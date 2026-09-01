@@ -27,6 +27,9 @@ L'arborescence est à l'échelle réelle : c'est elle qui décide de la concepti
 Le nombre de messages par dossier reste modeste (~15-40), sans incidence sur ce qu'on
 cherche à valider ici.
 
+Le panneau se **masque** par le bouton `⟨/⟩ requêtes` du bandeau (ou `Échap`), et le choix
+est mémorisé d'une visite à l'autre.
+
 ## Responsive — quatre paliers
 
 | Largeur | Disposition |

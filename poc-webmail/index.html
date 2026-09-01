@@ -43,6 +43,8 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .main.qopen{grid-template-columns:262px 340px 1fr 340px}
 .col{min-height:0;overflow:auto;background:var(--panel);border-right:1px solid var(--line)}
 .col:last-child{border-right:0}
+/* sans .qopen, le 4e enfant partirait sur une ligne implicite de la grille */
+.main:not(.qopen) #qpanel{display:none}
 
 /* ---- arborescence ---- */
 .navsearch{position:sticky;top:0;background:var(--panel);padding:8px;border-bottom:1px solid var(--line);z-index:2}
@@ -606,10 +608,17 @@ document.getElementById("btheme").onclick = () => {
     || (matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light");
   r.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
 };
-document.getElementById("bq").onclick = e => {
-  const m = document.getElementById("main");
-  m.classList.toggle("qopen"); e.currentTarget.classList.toggle("on");
-};
+const bq = document.getElementById("bq");
+function setQ(on) {
+  document.getElementById("main").classList.toggle("qopen", on);
+  bq.classList.toggle("on", on);
+  try { localStorage.setItem("abx.q", on ? "1" : "0"); } catch (e) {}
+}
+bq.onclick = () => setQ(!document.getElementById("main").classList.contains("qopen"));
+addEventListener("keydown", e => {
+  if (e.key === "Escape" && document.getElementById("main").classList.contains("qopen")) setQ(false);
+});
+try { if (localStorage.getItem("abx.q") === "0") setQ(false); } catch (e) {}
 document.getElementById("gsearch").oninput = e => {
   if (e.target.value.length !== 3) return;
   q("Recherche globale plein texte",
@@ -624,7 +633,7 @@ document.getElementById("gsearch").oninput = e => {
 document.getElementById("bnav").onclick = () =>
   MOBILE() ? setVue("nav") : (document.getElementById("main").classList.contains("navopen")
     ? closeNav() : openNav());
-document.getElementById("scrim").onclick = closeNav;
+document.getElementById("scrim").onclick = () => { closeNav(); setQ(false); };
 addEventListener("resize", () => { if (!TABLET()) closeNav();
   if (!MOBILE()) document.getElementById("main").dataset.vue = "liste"; });
 
