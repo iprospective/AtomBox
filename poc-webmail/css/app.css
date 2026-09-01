@@ -310,3 +310,8 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .pjname:focus{border-color:var(--accent);background:var(--panel2);outline:none}
 .pjrow .ps{color:var(--muted);font-size:11px;padding-left:5px}
 .pjacts{display:flex;gap:3px;flex:none}
+.jalon{display:inline-block;font-size:9.5px;font-weight:700;border-radius:3px;padding:0 4px;
+  border:1px solid var(--muted);color:var(--muted);margin-left:4px;vertical-align:1px}
+.jalon.v3{border-color:var(--accent);color:var(--accent)}
+.jalon.v4{border-color:var(--warn);color:var(--warn)}
+.chip.futur{opacity:.6;border-style:dashed}

@@ -7,7 +7,9 @@
   const F = ABX.Fmt, Fx = ABX.Fixtures, P = ABX.Providers;
 
   const VOLETS = [["boites","Domaines & boîtes"], ["apps","Applications & jetons"],
-                  ["axes","Axes & tags"], ["suite","Suite collaborative"]];
+                  ["axes","Axes & tags"], ["suite","Suite collaborative"],
+                  ["canaux","Canaux"]];
+  const jalon = v => v && v > 1 ? `<span class="jalon v${v}">V${v}</span>` : "";
 
   function boites() {
     return `<div class="box"><h4>Domaines</h4>
@@ -85,24 +87,63 @@
   function suite() {
     return `<div class="box"><h4>Fournisseurs de la suite</h4>
       <div class="hint">AtomBox se propose comme une <b>suite collaborative centrée sur la
-        messagerie</b> : tâches, contacts, fichiers et calendrier naissent d'un email. Chaque
-        capacité est un <b>contrat</b> — le natif est le produit vendu seul, les connecteurs
-        servent à s'insérer chez qui vit déjà dans Dolibarr ou Nextcloud. L'écran ne change
-        pas ; seule la trace d'appel change.</div>
+        messagerie</b> : contacts, tâches, cloud et CRM naissent d'un email. Chaque capacité
+        est un <b>contrat</b> — mais les composants <b>internes sont une cible de V3</b>. En
+        V1 et V2, AtomBox est une messagerie qui <b>se branche</b> : par connecteur, ou
+        absente. Ce que le contrat garantit, c'est que la V3 ne demandera aucune réécriture
+        d'interface.</div>
       ${Object.entries(P.CAPACITES).map(([cap, c]) => {
         const a = P.actif(cap);
         return `<div class="capa">
           <div class="capt">${c.ic} <b>${F.esc(c.label)}</b>
             <span class="hash">${c.contrat.join("  ·  ")}</span></div>
           <div class="chips">${Object.entries(c.fournisseurs).map(([id, f]) =>
-            `<span class="chip${id === a.id ? " on" : ""}" data-cap="${cap}" data-f="${id}"
-              >${f.ic} ${F.esc(f.label)}</span>`).join("")}</div>
+            `<span class="chip${id === a.id ? " on" : ""}${f.v > 1 ? " futur" : ""}"
+              data-cap="${cap}" data-f="${id}"
+              >${f.ic} ${F.esc(f.label)} ${jalon(f.v)}</span>`).join("")}</div>
           <div class="hint">${F.esc(a.note)}</div>
         </div>`; }).join("")}
       </div>`;
   }
 
-  const RENDU = { boites, apps, axes, suite };
+  /* Les canaux ne sont pas des capacités : c'est de l'ingestion, donc le cœur du
+     moteur. Ce volet ne sert qu'à une chose — rappeler ce qu'il ne faut PAS
+     s'interdire dès la V1, parce que ces trois précautions sont gratuites
+     maintenant et coûteuses plus tard. */
+  function canaux() {
+    return `<div class="box"><h4>Canaux d'entrée</h4>
+      <table class="erpl"><tr><th>Canal</th><th>Jalon</th><th>État</th></tr>
+      ${P.CANAUX.map(c => `<tr><td>${c.ic} <b>${F.esc(c.label)}</b></td>
+        <td>${jalon(c.v) || `<span class="st ok">V1</span>`}</td>
+        <td>${F.esc(c.etat)}</td></tr>`).join("")}</table>
+      <div class="hint">La V4 ouvre AtomBox aux canaux non-mail. Ce n'est pas une capacité
+        enfichable : un canal ENTRE dans le moteur, il ne se branche pas à côté.</div></div>
+
+    <div class="box"><h4>Ce qu'il ne faut pas s'interdire, dès la V1</h4>
+      <div class="hint">Trois précautions gratuites aujourd'hui, très coûteuses en V4 —
+        même raisonnement que D62 pour le multi-organisation : on ne construit pas la suite,
+        on ne se ferme pas la porte.</div>
+      <table class="erpl">
+        <tr><th>Précaution</th><th>Sans elle, en V4</th></tr>
+        <tr><td><b>L'identifiant d'un correspondant a un TYPE</b><br>
+          <span class="hash">correspondant_identifiant (type, valeur)</span> plutôt qu'une
+          colonne <code>adresse</code></td>
+          <td>un numéro de téléphone ne peut pas rejoindre l'identité qui porte déjà l'email
+          — et c'est justement l'intérêt de D35</td></tr>
+        <tr><td><b>Le message porte son CANAL</b><br>
+          <span class="hash">message.canal = 'email'</span> dès la première ligne</td>
+          <td>toutes les vues et tous les index supposent l'email, et il faut réécrire les
+          requêtes une par une</td></tr>
+        <tr><td><b>Ce qui est PROPRE À L'EMAIL est isolé</b><br>
+          <span class="hash">message_email</span> : headers, DKIM/SPF, MIME, uid IMAP</td>
+          <td>un SMS se retrouve avec douze colonnes nulles, et <code>message</code> devient
+          une table à trous que plus personne n'ose modifier</td></tr>
+      </table>
+      <div class="hint">La troisième est la seule qui demande un arbitrage : elle coûte une
+        jointure sur le chemin le plus chaud du produit. <b>Q38</b>.</div></div>`;
+  }
+
+  const RENDU = { boites, apps, axes, suite, canaux };
 
   ABX.Views = ABX.Views || {};
   ABX.Views.Admin = {

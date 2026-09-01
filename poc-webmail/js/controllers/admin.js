@@ -47,6 +47,13 @@
  GROUP BY ax.axe_id ORDER BY usages DESC;`,
           "⚠ count(mt.message_id) balaye toute la table de liaison : acceptable sur un écran " +
           "d'administration ouvert une fois par mois, à surveiller si on l'affiche ailleurs", true],
+        canaux: ["Administration — canaux d'entrée",
+`-- en V1 il n'y a qu'un canal, et c'est justement le moment de le dire
+SELECT canal, count(*) FROM message GROUP BY canal;   -- ('email', 4412)`,
+          "⚠ écrire cette colonne dès la V1 coûte un octet par message ; l'ajouter en V4 " +
+          "coûte une migration sur des dizaines de millions de lignes et la relecture de " +
+          "toutes les requêtes. Même raisonnement que D62 : on ne construit pas, on ne se " +
+          "ferme pas la porte", true],
         suite: ["Administration — fournisseurs de la suite",
 `SELECT cle, valeur FROM configuration
  WHERE organisation_id = :org AND cle LIKE 'capacite.%';`,

@@ -148,41 +148,69 @@ Seul **« traité »** sort de la file — il pose `sorti_le` et déplace donc l
 (D14/D30). Les autres états sont des positions *dans* la file. Revenir en arrière est
 possible, et rouvre Q09 : la trace le signale à chaque fois.
 
-## La suite collaborative — capacités enfichables
+## La suite collaborative — et son calendrier
 
 AtomBox se propose aussi comme une **suite collaborative centrée sur la messagerie** :
-tâches, contacts, fichiers et calendrier naissent d'un email. Là où Nextcloud part du
-fichier et un ERP du client, AtomBox part de l'échange.
+contacts, tâches, cloud et CRM naissent d'un email. Là où Nextcloud part du fichier et un
+ERP du client, AtomBox part de l'échange.
 
-Chaque capacité est un **contrat**, pas une fonctionnalité :
+**Mais pas tout de suite.** Le phasage est explicite :
+
+| Jalon | Ce qui arrive |
+|---|---|
+| **V1** | le moteur, l'API, le webmail — et les capacités **par connecteur**, ou absentes |
+| **V2** | livraison LMTP, module Dovecot, messagerie interne hors SMTP |
+| **V3** | les **composants internes** : contacts, tâches, cloud, CRM |
+| **V4** | les **canaux non-mail** : SMS, WhatsApp, téléphonie |
+
+Écrire un CRM interne pendant qu'on écrit un moteur de stockage, c'est rater les deux — et
+un connecteur Dolibarr rend le service dès la V1. Ce que le contrat garantit, c'est que la
+V3 **ne demandera aucune réécriture d'interface**.
+
+### Les capacités sont des contrats
 
 | Capacité | Fournisseurs |
 |---|---|
-| **Tâches** | AtomBox · Dolibarr · Redmine · Nextcloud Deck |
-| **Contacts** | AtomBox · CardDAV · Dolibarr · LDAP |
-| **Fichiers** | AtomBox (le magasin) · Nextcloud WebDAV |
-| **Calendrier** | AtomBox · CalDAV |
+| **Tâches** | aucun · Dolibarr · Redmine · Nextcloud Deck · *AtomBox (V3)* |
+| **Contacts** | aucun · AtomBox (lecture V1, carnet V3) · CardDAV · Dolibarr · LDAP |
+| **Cloud** | aucun · Nextcloud WebDAV · *AtomBox (V3)* |
+| **Calendrier** | aucun · CalDAV · *AtomBox (V3)* |
+| **CRM** | aucun · Dolibarr · *AtomBox (V3)* |
 
-Le **natif n'est pas un repli** : c'est le produit vendu seul, et c'est la configuration à
-laquelle il faut que le produit soit bon. En V1, des outils **légers** — une tâche avec un
-titre, une échéance et un statut ; un contact qui est le correspondant qu'on a déjà ; un
-fichier qui est la pièce jointe qu'on stocke déjà. Ce qui est léger et cohérent bat ce qui
-est complet et à moitié fait.
+**« Aucun » est un état normal, pas une panne** : l'entrée de menu disparaît, et c'est tout.
+Mieux vaut pas de gestionnaire de tâches qu'un gestionnaire de tâches à moitié fait. Les
+contacts font exception — leur lecture est **gratuite** dès la V1, puisque la table
+`correspondant` existe déjà pour le rattachement (D35).
 
-Les connecteurs servent l'autre cas : s'insérer chez qui vit déjà dans Dolibarr ou
-Nextcloud, sans dupliquer ses données. **L'écran ne sait pas lequel est branché** — seule la
-cascade change, et le POC affiche les deux :
+**L'écran ne sait pas lequel est branché** — seule la cascade change, et le POC affiche les
+deux (basculer sur un fournisseur V3 donne un **aperçu**, précisément pour permettre la
+comparaison) :
 
-- **tâche native** : un `INSERT`, une clé étrangère vers le message, et « mes emails à
-  traiter » + « mes tâches » se lisent dans la même requête ;
 - **tâche Dolibarr** : un `POST`, une référence externe, un lien qui **peut mourir**, et une
-  file de travail qui demande un appel de plus à chaque affichage.
-- **fichier natif** : « enregistrer » ne copie **rien** — l'octet est déjà stocké et
-  dédupliqué (D24) ;
-- **fichier Nextcloud** : l'octet existe alors **deux fois**, et la déduplication ne protège
-  plus le second exemplaire.
+  file de travail qui demande un appel de plus à chaque affichage ;
+- **tâche native** : un `INSERT`, une clé étrangère vers le message, et « mes emails à
+  traiter » + « mes tâches » se lisent dans **une seule requête** ;
+- **cloud Nextcloud** : l'octet existe **deux fois**, la déduplication ne protège plus le
+  second exemplaire ;
+- **cloud natif** : « enregistrer » ne copie **rien** — l'octet est déjà stocké et
+  dédupliqué (D24).
 
-C'est ce contraste qui doit décider, pas une préférence de principe.
+C'est ce contraste qui doit décider du jalon V3, pas une préférence de principe.
+
+### Les canaux — ce qu'il ne faut pas s'interdire
+
+La V4 ouvre AtomBox au non-mail. Ce n'est **pas** une capacité enfichable : un canal *entre*
+dans le moteur. Trois précautions gratuites aujourd'hui, très coûteuses ensuite — même
+raisonnement que D62 pour le multi-organisation :
+
+| Précaution | Sans elle, en V4 |
+|---|---|
+| L'identifiant d'un correspondant a un **type** | un numéro de téléphone ne peut pas rejoindre l'identité qui porte déjà l'email — l'intérêt même de D35 |
+| Le message porte son **canal** | toutes les vues supposent l'email, et il faut réécrire les requêtes une par une |
+| Ce qui est **propre à l'email** est isolé | un SMS se retrouve avec douze colonnes nulles, et `message` devient une table à trous |
+
+La troisième est la seule qui demande un arbitrage : elle coûte une jointure sur le chemin
+le plus chaud du produit.
 
 ## Administration
 

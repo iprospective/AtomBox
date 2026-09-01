@@ -235,24 +235,32 @@ vrai(A.Corpus.cnt(w.fid).f >= 1, "les compteurs suivent la file de travail");
 
 console.log("— capacités enfichables —————————————————————————");
 const P = A.Providers;
-eq(P.actif("taches").id, "natif", "défaut : suite autonome");
-eq(Object.keys(P.CAPACITES).length, 4, "quatre capacités");
-vrai(Object.keys(P.CAPACITES.contacts.fournisseurs).length >= 4,
-     "contacts : natif, CardDAV, Dolibarr, LDAP");
-A.QueryLog.vider();
-A.Capacites.creerTache(client);
-const tn = A.QueryLog.entrees[0];
-vrai(tn.label.includes("natif"), "la trace nomme le fournisseur");
-vrai(tn.etapes.every(e => e.t !== "http"), "en natif : aucun appel réseau");
-vrai(tn.etapes.some(e => (e.detail || "").includes("INSERT INTO tache")), "une table locale");
-P.choisir("taches", "dolibarr");
+eq(Object.keys(P.CAPACITES).length, 5, "cinq capacités : tâches, contacts, fichiers, calendrier, CRM");
+eq(P.actif("taches").id, "dolibarr", "défaut V1 : un connecteur, pas le natif");
+vrai(Object.keys(P.CAPACITES.contacts.fournisseurs).length >= 5,
+     "contacts : aucun, natif, CardDAV, Dolibarr, LDAP");
+vrai(Object.values(P.CAPACITES).every(c => c.fournisseurs.aucun),
+     "chaque capacité peut être ABSENTE — c'est un état normal en V1");
+eq(P.CAPACITES.taches.fournisseurs.natif.v, 3, "le composant interne est jalonné V3");
+eq(P.CAPACITES.crm.fournisseurs.natif.v, 3, "le CRM interne aussi");
+eq(P.CANAUX.filter(c => c.v === 4).length, 3, "trois canaux en V4 : SMS, WhatsApp, téléphonie");
+
 A.QueryLog.vider();
 A.Capacites.creerTache(client);
 const td = A.QueryLog.entrees[0];
+vrai(td.label.includes("Dolibarr"), "la trace nomme le fournisseur");
 vrai(td.etapes.some(e => e.t === "http"), "en connecteur : un appel sortant");
 vrai(td.etapes.some(e => e.warn), "et l'avertissement sur le lien qui peut mourir");
-eq(tn.etapes[0].label, td.etapes[0].label, "le geste de départ est le MÊME");
 P.choisir("taches", "natif");
+vrai(A.QueryLog.entrees.slice(0, 2).some(x => x.label.includes("aperçu")),
+     "basculer sur le natif prévient : V3");
+A.QueryLog.vider();
+A.Capacites.creerTache(client);
+const tn = A.QueryLog.entrees[0];
+vrai(tn.etapes.every(e => e.t !== "http"), "en natif : aucun appel réseau");
+vrai(tn.etapes.some(e => (e.detail || "").includes("INSERT INTO tache")), "une table locale");
+eq(tn.etapes[0].label, td.etapes[0].label, "le geste de départ est le MÊME");
+P.choisir("taches", "dolibarr");
 
 console.log("— administration ————————————————————————————————");
 A.Controllers.Admin.ouvrir("apps");
@@ -264,8 +272,15 @@ vrai(A.QueryLog.entrees[0].etapes.some(e => (e.index || "").includes("empreinte"
 A.Controllers.Admin.geste("tok:dolibarr-mmi");
 vrai(A.QueryLog.entrees[0].label.includes("Révoquer"), "révocation tracée");
 A.Controllers.Admin.ouvrir("suite");
-vrai(p.doc.getElementById("detail").innerHTML.includes("Gestionnaire de tâches"),
-     "le volet suite liste les capacités");
+const vs = p.doc.getElementById("detail").innerHTML;
+vrai(vs.includes("Gestionnaire de tâches"), "le volet suite liste les capacités");
+vrai(vs.includes("CRM"), "CRM compris");
+vrai(vs.includes('class="jalon v3"'), "les composants internes sont marqués V3");
+A.Controllers.Admin.ouvrir("canaux");
+const vc = p.doc.getElementById("detail").innerHTML;
+vrai(vc.includes("WhatsApp") && vc.includes("Téléphonie"), "le volet canaux annonce la V4");
+vrai(vc.includes("message.canal"), "et les précautions de schéma à prendre dès la V1");
+vrai(A.QueryLog.entrees[0].warn, "la trace insiste : ajouter la colonne en V4 coûte une migration");
 
 console.log("— pièces jointes ————————————————————————————————");
 A.Controllers.Admin.ouvrirPJ();
