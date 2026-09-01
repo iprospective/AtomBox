@@ -77,7 +77,10 @@ eq(envoi.pj, 1, "la pièce jointe a suivi");
 const q = A.QueryLog.entrees.find(x => x.label.startsWith("Envoyer"));
 vrai(!!q, "l'envoi est journalisé");
 vrai(q.warn === true, "destinataires mixtes : l'avertissement D12 est levé");
-vrai(q.sql.includes("pg_notify"), "les externes passent au relais");
+vrai(q.enfants.length >= 4, "l'envoi est décomposé en " + q.enfants.length + " requêtes");
+vrai(q.enfants.some(e => e.sql.includes("pg_notify")), "les externes passent au relais");
+vrai(q.enfants.some(e => e.sql.includes("'recu'")), "les internes sont livrés en base");
+vrai(q.enfants.some(e => e.warn), "l'étage mixte porte l'avertissement");
 
 console.log("— transfert par référence ————————————————————————");
 A.Controllers.Compose.demarrer("tr", src);
@@ -112,6 +115,75 @@ vrai(!B.Corpus.tous.some(m => m.id === cible.id), "le message supprimé n'est pa
 vrai(B.Store.ui.tabs.length > 0, "les onglets sont restaurés");
 const m0 = B.Corpus.par(lignes[0].dataset.id);
 eq(m0.lu, true, "le message lu la session précédente est toujours lu");
+
+console.log("— sens : reçus / envoyés —————————————————————————");
+const dossierAxe = { id: dossier.id, label: dossier.label, kind: "virtuel", axe: "client" };
+const contenu = A.Corpus.vue(dossierAxe);
+const sortants = contenu.filter(m => m.sens === "out");
+vrai(sortants.length > 0, sortants.length + " sortants dans un dossier client sur " + contenu.length);
+vrai(sortants.length < contenu.length, "et des entrants aussi");
+eq(A.Corpus.filtrer(dossierAxe, "file", "date_desc", "out").every(m => m.sens === "out"), true,
+   "le filtre « envoyés » ne garde que les sortants");
+eq(A.Corpus.filtrer(dossierAxe, "file", "date_desc", "in").every(m => m.sens === "in"), true,
+   "et « reçus » que les entrants");
+const croise = A.Corpus.filtrer(dossierAxe, "non_lus", "date_desc", "in");
+eq(croise.every(m => !m.lu && m.sens === "in"), true, "sens et filtre se CROISENT");
+eq(A.Views.List.variante(sortants[0]), "sent",
+   "un sortant s'affiche comme dans Envoyés, quel que soit son dossier");
+vrai(A.Registry.render("message.card", { m: sortants[0], variant: "sent" }).includes("À :"),
+     "sa carte montre le destinataire");
+A.Controllers.List.logSens("out");
+const qs = A.QueryLog.entrees[0];
+vrai(qs.warn, "le journal avertit : le sens doit être une colonne, pas une déduction");
+vrai(qs.sql.includes("r.sens"), "la requête s'appuie sur r.sens");
+
+console.log("— tags ————————————————————————————————————————");
+const mt = A.Corpus.par(lignes[0].dataset.id);
+const nTags = mt.tags.length;
+A.MessageService.ajouterTag(mt, "projet", "RM2937");
+eq(mt.tags.length, nTags + 1, "tag ajouté");
+eq(mt.tags[mt.tags.length - 1].src, "utilisateur", "posé par l'utilisateur");
+A.MessageService.ajouterTag(mt, "projet", "RM2937");
+eq(mt.tags.length, nTags + 1, "un doublon exact n'est pas reposé");
+A.MessageService.ajouterTag(mt, "projet", "  ");
+eq(mt.tags.length, nTags + 1, "une valeur vide est refusée");
+const iAuto = mt.tags.findIndex(t => t.src === "dolibarr-mmi");
+if (iAuto >= 0) { A.MessageService.retirerTag(mt, iAuto);
+  vrai(A.QueryLog.entrees[0].warn, "retirer un tag de connecteur lève un avertissement"); }
+const iUser = mt.tags.findIndex(t => t.src === "utilisateur");
+A.MessageService.retirerTag(mt, iUser);
+vrai(!mt.tags.some(t => t.val === "RM2937"), "tag retiré");
+vrai(!!A.Store.ratt[mt.id].tags, "les tags sont dans le delta persisté");
+
+console.log("— quarantaine ————————————————————————————————");
+const spam = A.Corpus.par(lignes[4].dataset.id);
+A.MessageService.junk(spam);
+eq(spam.dossier, "junk", "mis en quarantaine");
+const qj = A.QueryLog.entrees[0];
+eq(qj.enfants.length, 2, "le geste classe ET apprend");
+vrai(qj.enfants.some(e => e.sql.includes("apprentissage_spam")), "l'apprentissage est journalisé");
+vrai(A.Views.Message.actionsEtat(spam).includes("nonJunk"),
+     "la barre propose « ce n'est pas un indésirable »");
+vrai(!A.Views.Message.actionsEtat(spam).includes('data-x="junk"'),
+     "et ne propose plus de le remarquer indésirable");
+A.MessageService.nonJunk(spam);
+eq(spam.dossier, null, "sorti de la quarantaine");
+vrai(A.QueryLog.entrees[0].enfants.some(e => e.sql.includes("'ham'")), "le filtre désapprend");
+
+console.log("— requêtes imbriquées ————————————————————————————");
+A.Controllers.Message.logErp(client, "inv");
+const api = A.QueryLog.entrees[0];
+eq(api.kind, "api", "entrée marquée API");
+vrai(api.sql.startsWith("GET "), "le parent est l'appel HTTP");
+eq(api.enfants.length, 1, "et porte la requête SQL qu'il déclenche");
+vrai(api.enfants[0].sql.includes("SELECT"), "laquelle est bien du SQL");
+vrai(api.enfants[0].index.includes("portée"), "avec son propre index et son avertissement");
+const rendu = A.Views.QueryLog.render(A.QueryLog.entrees);
+vrai(rendu.includes("class=\"sub\""), "la vue rend le bloc imbriqué");
+vrai(rendu.includes("requête(s) déclenchée(s)"), "et l'annonce");
+A.Controllers.Message.logErp(client, "res");
+vrai(A.QueryLog.entrees[0].enfants.length === 3, "un geste non-API peut aussi être décomposé");
+vrai(!A.QueryLog.entrees[0].sql, "son parent n'a pas de requête propre");
 
 console.log("— déterminisme ————————————————————————————————");
 const p3 = demarrer(creerStockage());   // stockage vierge

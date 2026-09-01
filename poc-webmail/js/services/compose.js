@@ -49,7 +49,7 @@ VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj
 
     fabriquer(d, fid) {
       const id = fid + "/u" + (++St.seq);
-      const m = { id, fid, from: Fx.MOI.nom, mail: d.de, boite: d.de,
+      const m = { id, fid, sens: "out", from: Fx.MOI.nom, mail: d.de, boite: d.de,
         to: d.a.split(",").map(x => x.trim()).filter(Boolean),
         subject: d.sujet || "(sans sujet)", body: d.corps,
         snippet: (d.corps || "").split("\n").find(l => l.trim()) || "…",
@@ -87,38 +87,61 @@ ON CONFLICT (message_id) DO UPDATE SET corps = EXCLUDED.corps, maj_le = now();`,
       } else {
         const dest = m.to.concat(d.cc.split(",").map(x => x.trim()).filter(Boolean));
         const int = dest.filter(Fx.interne), ext = dest.filter(a => !Fx.interne(a));
-        ABX.log("Envoyer — " + int.length + " interne(s), " + ext.length + " externe(s)",
-`BEGIN;
--- le message est écrit UNE fois, quel que soit le nombre de destinataires (D10)
-INSERT INTO message (message_id, sujet, corps, from_adresse, date_envoi, blob_ref)
-VALUES (:id, :sujet, :corps, '` + d.de + `', now(), :ref);
-
--- l'expéditeur : sorti de la file d'entrée dès l'écriture
-INSERT INTO rattachement (message_id, compte_id, boite_id, recu_le, sorti_le, motif_sortie)
-VALUES (:id, :moi, :boite, now(), now(), 'envoye');
-
--- destinataires INTERNES : livrés en base, sans passer par le SMTP (D12)
-INSERT INTO rattachement (message_id, compte_id, boite_id, recu_le)
-SELECT :id, b.compte_id, b.boite_id FROM boite b
- WHERE b.adresse = ANY (:internes);` + (d.ref && d.src ? `
-
--- transfert par référence : un lien + une ACL, aucune copie (D58/D67)
-INSERT INTO message_lien (message_porteur, message_source, type)
+        const enfants = [
+          { label: "le message est écrit UNE fois, quel que soit le nombre de destinataires (D10)",
+            sql:
+`INSERT INTO message (message_id, sujet, corps, from_adresse, date_envoi, blob_ref)
+VALUES (:id, :sujet, :corps, '` + d.de + `', now(), :ref);`,
+            index: "le corps part au magasin d'octets, pas dans la colonne : la base indexe, " +
+                   "elle ne stocke pas (D05/D07)" },
+          { label: "l'expéditeur — sorti de la file dès l'écriture",
+            sql:
+`INSERT INTO rattachement (message_id, compte_id, boite_id, sens, recu_le, sorti_le, motif_sortie)
+VALUES (:id, :moi, :boite, 'envoye', now(), now(), 'envoye');`,
+            index: "le sens est posé ICI, à l'émission : c'est ce qui rend le filtre " +
+                   "« reçus / envoyés » indexable au lieu d'être déduit de from_adresse" },
+        ];
+        if (int.length) enfants.push(
+          { label: int.length + " destinataire(s) INTERNE(s) — livrés en base, sans SMTP (D12)",
+            sql:
+`INSERT INTO rattachement (message_id, compte_id, boite_id, sens, recu_le)
+SELECT :id, b.compte_id, b.boite_id, 'recu', now() FROM boite b
+ WHERE b.adresse = ANY (:internes);   -- ` + int.join(", "),
+            index: "une ligne par destinataire, un seul message : c'est exactement ce que la " +
+                   "déduplication devait donner (D10)" });
+        if (d.ref && d.src) enfants.push(
+          { label: "transfert par référence : un lien + une ACL, aucune copie (D58/D67)",
+            sql:
+`INSERT INTO message_lien (message_porteur, message_source, type)
 VALUES (:id, '` + d.src + `', 'reference');
 INSERT INTO acl_message (message_id, principal, droit, accorde_par)
-SELECT '` + d.src + `', a, 'lire', :moi FROM unnest(:internes) a;` : "") + `
-COMMIT;` + (ext.length ? `
+SELECT '` + d.src + `', a, 'lire', :moi FROM unnest(:internes) a;`,
+            index: "l'ACL est indépendante et durable (D60) : le destinataire garde l'accès même " +
+                   "si l'expéditeur perd le sien" });
+        if (ext.length) enfants.push(
+          { label: ext.length + " destinataire(s) EXTERNE(s) — hors transaction",
+            sql:
+`COMMIT;
+SELECT pg_notify('smtp_out', :id);   -- ` + ext.join(", "),
+            index: int.length
+              ? "⚠ destinataires MIXTES : le relais ne doit remettre QUE les externes, sinon " +
+                "les internes reçoivent deux fois. C'est le point soulevé pour D12, et il se " +
+                "règle au moment de l'envoi, pas dans Postfix"
+              : "remise au relais après COMMIT : un SMTP lent ne doit pas tenir une transaction " +
+                "ouverte",
+            warn: int.length > 0 });
 
--- puis, HORS transaction : remise au relais pour les seuls externes
-SELECT pg_notify('smtp_out', :id);   -- ` + ext.join(", ") : ""),
-          ext.length && int.length
-            ? "⚠ destinataires MIXTES : le relais ne doit remettre QUE les externes, sinon les " +
-              "internes reçoivent deux fois — c'est le point soulevé pour D12, et il se règle au " +
-              "moment de l'envoi, pas dans Postfix"
+        ABX.log({
+          label: "Envoyer — " + int.length + " interne(s), " + ext.length + " externe(s)",
+          sql: "BEGIN;",
+          warn: ext.length > 0 && int.length > 0,
+          index: ext.length && int.length
+            ? "⚠ le cas mixte est le seul vraiment délicat : une partie du message est livrée " +
+              "en base, l'autre part au relais, et rien ne doit être livré deux fois"
             : ext.length
               ? "aucun destinataire interne : envoi SMTP classique, le message reste stocké une fois"
               : "aucun SMTP du tout : le message ne quitte jamais AtomBox (D12)",
-          ext.length > 0 && int.length > 0);
+          enfants });
       }
       ABX.Bus.emit("corpus:changed", { message: m });
       return m;

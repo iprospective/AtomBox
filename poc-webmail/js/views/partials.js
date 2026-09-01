@@ -30,12 +30,19 @@
        ${R.render("statut.chip", { m })}
        ${m.tags.map(tag => R.render("tag.chip", { tag })).join("")}</div>`);
 
-  R.define("message.card.actions", ({ m }) =>
-    `<div class="mact">${m.dossier === "trash"
+  R.define("message.card.actions", ({ m }) => {
+    const ou = m.dossier || m.fid;
+    const boutons = ou === "trash"
       ? `<button data-act="restaurer" title="Restaurer">↩</button>`
-      : `<button data-act="traiter" title="Marquer traité">✓</button>
-         <button data-act="archiver" title="Archiver">🗄</button>
-         <button data-act="corbeille" title="Mettre à la corbeille">🗑</button>`}</div>`);
+      : ou === "junk"
+        ? `<button data-act="nonJunk" title="Ce n'est pas un indésirable">✓ ham</button>
+           <button data-act="corbeille" title="Mettre à la corbeille">🗑</button>`
+        : `<button data-act="traiter" title="Marquer traité">✓</button>
+           <button data-act="archiver" title="Archiver">🗄</button>
+           <button data-act="junk" title="Indésirable">🚫</button>
+           <button data-act="corbeille" title="Mettre à la corbeille">🗑</button>`;
+    return `<div class="mact">${boutons}</div>`;
+  });
 
   R.define("message.card", ctx => {
     const { m, selection } = ctx;
@@ -108,6 +115,29 @@
         la référence externe (D20). Ce cadre est <b>rempli par un appel à l'application</b> au moment
         de l'affichage — c'est le prix à payer pour ne pas dupliquer l'ERP, et le premier endroit
         où il faudra un cache (Q31).</div></div>`;
+  });
+
+  /* ---- tags : la seule partie du message que l'utilisateur écrit ---------- */
+  R.define("message.tags", ({ m }) => {
+    const AXES = ABX.Fixtures.AXES.map(a => a.id).concat(["projet", "type"]);
+    return `<div class="box"><h4>Tags — plusieurs applications, sans écrasement (D17/D20)</h4>
+      ${m.tags.length ? m.tags.map((t, i) => `<div class="kv">
+          <span class="k">${F.esc(t.axe)}</span>
+          <span class="v"><b>${F.esc(t.val)}</b>
+            <span class="tag">posé par ${F.esc(t.src)}</span>
+            <button class="tagx" data-untag="${i}" title="Retirer ce tag">✕</button></span>
+        </div>`).join("") : `<div class="dmeta">aucun tag</div>`}
+      <div class="frow" style="margin-top:9px">
+        <label>Ajouter</label>
+        <select id="t_axe" style="flex:0 0 150px">${AXES.map(a =>
+          `<option value="${F.esc(a)}">${F.esc(a)}</option>`).join("")}</select>
+        <input id="t_val" list="t_vals" placeholder="valeur">
+        <button class="hbtn" id="t_add">+</button>
+      </div>
+      <datalist id="t_vals"></datalist>
+      <div class="hint">Un tag posé à la main appartient à l'utilisateur ; un tag posé par un
+        connecteur lui appartient (D19/D21) — le retirer ici ne l'empêche pas d'être reposé.</div>
+    </div>`;
   });
 
   /* ---- arborescence ------------------------------------------------------ */

@@ -14,6 +14,14 @@ suppose. ⚠ en orange = coûteux ou non indexé, badge `API` = appel entre Atom
 application connectée. C'est cette liste — et non les écrans — qui dictera les index du
 schéma.
 
+Les entrées sont **imbriquées** : un appel d'API n'est pas une requête, c'est une requête
+qui **en provoque d'autres**, et c'est précisément le coût qu'on veut voir. L'appel HTTP
+apparaît donc en tête, et sous lui, en retrait, les requêtes SQL qu'il déclenche côté
+AtomBox — chacune avec son propre index et son propre avertissement. Même chose pour un
+geste local qui écrit plusieurs fois : « marquer traité » montre l'`UPDATE` de l'état
+*et* l'`INSERT` du fait daté ; « vider la corbeille » montre les trois étages du
+ramasse-miettes, dont un seul appartient au clic.
+
 ## Architecture
 
 Quatre couches, une dépendance à sens unique : `core → services → views → controllers`.
@@ -92,6 +100,28 @@ Deux d'entre eux méritent le détour :
 - **Remettre dans la file** rouvre Q09 : si `sorti_le` est la clé de partition, un retour
   est un déplacement de partition. Le geste existe, reste à décider s'il est courant.
 
+## Sens, tags, quarantaine
+
+**Reçus / envoyés** est un axe de filtre **à part**, croisé avec le reste : on veut « non
+lus ET reçus », pas l'un ou l'autre. Un dossier virtuel porte toute la correspondance d'un
+tiers, entrante et sortante — sans les envois, un dossier client raconte la moitié de
+l'histoire et le fil est amputé. L'affichage suit : un message **sortant** montre son
+destinataire, quel que soit son dossier, en réutilisant la variante `sent` du registre.
+
+Le journal en tire une contrainte : **le sens doit être une colonne du rattachement**, posée
+à l'ingestion et à l'émission. Le déduire de `from_adresse IN (mes adresses)` est faux — une
+boîte commune reçoit ses propres envois — et ne s'indexe pas.
+
+**Les tags** s'ajoutent et se retirent réellement, avec le nom des valeurs existantes de
+l'axe proposé en autocomplétion : sans cela, chacun écrit « Belair SAS », « belair » et
+« Belair sas », et l'axe ne regroupe plus rien — c'est Q05 vue depuis l'écran. Retirer un
+tag posé par un **connecteur** lève un avertissement : il sera reposé au passage suivant, un
+retrait durable suppose autre chose (D19/D21).
+
+**La quarantaine** a son geste symétrique. « Ce n'est pas un indésirable » remet le message
+à sa place *et* fait désapprendre le filtre : un filtre qui n'apprend que dans un sens
+dérive, et c'est la seule trace qui permettra de mesurer son taux de faux positifs.
+
 ## Onglets
 
 Deuxième ligne d'en-tête, toujours visible. Un clic ouvre un onglet **provisoire**
@@ -161,7 +191,9 @@ l'application, ce que la maquette signale comme le premier besoin de cache (Q31)
 | Arborescence **engendrée** depuis les axes (200 fournisseurs, 52 clients…) | D76, D77 |
 | Recherche dans l'arborescence (croix / `Échap`) + « voir les N autres » | D77 |
 | Dossiers **spéciaux** (vues) vs **utilisateur** vs **virtuels** ; « Traités » et « Archives » sont des vues sur `motif_sortie` | D30, D51, D75 |
-| Filtres (en file / non lus / récents / PJ / lourds / sortis) × tris | D16 |
+| Filtres (en file / non lus / récents / PJ / lourds / sortis) **×** sens (reçus / envoyés) **×** tris | D16 |
+| Tags posés et retirés à la main, à côté de ceux des connecteurs | D17, D18, D20, Q05 |
+| Quarantaine symétrique : marquer indésirable **et** désapprendre | D71 |
 | Fil de discussion, tags multi-applications sans écrasement | D55, D17, D20 |
 | Pièces jointes : dédup, MIME déclaré vs détecté, recompression, `.eml` réversible | D11, D24, D25, D26, D32, D69, D70 |
 | Composition : identité de boîte, transfert par référence, envoi interne hors SMTP | Q26, D58, D66, D67, D12, D10 |

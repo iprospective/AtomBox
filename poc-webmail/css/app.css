@@ -235,3 +235,16 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
   .hbtn{padding:6px 8px}
   .msg .snip{display:none}
 }
+
+/* ---- requêtes imbriquées : ce qu'un appel déclenche ---- */
+.qi .sub{margin-top:7px;padding-left:9px;border-left:2px solid var(--accent)}
+.qi .subt{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
+  margin-bottom:4px}
+.qi .qs{margin-bottom:6px}
+.qi .qs:last-child{margin-bottom:0}
+.qi .qs .lbl{font-size:11px;color:var(--muted);margin-bottom:3px}
+
+/* ---- retrait d'un tag ---- */
+.tagx{border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:4px;
+  cursor:pointer;font-size:10px;line-height:1;padding:2px 4px;margin-left:5px}
+.tagx:hover{border-color:var(--danger);color:var(--danger)}

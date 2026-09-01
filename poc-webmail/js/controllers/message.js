@@ -17,18 +17,34 @@
       el.querySelector("#dep").onchange = e => M.deplacer(m, e.target.value);
 
       D.on(el, "[data-x]", "onclick", b => M[b.dataset.x](m));
+      D.on(el, "[data-untag]", "onclick", b => M.retirerTag(m, +b.dataset.untag));
+      Message.cablerTags(el, m);
       D.on(el, "[data-c]", "onclick", b => ABX.Controllers.Compose.demarrer(b.dataset.c, m));
       D.on(el, "[data-a]", "onclick", b => Message.logMessage(b.dataset.a, m));
       D.on(el, ".pjc",     "onclick", c => Message.logPieceJointe(m, +c.dataset.pj));
       D.on(el, "[data-e]", "onclick", b => Message.logErp(m, b.dataset.e));
     },
 
+    /* Le champ de valeur propose les valeurs existantes de l'axe choisi : sans
+       cela, chacun écrit « Belair SAS », « belair » et « Belair sas », et l'axe
+       ne regroupe plus rien — c'est la gouvernance des axes de Q05, vue de l'écran. */
+    cablerTags(el, m) {
+      const axe = el.querySelector("#t_axe"), val = el.querySelector("#t_val");
+      const liste = el.querySelector("#t_vals");
+      if (!axe || !val) return;
+      const proposer = () => {
+        const vals = (ABX.Fixtures.valeurs[axe.value] || []).slice(0, 200);
+        liste.innerHTML = vals.map(v => `<option value="${F.esc(v.label)}">`).join("");
+      };
+      axe.onchange = proposer;
+      proposer();
+      const ajouter = () => M.ajouterTag(m, axe.value, val.value);
+      el.querySelector("#t_add").onclick = ajouter;
+      val.onkeydown = e => { if (e.key === "Enter") ajouter(); };
+    },
+
     logMessage(quoi, m) {
       const A = {
-        tag: ["Poser un tag",
-`INSERT INTO message_tag (message_id, tag_id, source) VALUES (:id, :tag, :application)
- ON CONFLICT DO NOTHING;   -- pas d'unicité (message, axe) : deux clients possibles (D17)`,
-          "ACL de l'axe vérifiée en amont (D18) ; axes autorisés injectés en axe_id IN (…)"],
         orig: ["Télécharger le message original (.eml)",
 `-- réassemblage : le corps, puis chaque partie ré-encodée À L'IDENTIQUE (D25)
 SELECT blob_ref, headers FROM message WHERE message_id = :id;
@@ -78,67 +94,99 @@ UPDATE piece_jointe
       const tg = Erp.tagDe(m); if (!tg) return;
       const f = Erp.fiche(tg.axe, tg.val), c = f.cfg, o = ABX.PRNG.pick(f.objets);
       const E = {
-        res: ["Comment ce message a été rattaché à « " + tg.val + " »",
-`-- 1. l'adresse pointe une IDENTITÉ, jamais l'inverse (D35)
-SELECT c.correspondant_id, c.libelle
+        res: {
+          label: "Comment ce message a été rattaché à « " + tg.val + " »",
+          index: "trois étages, et aucun n'est facultatif : sans le second, AtomBox connaît " +
+                 "l'identité mais pas le tiers ; sans le troisième, personne ne pose le tag",
+          enfants: [
+            { label: "1. l'adresse pointe une IDENTITÉ, jamais l'inverse (D35)",
+              sql:
+`SELECT c.correspondant_id, c.libelle
   FROM adresse a JOIN correspondant c USING (correspondant_id)
- WHERE a.adresse = lower('${m.mail}');        -- index UNIQUE (adresse)
+ WHERE a.adresse = lower('${m.mail}');`,
+              index: "index UNIQUE (adresse) — un correspondant, N adresses : changer d'adresse " +
+                     "ne coupe pas l'historique du tiers" },
+            { label: "2. l'identité est reliée au tiers de CHAQUE application connectée",
+              sql:
+`SELECT application_id, ref_externe FROM correspondant_externe
+ WHERE correspondant_id = :cid;               -- ${c.app} → ${f.ref}`,
+              index: "index (correspondant_id) — c'est la table D85, sans laquelle le " +
+                     "rattachement automatique n'existe pas" },
+            { label: "3. le tag est posé par le CONNECTEUR, pas par AtomBox (D21)",
+              sql:
+`-- aucune requête ici : c'est l'application qui appelle POST /messages/{id}/tags
+-- Adresse inconnue ⇒ message sans tag. C'est voulu, pas un échec d'ingestion.` },
+          ] },
 
--- 2. l'identité est reliée au tiers de CHAQUE application connectée
-SELECT application_id, ref_externe FROM correspondant_externe
- WHERE correspondant_id = :cid;               -- ${c.app} → ${f.ref}
-
--- 3. c'est le CONNECTEUR qui pose le tag, pas AtomBox (D21)`,
-          "un correspondant, N adresses : changer d'adresse ne coupe pas l'historique du tiers " +
-          "(D35). Adresse inconnue ⇒ message sans tag : c'est voulu, pas un échec d'ingestion"],
-
-        lie: ["Lier ce message à " + o.type.toLowerCase() + " " + o.ref,
+        lie: {
+          label: "Lier ce message à " + o.type.toLowerCase() + " " + o.ref,
+          kind: "api",
+          sql:
 `POST /api/v1/messages/{message_id}/tags        Authorization: Bearer <token ${c.app}>
 { "axe": "${tg.axe}", "valeur": "${tg.val}",
-  "ref_externe": "${f.ref}", "piece": "${o.ref}" }
-
--- côté AtomBox
-INSERT INTO tag (axe_id, application_id, valeur, ref_externe)
+  "ref_externe": "${f.ref}", "piece": "${o.ref}" }`,
+          index: "l'ACL de l'axe est vérifiée avant d'écrire (D18) : poser un tag sur un axe " +
+                 "qu'on ne peut que lire doit être refusé, pas ignoré",
+          enfants: [
+            { label: "le tag de CETTE application, créé ou mis à jour",
+              sql:
+`INSERT INTO tag (axe_id, application_id, valeur, ref_externe)
 VALUES (:axe, :app, :valeur, :ref)
 ON CONFLICT (axe_id, application_id, valeur) DO UPDATE
    SET ref_externe = EXCLUDED.ref_externe
-RETURNING tag_id;
-INSERT INTO message_tag (message_id, tag_id, pose_par, pose_le)
+RETURNING tag_id;`,
+              index: "l'application est DANS la clé d'unicité (D20) : quatre Dolibarr font " +
+                     "quatre jeux de tags et aucun n'écrase l'autre (D17)" },
+            { label: "la liaison message ↔ tag",
+              sql:
+`INSERT INTO message_tag (message_id, tag_id, pose_par, pose_le)
 VALUES (:id, :tag, :application, now()) ON CONFLICT DO NOTHING;`,
-          "l'application est DANS la clé d'unicité (axe, application, valeur) — D20 : quatre " +
-          "Dolibarr font quatre jeux de tags et aucun n'écrase l'autre (D17). ACL de l'axe " +
-          "vérifiée avant (D18)", false, "api"],
+              index: "pas d'unicité (message, axe) : un message peut relever de deux clients" },
+          ] },
 
-        inv: ["Onglet « Emails » de la fiche " + f.ref + ", vu depuis " + c.app,
+        inv: {
+          label: "Onglet « Emails » de la fiche " + f.ref + ", vu depuis " + c.app,
+          kind: "api",
+          sql:
 `GET /api/v1/messages?axe=${tg.axe}&valeur=${encodeURIComponent(tg.val)}
     &application=${c.app}&limite=20&curseur=eyJkIjoiMjAyNi0wMy0xMSIsImkiOjkxfQ
-Authorization: Bearer <token opaque de l'application>          -- D63
-
--- côté AtomBox
-SELECT m.message_id, m.sujet, m.from_adresse, m.date_reception, m.nb_pieces_jointes
+Authorization: Bearer <token opaque de l'application>          -- D63`,
+          index: "un ERP pagine PROFOND : le curseur n'est pas un raffinement, c'est la seule " +
+                 "forme qui tienne à la millième page",
+          warn: true,
+          enfants: [
+            { label: "la seule requête déclenchée — et elle porte déjà la portée",
+              sql:
+`SELECT m.message_id, m.sujet, m.from_adresse, m.date_reception, m.nb_pieces_jointes
   FROM message_tag mt JOIN message m USING (message_id)
  WHERE mt.tag_id = :tag
    AND m.boite_id = ANY (:portee_du_token)                     -- D37
    AND (m.date_reception, m.message_id) < (:cur_date, :cur_id) -- curseur, pas OFFSET
  ORDER BY m.date_reception DESC, m.message_id DESC
  LIMIT 20;`,
-          "⚠ index (tag_id, date_reception DESC, message_id DESC). Deux pièges : un ERP pagine " +
-          "PROFOND (OFFSET interdit) et la portée du token s'applique ICI, jamais dans " +
-          "l'appelant (D18/D37)", true, "api"],
+              index: "⚠ index (tag_id, date_reception DESC, message_id DESC). La portée du " +
+                     "token s'applique ICI, jamais dans l'appelant (D18/D37)", warn: true },
+          ] },
 
-        push: ["Notifier " + c.app + " (événement sortant)",
+        push: {
+          label: "Notifier " + c.app + " (événement sortant)",
+          kind: "api",
+          sql:
 `POST https://${c.app}.lan/api/atombox/hook          (asynchrone, rejouable)
 { "evenement": "message.tague", "message_id": "…", "axe": "${tg.axe}",
-  "valeur": "${tg.val}", "ref_externe": "${f.ref}", "pieces_jointes": ${m.pj} }
-
--- rien n'est émis dans la transaction d'ingestion : on empile, un worker vide
-INSERT INTO evenement_sortant (application_id, type, charge, etat, prochaine_tentative)
+  "valeur": "${tg.val}", "ref_externe": "${f.ref}", "pieces_jointes": ${m.pj} }`,
+          index: "cet appel n'est PAS fait ici : il est empilé, et un worker le sortira. " +
+                 "Une application injoignable ne doit jamais bloquer la réception du courrier",
+          enfants: [
+            { label: "tout ce qui se passe dans la transaction",
+              sql:
+`INSERT INTO evenement_sortant (application_id, type, charge, etat, prochaine_tentative)
 VALUES (:app, 'message.tague', :json::jsonb, 'a_emettre', now());`,
-          "index PARTIEL (prochaine_tentative) WHERE etat <> 'emis' — la file reste minuscule " +
-          "après des millions d'événements, et une application injoignable ne bloque jamais la " +
-          "réception", false, "api"],
+              index: "index PARTIEL (prochaine_tentative) WHERE etat <> 'emis' — la file reste " +
+                     "minuscule après des millions d'événements (D86)" },
+          ] },
       }[quoi];
-      ABX.log(E[0], E[1], E[2], E[3], E[4]);
+      ABX.log(E);
     },
   };
 

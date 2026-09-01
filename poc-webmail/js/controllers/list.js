@@ -49,7 +49,7 @@
 
     peindre() {
       const ui = St.ui;
-      const messages = C.filtrer(ui.folder, ui.filtre, ui.tri);
+      const messages = C.filtrer(ui.folder, ui.filtre, ui.tri, ui.sens);
       const actif = ui.tabs.find(t => t.key === ui.tab);
       const selection = actif && actif.type === "msg" ? actif.id : null;
       const el = D.paint("list", ABX.Views.List.render(ui, messages, selection));
@@ -61,6 +61,9 @@
 
       D.on(el, ".chip[data-f]", "onclick", c => { ui.filtre = c.dataset.f; St.save();
         List.peindre(); List.logFiltre(ui.filtre); });
+
+      D.on(el, ".chip[data-s]", "onclick", c => { ui.sens = c.dataset.s; St.save();
+        List.peindre(); List.logSens(ui.sens); });
 
       el.querySelector("#tri").onchange = e => {
         ui.tri = e.target.value; St.save(); List.peindre();
@@ -84,6 +87,26 @@
         const t = ui.tabs.find(x => x.key === "m:" + d.dataset.id);
         if (t) { t.prov = false; St.save(); ABX.Controllers.Tabs.peindre(); }
       });
+    },
+
+    /* Le sens ne se DÉDUIT pas de l'expéditeur : une boîte commune reçoit ses
+       propres envois, et un IN sur les N adresses du compte ne s'indexe pas. */
+    logSens(s) {
+      if (s === "tous") return ABX.log("Sens : tous",
+        `SELECT … -- aucune clause de sens`, "l'index de liste suffit, rien de plus à payer");
+      ABX.log("Filtre « " + (s === "in" ? "reçus" : "envoyés") + " »",
+`SELECT m.message_id, m.sujet, m.from_nom, m.date_reception
+  FROM rattachement r JOIN message m USING (message_id)
+ WHERE r.compte_id = :moi AND <portée du dossier>
+   AND r.sens = '${s === "in" ? "recu" : "envoye"}'
+ ORDER BY m.date_reception DESC LIMIT 50;
+
+-- l'alternative, à ne PAS retenir :
+--   AND m.from_adresse IN (SELECT adresse FROM boite WHERE compte_id = :moi)`,
+        "⚠ le sens doit être une COLONNE du rattachement, posée à l'ingestion et à " +
+        "l'émission. Le déduire de from_adresse est faux (une boîte commune reçoit ses " +
+        "propres envois) et ne s'indexe pas (IN sur N adresses). Sinon, index partiel " +
+        "(compte_id, date_reception DESC) WHERE sens = 'envoye'", true);
     },
 
     logFiltre(f) {

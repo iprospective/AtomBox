@@ -26,35 +26,41 @@
             <button class="hbtn" data-c="rep">↩ Répondre</button>
             <button class="hbtn" data-c="reptous">↩↩ Répondre à tous</button>
             <button class="hbtn" data-c="tr">➦ Transférer</button>
-            <button class="hbtn" data-a="tag">🏷 Taguer</button>
-            ${m.dossier === "trash"
-              ? `<button class="hbtn" data-x="restaurer">↩ Restaurer</button>
-                 <button class="hbtn dgr" data-x="supprimer">✕ Supprimer définitivement</button>`
-              : `${m.motif
-                   ? `<button class="hbtn" data-x="refile">↺ Remettre dans la file</button>`
-                   : `<button class="hbtn" data-x="traiter">✓ Traité</button>
-                      <button class="hbtn" data-x="archiver">🗄 Archiver</button>`}
-                 <button class="hbtn" data-x="${m.lu ? "nonLu" : "lire"}">${m.lu ? "◻ Non lu" : "◼ Lu"}</button>
-                 <button class="hbtn" data-x="junk">🚫 Indésirable</button>
-                 <button class="hbtn" data-x="corbeille">🗑 Corbeille</button>`}
+            ${ABX.Views.Message.actionsEtat(m)}
             <button class="hbtn" data-a="orig">⤓ .eml</button>
             <select class="sortsel" id="dep" style="margin-left:0">
               <option value="">Déplacer vers…</option>${dossiers}</select>
           </div>
         </div>
         ${ABX.Views.Message.lienHtml(m)}
-        <div class="box"><h4>Tags — plusieurs applications, sans écrasement (D17/D20)</h4>
-          ${m.tags.length ? m.tags.map(x => `<div class="kv"><span class="k">${F.esc(x.axe)}</span>
-            <span class="v"><b>${F.esc(x.val)}</b>
-            <span class="tag">posé par ${F.esc(x.src)}</span></span></div>`).join("")
-            : `<div class="dmeta">aucun tag</div>`}
-        </div>
+        ${R.render("message.tags", { m })}
         ${R.render("erp.panel", { m })}
         ${R.render("attachment.list", { m })}
         <div class="box"><h4>Fil de discussion (${fil.length} messages)</h4>
           <div class="dmeta">thread_id matérialisé — D55</div></div>
         <div class="thread">${fil.map(x =>
           R.render("thread.item", { x, courant: x.id === m.id })).join("")}</div>`;
+    },
+
+    /* La barre d'actions suit l'état : à la corbeille on restaure ou on efface,
+       en quarantaine on désapprend, sorti de la file on y revient (Q09). */
+    actionsEtat(m) {
+      const ou = m.dossier || m.fid;
+      if (ou === "trash") return `
+        <button class="hbtn" data-x="restaurer">↩ Restaurer</button>
+        <button class="hbtn dgr" data-x="supprimer">✕ Supprimer définitivement</button>`;
+      const lu = `<button class="hbtn" data-x="${m.lu ? "nonLu" : "lire"}">${
+        m.lu ? "◻ Non lu" : "◼ Lu"}</button>`;
+      if (ou === "junk") return `
+        <button class="hbtn" data-x="nonJunk">✓ Ce n'est pas un indésirable</button>
+        ${lu}<button class="hbtn dgr" data-x="corbeille">🗑 Corbeille</button>`;
+      return `${m.motif
+          ? `<button class="hbtn" data-x="refile">↺ Remettre dans la file</button>`
+          : `<button class="hbtn" data-x="traiter">✓ Traité</button>
+             <button class="hbtn" data-x="archiver">🗄 Archiver</button>`}
+        ${lu}
+        <button class="hbtn" data-x="junk">🚫 Indésirable</button>
+        <button class="hbtn" data-x="corbeille">🗑 Corbeille</button>`;
     },
 
     /* Un transfert par référence n'est pas une copie : c'est un pointeur, et un

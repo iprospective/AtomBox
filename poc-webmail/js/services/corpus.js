@@ -15,28 +15,34 @@
 
   function fabriqueMessages(fid, label, n, opt) {
     const out = [], o = opt || {};
+    const axe = fid.split(":")[0];
     for (let i = 0; i < n; i++) {
       const qui = fid.startsWith("collaborateur") ? label : Fx.pers();
       const dom = ABX.Fmt.slug(label).slice(0, 14) + ".fr";
       const adr = ABX.Fmt.slug(qui).replace(/-/g, ".") + "@" + dom;
       const boite = P.pick(Fx.MOI.boites).adresse;
+      /* Un dossier virtuel porte TOUTE la correspondance d'un tiers, pas seulement
+         ce qu'on en a reçu : sans les envois, un dossier client raconte la moitié
+         de l'histoire, et le fil de discussion est amputé. */
+      const tirage = P.next(), luTirage = P.next() < .3;
+      const sortant = !!o.sortant || (Fx.estAxe(axe) && tirage < .25);
       const m = {
         id: fid + "/m" + i, fid,
-        from: o.sortant ? Fx.MOI.nom : qui,
-        mail: o.sortant ? boite : adr,
-        to:   o.sortant ? [adr]  : [boite],
-        boite,                                    // la boîte qui a REÇU — Q26
+        sens: sortant ? "out" : "in",
+        from: sortant ? Fx.MOI.nom : qui,
+        mail: sortant ? boite : adr,
+        to:   sortant ? [adr]  : [boite],
+        boite,                                    // la boîte qui a reçu ou émis — Q26
         subject: (P.next() < .3 ? "Re: " : "") + P.pick(Fx.SUJETS).replace("{n}", "" + P.int(1000, 9999)),
         body: P.pick(Fx.CORPS),
         date: Date.now() - P.int(0, 300) * 864e5 - P.int(0, 86399) * 1000,
-        lu: o.sortant ? true : !(P.next() < .3),
+        lu: sortant ? true : !luTirage,
         thread: P.int(1, 4), tags: [],
         sorti: null, motif: null, dossier: null, ref: null, compo: null,
       };
       m.snippet = m.body.split("\n")[2] || "…";
       At.attacher(m);
-      const ax = fid.split(":")[0];
-      if (Fx.estAxe(ax)) m.tags.push({ axe: ax, val: label, src: "dolibarr-mmi" });
+      if (Fx.estAxe(axe)) m.tags.push({ axe, val: label, src: "dolibarr-mmi" });
       if (P.next() < .25) m.tags.push({ axe:"projet", val:"RM" + P.int(2800, 2900), src:"redmine-ipro" });
       if (P.next() < .18) m.tags.push({ axe:"type", val:P.pick(["facture","devis","contrat"]), src:"filtre" });
       out.push(m);
@@ -121,9 +127,11 @@
       size:      (x, y) => y.size - x.size,
     },
 
-    /* Filtre + tri de la liste. Dans une vue de sortie, « en file » n'a pas de sens. */
-    filtrer(folder, filtre, tri) {
+    /* Filtre + tri de la liste. Le SENS est un second axe, indépendant du premier :
+       on veut « non lus ET reçus », pas l'un ou l'autre. */
+    filtrer(folder, filtre, tri, sens) {
       let a = Corpus.vue(folder);
+      if (sens === "in" || sens === "out") a = a.filter(m => (m.sens || "in") === sens);
       if (!VUES[folder.id]) a = filtre === "sortis" ? a.filter(m => m.motif) : a.filter(m => !m.motif);
       if (filtre === "non_lus") a = a.filter(m => !m.lu);
       if (filtre === "recents") a = a.filter(m => Date.now() - m.date < 30 * 864e5);

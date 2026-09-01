@@ -9,9 +9,21 @@
 
   ABX.QueryLog = {
     entrees,
-    /* kind : "sql" (défaut) ou "api" — un appel d'API n'est pas une requête interne. */
-    add(label, sql, index, warn, kind) {
-      entrees.unshift({ label, sql, index, warn, kind, t: new Date() });
+
+    /* Deux formes :
+         add(label, sql, index, warn, kind)     — une requête, la forme courante ;
+         add({ label, kind, sql, index, warn, enfants: [ { label, sql, index, warn } ] })
+
+       La seconde sert dès qu'un geste en déclenche plusieurs : un appel d'API
+       n'est pas une requête, c'est une requête qui EN PROVOQUE d'autres, et c'est
+       précisément le coût qu'on veut voir. Un UPDATE suivi d'un INSERT dans le
+       journal d'activité, de même. */
+    add(a, sql, index, warn, kind) {
+      const e = typeof a === "object" && a !== null
+        ? { ...a, enfants: a.enfants || [] }
+        : { label: a, sql, index, warn, kind, enfants: [] };
+      e.t = new Date();
+      entrees.unshift(e);
       if (entrees.length > MAX) entrees.pop();
       ABX.Bus.emit("querylog:changed");
     },

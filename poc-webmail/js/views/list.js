@@ -6,13 +6,18 @@
 
   const FILTRES = [["file","En file"], ["non_lus","Non lus"], ["recents","30 derniers jours"],
                    ["pj","Avec pièce jointe"], ["lourds","Lourds (> 2 Mo)"], ["sortis","Traités / archivés"]];
+  /* Le sens est un axe à part : on le croise avec le filtre, on ne le remplace pas. */
+  const SENS = [["tous","Tous"], ["in","↓ Reçus"], ["out","↑ Envoyés"]];
+  const SANS_SENS = { sent:1, drafts:1 };   // là, tout est déjà du même sens
 
   /* La variante d'affichage : le dossier d'abord, sinon l'axe — et seulement si
      une partielle existe pour lui. Ajouter un axe spécialisé = ajouter une
      partielle, sans toucher à ce fichier. */
   function variante(m) {
+    /* Ce qui compte est le SENS, pas le dossier : un message sortant rangé dans un
+       dossier client doit montrer son destinataire, comme dans « Envoyés ». */
+    if ((m.sens || "in") === "out") return "sent";
     const f = m.dossier || m.fid;
-    if (f === "sent" || f === "drafts") return "sent";
     const ax = f.split(":")[0];
     return R.has("message.card.meta", ax) || R.has("message.card.body", ax)
         || R.has("message.card.header", ax) ? ax : null;
@@ -20,7 +25,7 @@
 
   ABX.Views = ABX.Views || {};
   ABX.Views.List = {
-    FILTRES, variante,
+    FILTRES, SENS, variante,
     render(ui, messages, selection) {
       const vueSortie = !!C.VUES[ui.folder.id];
       let h = `<div class="backbar"><button data-vue="nav">‹ Dossiers</button>
@@ -36,7 +41,12 @@
             <option value="date_desc">Date ↓</option><option value="date_asc">Date ↑</option>
             <option value="from">Expéditeur</option><option value="subj">Sujet</option>
             <option value="size">Taille</option></select></div>
-        ${ui.folder.kind === "axe" ? `<div class="chips" style="margin-top:6px">
+        ${SANS_SENS[ui.folder.id] ? "" : `<div class="chips" style="margin-top:6px">
+          ${SENS.map(([k, l]) => `<span class="chip${(ui.sens || "tous") === k ? " on" : ""}"
+            data-s="${k}">${l}</span>`).join("")}
+          ${ui.folder.kind === "axe"
+            ? `<span class="chip on" style="margin-left:6px">↳ inclut les sous-dossiers</span>` : ""}</div>`}
+        ${SANS_SENS[ui.folder.id] && ui.folder.kind === "axe" ? `<div class="chips" style="margin-top:6px">
           <span class="chip on">↳ inclut les sous-dossiers</span></div>` : ""}</div>`;
 
       h += messages.length
