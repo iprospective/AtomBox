@@ -12,14 +12,17 @@
     if (patch.suppr) C.retire(m);
     C.recompte();
     St.save();
-    if (log) ABX.log(...(Array.isArray(log) ? log : [log]));
+    if (typeof log === "function") log(m);
+    else if (log) ABX.log(...(Array.isArray(log) ? log : [log]));
     ABX.Bus.emit("corpus:changed", { message: m, patch });
   }
 
   const M = {
     appliquer,
 
-    lire: m => appliquer(m, { lu: true }, ["Marquer lu",
+    /* `muet` : l'ouverture d'un message décrit déjà cette écriture dans sa
+       cascade — inutile de la journaliser deux fois. */
+    lire: (m, muet) => appliquer(m, { lu: true }, muet ? null : ["Marquer lu",
 `UPDATE rattachement SET lu_le = now()
  WHERE message_id = :id AND compte_id = :moi AND lu_le IS NULL;`,
       "une ÉCRITURE à chaque ouverture — le prix d'un compteur de non-lus juste, et d'un début " +
@@ -30,23 +33,36 @@
       "le compteur redevient juste sans toucher au journal : la lecture reste tracée dans " +
       "activite, on n'efface pas un fait (D54/D59)"]),
 
-    traiter: m => appliquer(m, { motif:"traite", sorti: Date.now() }, {
-      label: "Marquer traité", warn: true,
-      index: "deux écritures pour un clic : l'état courant d'un côté, le fait daté de l'autre. " +
-             "Confondre les deux, c'est perdre l'historique au premier changement d'avis",
-      enfants: [
-        { label: "l'état : le message quitte la file",
-          sql:
+    traiter: m => appliquer(m, { motif:"traite", sorti: Date.now() },
+      x => ABX.Traces.muter(x, {
+        label:"Marquer traité", nom:"traiter",
+        corps:{ sorti: true, motif_sortie: "traite" },
+        retour:{ message_id: x.id, sorti_le: "2026-09-01T14:02:11+02:00",
+                 motif_sortie: "traite", lu_le: "2026-09-01T14:01:58+02:00" },
+      }, [
+        { t:"sql", label:"l'état : le message quitte la file",
+          detail:
 `UPDATE rattachement SET sorti_le = now(), motif_sortie = 'traite'
  WHERE message_id = :id AND compte_id = :moi;`,
-          index: "⚠ déplace la ligne de partition si sorti_le en est la clé (D14/D30) — un seul " +
-                 "déplacement par email, c'est le pari de la conception", warn: true },
-        { label: "le fait : « a traité », daté, non modifiable",
-          sql:
-`INSERT INTO activite (compte_id, message_id, type, at) VALUES (:moi, :id, 'traite', now());`,
-          index: "le journal est partitionné par année (D56) : il grossit sans fin, mais on ne " +
-                 "lit jamais que le haut" },
-      ] }),
+          index:"⚠ si sorti_le est la clé de partition (D14/D30), cet UPDATE n'écrit pas une " +
+                "ligne : il la DÉPLACE — suppression dans une partition, insertion dans une " +
+                "autre. Le pari « un seul déplacement par email » tient tant que Q09 reste rare",
+          warn:true },
+        { t:"sql", label:"le fait : « a traité », daté, non modifiable",
+          detail:
+`INSERT INTO activite (compte_id, message_id, type, at)
+VALUES (:moi, :id, 'traite', now());`,
+          index:"deux écritures pour un clic, et c'est voulu : l'état courant d'un côté, le fait " +
+                "daté de l'autre. Les confondre, c'est perdre l'historique au premier changement " +
+                "d'avis (D54). Journal partitionné par année (D56)" },
+        { t:"event", label:"les applications connectées sont prévenues",
+          detail:
+`INSERT INTO evenement_sortant (application_id, type, charge, etat, prochaine_tentative)
+SELECT application_id, 'message.traite', :json, 'a_emettre', now()
+  FROM abonnement WHERE type = 'message.traite';`,
+          index:"un ERP qui suit ses échanges veut savoir qu'un message a été traité — mais " +
+                "l'apprendre ne doit pas retarder le clic (D86)" },
+      ])),
 
     archiver: m => appliquer(m, { motif:"archive", sorti: Date.now() }, ["Archiver (sortir sans traiter)",
 `UPDATE rattachement SET sorti_le = now(), motif_sortie = 'archive'
@@ -61,11 +77,27 @@
       "Autorisé ici — reste à décider si le cas est courant ou exceptionnel, la réponse " +
       "change le partitionnement", true]),
 
-    corbeille: m => appliquer(m, { dossier:"trash" }, ["Mettre à la corbeille",
-`UPDATE rattachement SET dossier_id = :trash, deplace_le = now()
+    corbeille: m => appliquer(m, { dossier:"trash" },
+      x => ABX.Traces.muter(x, {
+        label:"Mettre à la corbeille", nom:"corbeille",
+        corps:{ dossier: "trash" },
+        retour:{ message_id: x.id, dossier_id: "trash",
+                 dossier_origine: (x.fid || "inbox"), deplace_le: "2026-09-01T14:02:11+02:00" },
+      }, [
+        { t:"sql", label:"un déplacement, pas une suppression",
+          detail:
+`UPDATE rattachement
+   SET dossier_origine = COALESCE(dossier_origine, dossier_id),
+       dossier_id = :trash, deplace_le = now()
  WHERE message_id = :id AND compte_id = :moi;`,
-      "la corbeille est un DÉPLACEMENT, pas une suppression : le message est intact et les " +
-      "autres comptes qui le portent ne voient rien (D10)"]),
+          index:"le message est intact, et les autres comptes qui le portent ne voient rien (D10). " +
+                "COALESCE : on mémorise l'origine au PREMIER passage seulement, sinon un " +
+                "aller-retour corbeille ferait de la corbeille l'origine (D88)" },
+        { t:"note", label:"ce qui ne se passe PAS ici",
+          detail:"aucun DELETE, aucun ramasse-miettes, aucune touche au magasin d'octets",
+          index:"la suppression réelle est un balayage, jamais un clic (D87) — c'est « vider la " +
+                "corbeille » qui la déclenche, et encore, en tâche de fond" },
+      ])),
 
     junk: m => appliquer(m, { dossier:"junk" }, {
       label: "Marquer indésirable",

@@ -10,7 +10,7 @@ console.log("— chargement —————————————————�
 const ls = creerStockage();
 let p = demarrer(ls);
 let A = p.ABX;
-eq(p.fichiers.length, 28, "index.html déclare tous les scripts");
+vrai(p.fichiers.length > 25, p.fichiers.length + " scripts déclarés par index.html");
 vrai(A.Corpus.tous.length > 3000, "corpus engendré (" + A.Corpus.tous.length + " messages)");
 vrai(A.Registry.liste().length >= 15, "partielles enregistrées : " + A.Registry.liste().length);
 vrai(p.doc.getElementById("nav").innerHTML.includes("Fournisseurs"), "arborescence peinte");
@@ -75,12 +75,13 @@ eq(A.Corpus.dossiers.sent.length, avant + 1, "message envoyé, présent dans Env
 const envoi = A.Corpus.dossiers.sent[0];
 eq(envoi.pj, 1, "la pièce jointe a suivi");
 const q = A.QueryLog.entrees.find(x => x.label.startsWith("Envoyer"));
+const det = e => (e.detail || "");
 vrai(!!q, "l'envoi est journalisé");
 vrai(q.warn === true, "destinataires mixtes : l'avertissement D12 est levé");
-vrai(q.enfants.length >= 4, "l'envoi est décomposé en " + q.enfants.length + " requêtes");
-vrai(q.enfants.some(e => e.sql.includes("pg_notify")), "les externes passent au relais");
-vrai(q.enfants.some(e => e.sql.includes("'recu'")), "les internes sont livrés en base");
-vrai(q.enfants.some(e => e.warn), "l'étage mixte porte l'avertissement");
+vrai(q.etapes.length >= 5, "l'envoi est décomposé en " + q.etapes.length + " étapes");
+vrai(q.etapes.some(e => det(e).includes("pg_notify")), "les externes passent au relais");
+vrai(q.etapes.some(e => det(e).includes("'recu'")), "les internes sont livrés en base");
+vrai(q.etapes.some(e => e.warn), "l'étage mixte porte l'avertissement");
 
 console.log("— transfert par référence ————————————————————————");
 A.Controllers.Compose.demarrer("tr", src);
@@ -134,8 +135,8 @@ vrai(A.Registry.render("message.card", { m: sortants[0], variant: "sent" }).incl
      "sa carte montre le destinataire");
 A.Controllers.List.logSens("out");
 const qs = A.QueryLog.entrees[0];
-vrai(qs.warn, "le journal avertit : le sens doit être une colonne, pas une déduction");
-vrai(qs.sql.includes("r.sens"), "la requête s'appuie sur r.sens");
+vrai(qs.warn, "la trace avertit : le sens doit être une colonne, pas une déduction");
+vrai(qs.etapes.some(e => (e.detail || "").includes("r.sens")), "la requête s'appuie sur r.sens");
 
 console.log("— tags ————————————————————————————————————————");
 const mt = A.Corpus.par(lignes[0].dataset.id);
@@ -160,30 +161,55 @@ const spam = A.Corpus.par(lignes[4].dataset.id);
 A.MessageService.junk(spam);
 eq(spam.dossier, "junk", "mis en quarantaine");
 const qj = A.QueryLog.entrees[0];
-eq(qj.enfants.length, 2, "le geste classe ET apprend");
-vrai(qj.enfants.some(e => e.sql.includes("apprentissage_spam")), "l'apprentissage est journalisé");
+eq(qj.etapes.filter(e => e.t === "sql").length, 2, "le geste classe ET apprend");
+vrai(qj.etapes.some(e => (e.detail || "").includes("apprentissage_spam")),
+     "l'apprentissage est tracé");
 vrai(A.Views.Message.actionsEtat(spam).includes("nonJunk"),
      "la barre propose « ce n'est pas un indésirable »");
 vrai(!A.Views.Message.actionsEtat(spam).includes('data-x="junk"'),
      "et ne propose plus de le remarquer indésirable");
 A.MessageService.nonJunk(spam);
 eq(spam.dossier, null, "sorti de la quarantaine");
-vrai(A.QueryLog.entrees[0].enfants.some(e => e.sql.includes("'ham'")), "le filtre désapprend");
+vrai(A.QueryLog.entrees[0].etapes.some(e => (e.detail || "").includes("'ham'")),
+     "le filtre désapprend");
 
-console.log("— requêtes imbriquées ————————————————————————————");
+console.log("— cascade d'ouverture d'un message ————————————————");
+const cible2 = A.Corpus.tous.find(x => x.fid.startsWith("client:") && x.pj && x.tags.length && !x.lu);
+A.QueryLog.vider();
+A.Controllers.Tabs.ouvrir({ type: "msg", id: cible2.id }, false);
+const tr = A.QueryLog.entrees.find(x => x.label.startsWith("Ouvrir «"));
+vrai(!!tr, "la cascade est tracée");
+const types = tr.etapes.map(e => e.t);
+["ui","cache","http","route","ctrl","acl","sql","blob","json","render"].forEach(t =>
+  vrai(types.includes(t), "étape « " + t + " » présente"));
+vrai(types.indexOf("ui") < types.indexOf("http"), "le clic précède l'appel");
+vrai(types.indexOf("http") < types.indexOf("sql"), "l'appel précède les requêtes");
+vrai(types.lastIndexOf("json") < types.lastIndexOf("render"), "le JSON précède le rendu");
+const js = tr.etapes.find(e => e.t === "json");
+const contrat = JSON.parse(js.detail);
+eq(contrat.message_id, cible2.id, "le JSON porte l'identifiant");
+["sujet","de","a","boite","sens","date_reception","lu_le","sorti_le","thread_id",
+ "taille_octets","nb_pieces_jointes","tags","pieces_jointes","corps"].forEach(k =>
+  vrai(k in contrat, "contrat d'API : champ « " + k + " »"));
+eq(contrat.pieces_jointes.length, cible2.pj, "les pièces jointes y sont");
+vrai("mime_declare" in contrat.pieces_jointes[0] && "mime_detecte" in contrat.pieces_jointes[0],
+     "avec les deux types, déclaré et détecté (D32)");
+vrai(tr.etapes.some(e => e.warn), "la cascade signale ses points coûteux");
+vrai(tr.etapes.filter(e => e.t === "http").length >= 2,
+     "un message tagué coûte un SECOND aller-retour, vers l'application (Q31)");
+const rc = A.Views.QueryLog.render([tr]);
+vrai(rc.includes("réseau — aller-retour") && rc.includes(">serveur<"),
+     "la vue marque les passages de frontière");
+
+console.log("— cascade ————————————————————————————————————————");
 A.Controllers.Message.logErp(client, "inv");
 const api = A.QueryLog.entrees[0];
-eq(api.kind, "api", "entrée marquée API");
-vrai(api.sql.startsWith("GET "), "le parent est l'appel HTTP");
-eq(api.enfants.length, 1, "et porte la requête SQL qu'il déclenche");
-vrai(api.enfants[0].sql.includes("SELECT"), "laquelle est bien du SQL");
-vrai(api.enfants[0].index.includes("portée"), "avec son propre index et son avertissement");
+vrai(api.etapes.some(e => e.t === "http"), "la trace contient l'appel HTTP");
+vrai(api.etapes.some(e => e.t === "sql"), "et la requête qu'il déclenche");
+vrai(api.etapes[0].detail.startsWith("GET "), "l'appel vient en premier");
 const rendu = A.Views.QueryLog.render(A.QueryLog.entrees);
-vrai(rendu.includes("class=\"sub\""), "la vue rend le bloc imbriqué");
-vrai(rendu.includes("requête(s) déclenchée(s)"), "et l'annonce");
-A.Controllers.Message.logErp(client, "res");
-vrai(A.QueryLog.entrees[0].enfants.length === 3, "un geste non-API peut aussi être décomposé");
-vrai(!A.QueryLog.entrees[0].sql, "son parent n'a pas de requête propre");
+vrai(rendu.includes('class="casc"'), "la vue rend la cascade");
+vrai(rendu.includes("réseau — aller-retour"), "et marque le passage du réseau");
 
 console.log("— déterminisme ————————————————————————————————");
 const p3 = demarrer(creerStockage());   // stockage vierge

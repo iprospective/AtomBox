@@ -34,13 +34,20 @@
 
       if (spec.type === "msg") {
         const m = C.par(spec.id);
-        if (m && !m.lu) ABX.MessageService.lire(m);          // émet, donc repeint
+        const dejaOuvert = !!t.vu;
+        if (m && !dejaOuvert) { t.vu = true; ABX.Traces.ouvrirMessage(m, m.lu); }
+        else if (m) ABX.log({ label:"Revenir sur l'onglet « " + m.subject + " »", etapes:[
+          { t:"ui", label:"clic sur l'onglet", detail:"views/tabs.js → Controllers.Tabs.ouvrir" },
+          { t:"cache", label:"aucune requête",
+            detail:"le message est déjà en mémoire du client",
+            index:"c'est tout l'intérêt d'un onglet — à condition d'avoir chargé le corps AVEC " +
+                  "le message, une requête et non deux" },
+          { t:"render", label:"Views.Message, sur les mêmes données",
+            detail:"Controllers.App.peindre('detail')" },
+        ]});
+        if (m && !m.lu) ABX.MessageService.lire(m, true);    // émet, donc repeint
         else { St.save(); ABX.Controllers.App.peindre("tabs");
                ABX.Controllers.App.peindre("list"); ABX.Controllers.App.peindre("detail"); }
-        if (avant && avant !== key) ABX.log("Basculer d'onglet — aucune requête",
-`-- rien. Le message est déjà en mémoire du client : c'est tout l'intérêt d'un
--- onglet par rapport à une re-sélection dans la liste.`,
-          "à condition d'avoir chargé le corps AVEC le message — une requête, pas deux");
       } else {
         St.save();
         ABX.Controllers.App.peindre("tabs");

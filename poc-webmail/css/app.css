@@ -236,13 +236,28 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
   .msg .snip{display:none}
 }
 
-/* ---- requêtes imbriquées : ce qu'un appel déclenche ---- */
-.qi .sub{margin-top:7px;padding-left:9px;border-left:2px solid var(--accent)}
-.qi .subt{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
-  margin-bottom:4px}
-.qi .qs{margin-bottom:6px}
-.qi .qs:last-child{margin-bottom:0}
-.qi .qs .lbl{font-size:11px;color:var(--muted);margin-bottom:3px}
+/* ---- cascade : la succession d'un geste, du clic au rendu ---- */
+.qi.w{background:linear-gradient(90deg,rgba(180,83,9,.07),transparent 60%)}
+.qi .nsteps{float:right;font-size:10px;color:var(--muted);font-weight:400}
+.casc{list-style:none;margin:7px 0 0;padding:0 0 0 2px}
+.step{display:flex;gap:8px;padding:4px 0 4px 9px;border-left:2px solid var(--line);position:relative}
+.step .pic{flex:none;width:16px;text-align:center;font-size:12px;line-height:1.5}
+.step .body{flex:1;min-width:0}
+.step .et{font-weight:600;font-size:11.5px}
+.step .det{color:var(--muted);font-size:11.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.step code{display:block;margin-top:3px}
+.step.w{border-left-color:var(--warn)}
+/* côté serveur : la barre change, c'est ce qui reste à écrire */
+.step.route,.step.ctrl,.step.svc,.step.acl,.step.sql,.step.blob,.step.event,.step.note{
+  border-left-color:var(--accent);border-left-style:solid}
+.step.http,.step.json{border-left:2px dashed var(--accent)}
+.step.http .et,.step.json .et{color:var(--accent)}
+.step.acl .et{color:var(--ok)}
+.step.ui .et,.step.render .et{color:var(--muted);font-weight:500}
+.fr{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);
+  padding:5px 0 3px 11px;border-left:2px dotted var(--line)}
+.fr.srv{color:var(--accent);border-left-color:var(--accent)}
 
 /* ---- retrait d'un tag ---- */
 .tagx{border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:4px;

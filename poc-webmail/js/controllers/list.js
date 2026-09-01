@@ -18,7 +18,7 @@
     ouvrir(folder) {
       const ui = St.ui;
       ui.folder = folder;
-      List.logOuverture(folder);
+      ABX.Traces.ouvrirDossier(folder, C.filtrer(folder, ui.filtre, ui.tri, ui.sens).length);
       St.save();
       ABX.Controllers.Nav.peindre();
       List.peindre();

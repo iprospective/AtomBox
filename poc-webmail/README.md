@@ -7,20 +7,45 @@ Ouvrir `index.html` dans un navigateur : c'est tout.
 > en `file://`, et ce POC doit rester ouvrable par double-clic. L'ordre de chargement
 > déclaré dans `index.html` **est** la déclaration des dépendances.
 
-## Le vrai livrable : le panneau « requêtes »
+## Le vrai livrable : la trace des gestes
 
-Chaque geste journalise **la question qu'il pose aux données** et l'index qu'elle
-suppose. ⚠ en orange = coûteux ou non indexé, badge `API` = appel entre AtomBox et une
-application connectée. C'est cette liste — et non les écrans — qui dictera les index du
-schéma.
+Ce n'est pas un journal de requêtes SQL : c'est la **cascade complète** d'un geste, dans
+l'ordre d'exécution. Ouvrir un message déroule dix-sept étapes — le clic, le cache client,
+l'appel HTTP, la route, le contrôleur, la vérification de portée, les quatre requêtes, la
+lecture du magasin d'octets, le JSON renvoyé, le rendu, puis l'appel à l'ERP et l'écriture
+du « lu ».
 
-Les entrées sont **imbriquées** : un appel d'API n'est pas une requête, c'est une requête
-qui **en provoque d'autres**, et c'est précisément le coût qu'on veut voir. L'appel HTTP
-apparaît donc en tête, et sous lui, en retrait, les requêtes SQL qu'il déclenche côté
-AtomBox — chacune avec son propre index et son propre avertissement. Même chose pour un
-geste local qui écrit plusieurs fois : « marquer traité » montre l'`UPDATE` de l'état
-*et* l'`INSERT` du fait daté ; « vider la corbeille » montre les trois étages du
-ramasse-miettes, dont un seul appartient au clic.
+Une barre de côté marque les passages de frontière : ce qui est **navigateur**, ce qui
+traverse le **réseau**, ce qui tourne sur le **serveur qui reste à écrire**. Chaque étape
+porte son type, son détail (code, SQL, JSON, signature de méthode), l'index qu'elle suppose
+et un ⚠ quand elle est coûteuse, fragile ou non tranchée.
+
+| Type | Ce qu'il montre |
+|---|---|
+| `ui` `render` `cache` | ce qui se passe dans le navigateur, y compris ce qu'on **évite** de demander |
+| `http` `json` | l'aller-retour — et le **contrat d'API**, en JSON réel construit sur le message affiché |
+| `route` `ctrl` `svc` `acl` | ce qu'il faudra écrire : la route, le contrôleur, le service, la vérification de portée |
+| `sql` `blob` `event` | les requêtes, la lecture du magasin d'octets, les événements sortants |
+
+**C'est ce fichier qui sert de support de CDC** : `js/services/api-trace.js` décrit la
+surface d'API par les gestes qui l'appellent. Écrire le serveur, ce sera écrire ce qui y est
+décrit ; tout champ absent du JSON est une colonne dont personne n'a encore eu besoin.
+
+> **Hypothèse de travail, à ne pas confondre avec une décision** : une API REST, une
+> ressource par concept du modèle. **Q07 n'est pas tranchée.** Un point d'entrée unique
+> (GraphQL, RPC) donnerait une autre cascade — moins d'allers-retours, plus de complexité
+> serveur. La trace est faite pour rendre la comparaison possible : **lire une cascade et
+> compter ses passages de réseau** est le moyen le plus direct de trancher Q07.
+
+Trois constats sortent déjà de la lecture des cascades :
+
+- **Ouvrir un message tagué coûte deux allers-retours**, dont un vers une application
+  qu'AtomBox ne contrôle pas. C'est Q31, et c'est la raison pour laquelle le cadre métier
+  doit se remplir *après* le message.
+- **Le paramètre `inclure` n'est pas un confort** : sans lui, ouvrir un message demande le
+  corps, puis les pièces jointes, puis le fil — trois allers-retours pour un clic.
+- **La portée est dans la requête, pas avant elle** : un message hors portée n'existe pas,
+  donc 404 et non 403 — il n'y a rien à vérifier puisqu'il n'y a rien à trouver.
 
 ## Architecture
 
@@ -35,7 +60,8 @@ js/core/       prng      aléatoire déterministe (le corpus doit être reproduc
                bus       événements : un service n'appelle jamais une vue
                registry  vues partielles surchargeables
                store     état + persistance localStorage
-js/services/   query-log     le journal (le livrable)
+js/services/   query-log     la trace : un geste = une suite d'étapes typées
+               api-trace     LA SURFACE D'API, décrite par les gestes — le support de CDC
                attachments   magasin d'octets dédupliqué
                erp           applications connectées
                fixtures      axes, dossiers, identités
