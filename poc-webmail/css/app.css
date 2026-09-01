@@ -31,7 +31,7 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .hspacer{flex:1}
 .hbtn{background:none;border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer}
 .hbtn:hover{background:var(--accent-soft);border-color:var(--accent)}
-".hbtn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.hbtn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .hbtn.prim{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 .hbtn.prim:hover{filter:brightness(1.08)}
 .hbtn.dgr:hover{border-color:var(--danger);color:var(--danger);background:transparent}
@@ -314,6 +314,7 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
   border:1px solid var(--muted);color:var(--muted);margin-left:4px;vertical-align:1px}
 .jalon.v3{border-color:var(--accent);color:var(--accent)}
 .jalon.v4{border-color:var(--warn);color:var(--warn)}
+.jalon.v5{border-color:var(--danger);color:var(--danger);border-style:dashed}
 .chip.futur{opacity:.6;border-style:dashed}
 
 /* ---- bandeau « ceci est un POC » ---- */

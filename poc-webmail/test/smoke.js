@@ -317,17 +317,22 @@ const hc = p.doc.getElementById("detail").innerHTML;
 vrai(!!A.CDC, "index du CDC chargé");
 vrai(A.CDC.decisions.length >= 90, A.CDC.decisions.length + " décisions indexées");
 vrai(A.CDC.questions.length >= 30, A.CDC.questions.length + " questions indexées");
-eq(A.CDC.chapitres.length, 16, "16 chapitres");
-vrai(hc.includes("D98"), "la dernière décision est affichée");
-vrai(hc.includes("Q38"), "et les questions ouvertes aussi");
+eq(A.CDC.chapitres.length, 17, "17 chapitres — 13 = émission et délivrabilité");
+vrai(hc.includes("D113"), "la dernière décision est affichée");
+vrai(hc.includes("Q44"), "et les questions ouvertes aussi");
 vrai(hc.includes(A.CDC.genere), "la page date son index");
 A.Controllers.Pages.ouvrir("features");
 const hf = p.doc.getElementById("detail").innerHTML;
 const nFeat = A.Views.Pages.FEATURES.reduce((s, [, l]) => s + l.length, 0);
 vrai(nFeat >= 40, nFeat + " fonctionnalités listées");
 vrai(hf.includes("V4"), "les jalons y figurent");
+vrai(hf.includes("Moteur de filtres"), "le moteur de filtres (D74) est listé");
+vrai(hf.includes("DMARC"), "la délivrabilité DMARC est listée");
+vrai(hf.includes("expéditeur externe"), "l'affichage sûr est listé");
 A.Controllers.Pages.ouvrir("roadmap");
-eq(A.Views.Pages.ROADMAP.length, 4, "quatre jalons dans la feuille de route");
+eq(A.Views.Pages.ROADMAP.length, 5, "cinq jalons dans la feuille de route");
+vrai(p.doc.getElementById("detail").innerHTML.includes("jalon v5"),
+     "le jalon V5 a son propre style");
 
 console.log("— déterminisme ————————————————————————————————");
 const p3 = demarrer(creerStockage());   // stockage vierge
