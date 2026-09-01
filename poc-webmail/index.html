@@ -117,6 +117,36 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .qi .idx.w{color:var(--warn)}
 .note{padding:10px 11px;color:var(--muted);font-size:11.5px;border-bottom:1px solid var(--line)}
 
+/* ---- pièces jointes ---- */
+.pjl{display:flex;flex-direction:column;gap:6px}
+.pjc{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-radius:7px;
+  padding:7px 9px;background:var(--panel);cursor:pointer}
+.pjc:hover{border-color:var(--accent)}
+.pjc .pic{font-size:17px;line-height:1.25;flex:none}
+.pjc .pn{flex:1;min-width:0}
+.pjc .pn b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pjc .ps{display:block;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pjc .bd{display:block;margin-top:2px}
+.hash{font:10.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+.badge{display:inline-block;font-size:10.5px;border-radius:4px;padding:1px 6px;margin:2px 3px 0 0;
+  border:1px solid var(--line);background:var(--panel2);color:var(--muted)}
+.badge.ok{border-color:var(--ok);color:var(--ok)}
+.badge.w{border-color:var(--warn);color:var(--warn)}
+
+/* ---- intégration ERP ---- */
+.box.erp{border-color:var(--accent)}
+.box.erp h4{color:var(--accent)}
+.erpl{width:100%;border-collapse:collapse;font-size:12px;margin-top:7px}
+.erpl td{padding:3px 8px 3px 0;border-bottom:1px solid var(--line)}
+.erpl tr:last-child td{border-bottom:0}
+.erpl td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.st{font-size:10.5px;border-radius:4px;padding:1px 6px;border:1px solid var(--line);white-space:nowrap}
+.st.ok{border-color:var(--ok);color:var(--ok)}
+.st.due{border-color:var(--danger);color:var(--danger)}
+.st.wait{border-color:var(--warn);color:var(--warn)}
+.qi.api code{border-left:3px solid var(--accent)}
+
 /* ---- responsive ------------------------------------------------------------
    4 paliers : desktop large (4 colonnes) → desktop (3 + requêtes en tiroir)
    → tablette (2 + nav en tiroir) → mobile (1 colonne, navigation par vues).   */
@@ -201,6 +231,105 @@ const PRENOMS = ["Marie","Jean","Sophie","Luc","Camille","Thomas","Julie","Pierr
 const NOMS = ["Durand","Martin","Bernard","Petit","Robert","Richard","Dubois","Moreau","Laurent","Simon"];
 const pers = () => pick(PRENOMS) + " " + pick(NOMS);
 
+/* ---------------------------------------------------------------------------
+   PIÈCES JOINTES — magasin d'octets dédupliqué (D11 / D24 / D32)
+   Le BLOB porte les octets, le hash et le type DÉTECTÉ ; la LIAISON porte le
+   nom de fichier, le type DÉCLARÉ et l'encodage d'origine. Deux messages
+   peuvent nommer le même octet différemment, et un client mail déclare
+   parfois n'importe quoi — les deux faits doivent survivre au stockage.
+   ------------------------------------------------------------------------- */
+const hex   = n => { let s = ""; while (s.length < n) s += "0123456789abcdef"[int(0, 15)]; return s; };
+const poids = k => k < 1024 ? k + " ko"
+  : (k / 1024).toFixed(k < 10240 ? 1 : 0).replace(".", ",") + " Mo";
+const euro  = n => n.toLocaleString("fr-FR") + " €";
+const mimeC = t => t.replace("application/vnd.openxmlformats-officedocument.", "…ooxml.")
+                    .replace("spreadsheetml.sheet", "xlsx")
+                    .replace("wordprocessingml.document", "docx");
+
+const BLOBS = [];
+const blob = o => { const b = { pj_id: BLOBS.length + 1, sha: hex(12), refs: 1, ...o };
+                    BLOBS.push(b); return b; };
+
+const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/* Blobs RÉCURRENTS : à eux seuls, ils justifient la déduplication. */
+const RECUR = [
+  blob({ nom:"signature-logo", ext:"png",  mime:"image/png",       ko:34,   ic:"🖼", refs:1284 }),
+  blob({ nom:"CGV-2026",       ext:"pdf",  mime:"application/pdf", ko:212,  ic:"📄", refs:96 }),
+  blob({ nom:"tarifs-2026",    ext:"xlsx", mime:XLSX,              ko:344,  ic:"📊", refs:41 }),
+  blob({ nom:"plaquette-2026", ext:"pdf",  mime:"application/pdf", ko:2460, ic:"📄", refs:18, photo:true }),
+];
+
+const PJT = [
+  { ext:"pdf",  mime:"application/pdf", ic:"📄", ko:[38,1400],
+    noms:["Facture {n}","Devis {n}","BL {n}","Contrat de maintenance","Releve {n}"] },
+  { ext:"pdf",  mime:"application/pdf", ic:"📄", ko:[38,1400],
+    noms:["Avoir {n}","Bon de commande {n}","Attestation {n}"] },
+  { ext:"jpg",  mime:"image/jpeg", ic:"🖼", ko:[1900,7600], photo:true,
+    noms:["IMG_{n}","photo-chantier-{n}","montage-{n}"] },
+  { ext:"png",  mime:"image/png",  ic:"🖼", ko:[110,2400], photo:true,
+    noms:["capture-{n}","schema-{n}"] },
+  { ext:"xlsx", mime:XLSX, ic:"📊", ko:[22,480],  noms:["inventaire-{n}","suivi-commandes-{n}"] },
+  { ext:"docx", mime:DOCX, ic:"📝", ko:[30,340],  noms:["compte-rendu-{n}","cahier-des-charges-{n}"] },
+  { ext:"zip",  mime:"application/zip",  ic:"🗜", ko:[420,9200], noms:["dossier-{n}","photos-chantier-{n}"] },
+  { ext:"eml",  mime:"message/rfc822",   ic:"✉", ko:[14,180], eml:true, noms:["message-transfere-{n}"] },
+];
+
+function lien(b, noms) {
+  const base = noms ? pick(noms).replace("{n}", "" + int(1000, 9999)) : b.nom;
+  return { b, nom: base + "." + b.ext,
+           declare: rnd() < .12 ? "application/octet-stream" : b.mime,   // divergence D32
+           enc: b.ext === "eml" ? "8bit" : "base64" };
+}
+
+function attachePJ(m) {
+  m.pjs = [];
+  if (rnd() < .38) { const n = int(1, 3);
+    for (let k = 0; k < n; k++) { const t = pick(PJT);
+      m.pjs.push(lien(blob({ ext:t.ext, mime:t.mime, ic:t.ic, photo:t.photo, eml:t.eml,
+        ko:int(t.ko[0], t.ko[1]), refs: rnd() < .15 ? int(2, 6) : 1 }), t.noms)); } }
+  if (rnd() < .30) m.pjs.push(lien(pick(RECUR)));          // signature, CGV, tarifs…
+  m.pj    = m.pjs.length;
+  m.pj_ko = m.pjs.reduce((s, p) => s + p.b.ko, 0);
+  m.size  = int(4, 60) + Math.round(m.pj_ko * 1.37);       // base64 : +37 % sur le fil (D69)
+}
+
+/* ---------------------------------------------------------------------------
+   APPLICATIONS CONNECTÉES — le métier n'est PAS dans AtomBox (D19 / D21)
+   AtomBox porte le tag et la RÉFÉRENCE EXTERNE ; les montants ci-dessous sont
+   ceux que l'application renverrait à l'affichage. Rien n'est recopié.
+   ------------------------------------------------------------------------- */
+const ERP_APPS = {
+  client:       { app:"dolibarr-mmi",  nom:"Dolibarr — MMI Négoce", ic:"🏢", pref:"TH",   objet:"tiers" },
+  fournisseur:  { app:"dolibarr-mmi",  nom:"Dolibarr — MMI Négoce", ic:"🏢", pref:"TH",   objet:"fournisseur" },
+  sav:          { app:"redmine-ipro",  nom:"Redmine — support",     ic:"🛟", pref:"#",    objet:"demande" },
+  partenaire:   { app:"nextcloud-mmi", nom:"Nextcloud — partage",   ic:"☁",  pref:"grp-", objet:"groupe" },
+};
+const PIECES = [["Devis","PR",["accepté","en attente","refusé"]],
+                ["Commande","CO",["expédiée","en préparation","validée"]],
+                ["Facture","FA",["payée","impayée","en retard"]]];
+const OK_ST = { "payée":1, "accepté":1, "expédiée":1, "validée":1 };
+const KO_ST = { "impayée":1, "en retard":1, "refusé":1 };
+
+const FICHES = {};
+function fiche(axe, val) {
+  const k = axe + "|" + val;
+  if (FICHES[k]) return FICHES[k];
+  const cfg = ERP_APPS[axe]; if (!cfg) return null;
+  const objets = [];
+  for (let i = 0, n = int(2, 5); i < n; i++) {
+    const P = pick(PIECES);
+    objets.push({ type:P[0], statut:pick(P[2]), montant:int(120, 24000),
+      ref: P[1] + "26" + String(int(1, 12)).padStart(2, "0") + "-" + String(int(1, 999)).padStart(4, "0") });
+  }
+  const du = objets.filter(o => o.type === "Facture" && o.statut !== "payée");
+  return FICHES[k] = { cfg, ref: cfg.pref + int(1000, 9999), objets,
+    encours: du.reduce((s, o) => s + o.montant, 0),
+    echu:    du.filter(o => o.statut === "en retard").reduce((s, o) => s + o.montant, 0),
+    depuis:  2010 + int(0, 14) };
+}
+
 /* Les six familles de D76 : un AXE, ses VALEURS. */
 const AXES = [
   { id:"fournisseur",  label:"Fournisseurs",    icon:"📦", n:200 },
@@ -268,12 +397,12 @@ function messages(folderId, label) {
       snippet: pick(CORPS).split("\n")[2] || "…",
       body: pick(CORPS),
       date: Date.now() - int(0, 300) * 864e5 - int(0, 86399) * 1000,
-      unread: rnd() < .3, pj: rnd() < .35 ? int(1, 3) : 0,
-      size: int(4, 900),
+      unread: rnd() < .3,
       thread: int(1, 4),
       tags: [],
     });
     const m = out[out.length - 1];
+    attachePJ(m);                       // pièces jointes réelles + poids réel du message
     const ax = folderId.split(":")[0];
     if (AXES.some(a => a.id === ax)) m.tags.push({ axe: ax, val: label, src: "dolibarr-mmi" });
     if (rnd() < .25) m.tags.push({ axe: "projet", val: "RM" + int(2800, 2900), src: "redmine-ipro" });
@@ -287,8 +416,8 @@ function messages(folderId, label) {
    Chaque geste d'interface note la question qu'il pose aux données.
    ========================================================================== */
 const QLOG = [];
-function q(label, sql, index, warn) {
-  QLOG.unshift({ label, sql, index, warn, t: new Date() });
+function q(label, sql, index, warn, kind) {
+  QLOG.unshift({ label, sql, index, warn, kind, t: new Date() });
   if (QLOG.length > 40) QLOG.pop();
   document.getElementById("qn").textContent = QLOG.length;
   renderQ();
@@ -444,6 +573,7 @@ function filtered() {
   if (S.filtre === "non_lus") a = a.filter(m => m.unread);
   if (S.filtre === "recents") a = a.filter(m => Date.now() - m.date < 30 * 864e5);
   if (S.filtre === "pj")      a = a.filter(m => m.pj);
+  if (S.filtre === "lourds")  a = a.filter(m => m.size > 2048);
   const T = { date_desc:(x,y)=>y.date-x.date, date_asc:(x,y)=>x.date-y.date,
               from:(x,y)=>x.from.localeCompare(y.from),
               subj:(x,y)=>x.subject.localeCompare(y.subject),
@@ -453,7 +583,8 @@ function filtered() {
 
 function renderList() {
   const el = document.getElementById("list"), a = filtered();
-  const F = [["tous","Tous"],["non_lus","Non lus"],["recents","30 derniers jours"],["pj","Avec pièce jointe"]];
+  const F = [["tous","Tous"],["non_lus","Non lus"],["recents","30 derniers jours"],["pj","Avec pièce jointe"],
+             ["lourds","Lourds (> 2 Mo)"]];
   let h = `<div class="backbar"><button data-vue="nav">‹ Dossiers</button>
       <span style="color:var(--muted);font-size:11.5px">${esc(S.folder.label)}</span></div>
     <div class="lbar"><div class="t">${esc(S.folder.label)}
@@ -471,7 +602,7 @@ function renderList() {
       <div class="r1"><span class="from">${esc(m.from)}</span><span class="dt">${dt(m.date)}</span></div>
       <div class="subj">${esc(m.subject)}</div>
       <div class="snip">${esc(m.snippet)}</div>
-      <div class="meta">${m.pj ? `<span class="pj">📎 ${m.pj}</span>` : ""}
+      <div class="meta">${m.pj ? `<span class="pj">📎 ${m.pj} · ${poids(m.pj_ko)}</span>` : ""}
         ${m.tags.map(t => `<span class="tag ax">${esc(t.axe)}=${esc(t.val)}</span>`).join("")}</div>
     </div>`).join("") : `<div class="empty">Aucun message ne correspond à ce filtre.</div>`;
   el.innerHTML = h;
@@ -486,6 +617,15 @@ function renderList() {
     else if (S.filtre === "pj")
       q("Filtre « avec pièce jointe »", `SELECT … WHERE m.nb_pieces_jointes > 0 …;`,
         "nb_pieces_jointes dénormalisé (D29) — sinon un COUNT par ligne de liste");
+    else if (S.filtre === "lourds")
+      q("Filtre « lourds » — la file de recompression (D70)",
+`SELECT m.message_id, m.sujet, m.taille_octets, m.nb_pieces_jointes
+  FROM rattachement r JOIN message m USING (message_id)
+ WHERE r.compte_id = :moi AND <portée du dossier>
+   AND m.taille_octets > 2 * 1024 * 1024
+ ORDER BY m.taille_octets DESC LIMIT 50;`,
+        "⚠ aucun index sur taille_octets : acceptable au clic, PAS pour balayer le corpus. " +
+        "L'écran de recompression devra partir de piece_jointe (octets DESC), pas de message", true);
   });
   el.querySelector("#tri").onchange = e => {
     S.tri = e.target.value; renderList();
@@ -503,6 +643,65 @@ function renderList() {
     S.sel = m.dataset.id; renderList(); renderDetail();
     if (MOBILE()) setVue("detail");
   });
+}
+
+
+/* Pièces jointes : ce que la liaison sait, ce que le blob sait (D32). */
+function pjHtml(m) {
+  if (!m.pjs.length) return "";
+  const tot = m.pj_ko, fil = Math.round(tot * 1.37);
+  return `<div class="box"><h4>Pièces jointes — ${m.pjs.length} · ${poids(tot)} décodés,
+      ${poids(fil)} sur le fil (base64, D69)</h4>
+    <div class="pjl">${m.pjs.map((p, i) => { const b = p.b, div = p.declare !== b.mime;
+      return `<div class="pjc" data-pj="${i}">
+        <span class="pic">${b.ic}</span>
+        <span class="pn"><b>${esc(p.nom)}</b>
+          <span class="ps">${poids(b.ko)} · <span class="hash">sha256:${b.sha}…</span></span>
+          <span class="bd">
+            <span class="badge" title="${esc(b.mime)}">${esc(mimeC(b.mime))}</span>
+            ${b.refs > 1
+              ? `<span class="badge ok">stockée une fois · ${b.refs} liaisons</span>`
+              : `<span class="badge">octets uniques</span>`}
+            ${div ? `<span class="badge w">déclaré ${esc(mimeC(p.declare))} — c'est le type
+                     DÉTECTÉ qui fait foi</span>` : ""}
+            ${b.eml ? `<span class="badge">message/rfc822 — dédupliqué comme un message (D66)</span>` : ""}
+            ${b.photo && b.ko > 2000
+              ? `<span class="badge w">recompression proposée · gain ≈ ${poids(Math.round(b.ko * .62))} (D70)</span>` : ""}
+          </span></span></div>`; }).join("")}</div>
+    <div class="dmeta" style="margin-top:8px">Le <b>nom</b> et le <b>type déclaré</b> sont portés par
+      la liaison, les <b>octets</b> et le <b>type détecté</b> par le blob : c'est ce qui permet de
+      dédupliquer sans mentir sur le message d'origine (D24/D25/D32).</div></div>`;
+}
+
+/* Contexte métier : ce qu'AtomBox montre SANS le stocker (D03/D19/D21). */
+function erpHtml(m) {
+  const t = m.tags.find(x => ERP_APPS[x.axe]); if (!t) return "";
+  const f = fiche(t.axe, t.val), c = f.cfg;
+  const cls = o => OK_ST[o.statut] ? "ok" : KO_ST[o.statut] ? "due" : "wait";
+  return `<div class="box erp"><h4>${c.ic} ${esc(c.nom)} — contexte métier</h4>
+    <div class="kv"><span class="k">${esc(c.objet)}</span><span><b>${esc(t.val)}</b>
+      <span class="tag ax">${esc(f.ref)}</span>
+      <span class="tag">application ${esc(c.app)}</span>
+      <span class="tag">client depuis ${f.depuis}</span></span></div>
+    <div class="kv"><span class="k">Correspondant</span><span>${esc(m.mail)}
+      <span class="tag">→ identité résolue par l'annuaire (D35)</span></span></div>
+    <div class="kv"><span class="k">Encours</span><span><b>${euro(f.encours)}</b>
+      ${f.echu ? `<span class="st due">dont ${euro(f.echu)} échu</span>`
+               : `<span class="st ok">rien d'échu</span>`}</span></div>
+    <table class="erpl">${f.objets.map(o => `<tr>
+      <td>${o.type}</td><td><b>${esc(o.ref)}</b></td>
+      <td class="num">${euro(o.montant)}</td>
+      <td class="num"><span class="st ${cls(o)}">${o.statut}</span></td></tr>`).join("")}</table>
+    <div class="dacts" style="margin-top:9px">
+      <button class="hbtn" data-e="res">↳ D'où vient ce rattachement ?</button>
+      <button class="hbtn" data-e="lie">🔗 Lier à une pièce</button>
+      <button class="hbtn" data-e="inv">↔ Ce que Dolibarr affiche de son côté</button>
+      <button class="hbtn" data-e="push">⇪ Notifier l'application</button>
+    </div>
+    <div class="dmeta" style="margin-top:8px">AtomBox ne stocke aucun montant : il porte le tag et la
+      référence externe (D20). Ce cadre est <b>rempli par un appel à l'application</b> au moment de
+      l'affichage — c'est le prix à payer pour ne pas dupliquer l'ERP, et c'est le premier endroit
+      où il faudra un cache.</div></div>`;
 }
 
 /* ============================================================================
@@ -528,6 +727,7 @@ function renderDetail() {
         <button class="hbtn" data-a="tag">🏷 Taguer</button>
         <button class="hbtn" data-a="traite">✓ Marquer traité</button>
         <button class="hbtn" data-a="arch">📥 Archiver</button>
+        <button class="hbtn" data-a="orig">⤓ .eml original</button>
       </div>
     </div>
     <div class="box"><h4>Tags — plusieurs applications, sans écrasement (D17/D20)</h4>
@@ -536,6 +736,8 @@ function renderDetail() {
         <span class="tag">posé par ${esc(t.src)}</span></span></div>`).join("")
         : `<div class="dmeta">aucun tag</div>`}
     </div>
+    ${erpHtml(m)}
+    ${pjHtml(m)}
     <div class="box"><h4>Fil de discussion (${fil.length} messages)</h4>
       <div class="dmeta">thread_id matérialisé — D55</div></div>
     <div class="thread">${fil.map(x => `
@@ -576,8 +778,112 @@ INSERT INTO activite (compte_id, message_id, type, at) VALUES (:moi, :id, 'trait
 `UPDATE rattachement SET sorti_le = now(), motif_sortie = 'archive'
  WHERE message_id = :id AND compte_id = :moi;`,
         "motif_sortie distingue traité / archivé — D30 ; la vue Trash/Archive en découle (D51)"],
+      orig:["Télécharger le message original (.eml)",
+`-- réassemblage : le corps, puis chaque partie ré-encodée À L'IDENTIQUE (D25)
+SELECT blob_ref, headers FROM message WHERE message_id = :id;
+SELECT l.ordre, l.nom_fichier, l.mime_declare, l.transfer_encoding, l.disposition,
+       l.parametres, p.blob_ref
+  FROM message_piece_jointe l JOIN piece_jointe p USING (pj_id)
+ WHERE l.message_id = :id ORDER BY l.ordre;`,
+        "la liaison doit conserver l'ordre, l'encodage et les paramètres de partie : sans eux le " +
+        "message se reconstruit mais DKIM ne se revérifie plus (D25/D26) — d'où le verdict figé à l'ingestion"],
     }[b.dataset.a];
     q(A[0], A[1], A[2], A[3]);
+  });
+
+  /* ---- pièces jointes : ouvrir, remonter la dédup, recompresser ---------- */
+  el.querySelectorAll(".pjc").forEach(c => c.onclick = () => {
+    const p = m.pjs[+c.dataset.pj], b = p.b;
+    q("Ouvrir « " + p.nom + " »",
+`SELECT p.blob_ref, p.sha256, p.mime_detecte, p.octets,
+       l.nom_fichier, l.mime_declare, l.transfer_encoding, l.ordre
+  FROM message_piece_jointe l JOIN piece_jointe p USING (pj_id)
+ WHERE l.message_id = :id AND l.pj_id = ` + b.pj_id + `;
+-- les octets ne transitent jamais par PostgreSQL : zstd -d <blob_ref> (D05/D07)`,
+      "index (message_id, ordre) sur la liaison — le fichier lui-même reste hors base");
+    q("« " + p.nom + " » — qui d'autre porte CES octets ?",
+`SELECT m.message_id, m.sujet, l.nom_fichier, m.date_reception
+  FROM message_piece_jointe l JOIN message m USING (message_id)
+ WHERE l.pj_id = ` + b.pj_id + `      -- ` + b.refs + ` liaison(s) pour un seul blob de ` + poids(b.ko) + `
+ ORDER BY m.date_reception DESC LIMIT 50;`,
+      b.refs > 1
+        ? "index (pj_id, message_id) — sans ce sens de parcours, la dédup n'est qu'un gain de disque : "
+          + "ici elle économise " + poids(b.ko * (b.refs - 1)) + " et donne « où ai-je déjà vu ce fichier ? » (D24)"
+        : "index (pj_id, message_id) — un seul porteur ici : sur ce fichier la dédup ne gagne rien, "
+          + "et c'est le cas le plus fréquent. Le gain vient des quelques blobs très partagés");
+    if (b.photo && b.ko > 2000) q("Recompression proposée (D70)",
+`-- geste EXPLICITE, jamais automatique
+UPDATE piece_jointe
+   SET blob_origine = blob_ref, blob_ref = :neuf, octets = :neufs, recompresse_le = now()
+ WHERE pj_id = ` + b.pj_id + `;`,
+      "⚠ le blob est partagé par " + b.refs + " liaison(s) : un seul UPDATE libère ≈ " +
+      poids(Math.round(b.ko * .62)) + " mais modifie l'octet de TOUS les porteurs — " +
+      "l'original doit rester tant qu'un message doit être revérifiable (D25/D26)", true);
+  });
+
+  /* ---- intégration ERP : les deux sens (D03/D19/D20/D21) ---------------- */
+  el.querySelectorAll("[data-e]").forEach(bt => bt.onclick = () => {
+    const t = m.tags.find(x => ERP_APPS[x.axe]); if (!t) return;
+    const f = fiche(t.axe, t.val), c = f.cfg, o = pick(f.objets);
+    const E = {
+      res:["Comment ce message a été rattaché à « " + t.val + " »",
+`-- 1. l'adresse pointe une IDENTITÉ, jamais l'inverse (D35)
+SELECT c.correspondant_id, c.libelle
+  FROM adresse a JOIN correspondant c USING (correspondant_id)
+ WHERE a.adresse = lower('` + m.mail + `');        -- index UNIQUE (adresse)
+
+-- 2. l'identité est reliée au tiers de CHAQUE application connectée
+SELECT application_id, ref_externe FROM correspondant_externe
+ WHERE correspondant_id = :cid;                    -- ` + c.app + ` → ` + f.ref + `
+
+-- 3. c'est le CONNECTEUR qui pose le tag, pas AtomBox (D21)`,
+        "un correspondant, N adresses : changer d'adresse ne coupe pas l'historique du tiers (D35). " +
+        "Adresse inconnue ⇒ message sans tag : c'est voulu, pas un échec d'ingestion", false],
+      lie:["Lier ce message à " + o.type.toLowerCase() + " " + o.ref,
+`POST /api/v1/messages/{message_id}/tags        Authorization: Bearer <token ` + c.app + `>
+{ "axe": "` + t.axe + `", "valeur": "` + t.val + `",
+  "ref_externe": "` + f.ref + `", "piece": "` + o.ref + `" }
+
+-- côté AtomBox
+INSERT INTO tag (axe_id, application_id, valeur, ref_externe)
+VALUES (:axe, :app, :valeur, :ref)
+ON CONFLICT (axe_id, application_id, valeur) DO UPDATE
+   SET ref_externe = EXCLUDED.ref_externe
+RETURNING tag_id;
+INSERT INTO message_tag (message_id, tag_id, pose_par, pose_le)
+VALUES (:id, :tag, :application, now()) ON CONFLICT DO NOTHING;`,
+        "l'application est DANS la clé d'unicité (axe, application, valeur) — D20 : quatre Dolibarr " +
+        "font quatre jeux de tags et aucun n'écrase l'autre (D17). ACL de l'axe vérifiée avant (D18)",
+        false, "api"],
+      inv:["Onglet « Emails » de la fiche " + f.ref + ", vu depuis " + c.app,
+`GET /api/v1/messages?axe=` + t.axe + `&valeur=` + encodeURIComponent(t.val) + `
+    &application=` + c.app + `&limite=20&curseur=eyJkIjoiMjAyNi0wMy0xMSIsImkiOjkxfQ
+Authorization: Bearer <token opaque de l'application>          -- D63
+
+-- côté AtomBox
+SELECT m.message_id, m.sujet, m.from_adresse, m.date_reception, m.nb_pieces_jointes
+  FROM message_tag mt JOIN message m USING (message_id)
+ WHERE mt.tag_id = :tag
+   AND m.boite_id = ANY (:portee_du_token)                     -- D37
+   AND (m.date_reception, m.message_id) < (:cur_date, :cur_id) -- curseur, pas OFFSET
+ ORDER BY m.date_reception DESC, m.message_id DESC
+ LIMIT 20;`,
+        "⚠ index (tag_id, date_reception DESC, message_id DESC). Deux pièges : un ERP pagine PROFOND " +
+        "(OFFSET interdit) et la portée du token s'applique ICI, jamais dans l'appelant (D18/D37)",
+        true, "api"],
+      push:["Notifier " + c.app + " (événement sortant)",
+`POST https://` + c.app + `.lan/api/atombox/hook          (asynchrone, rejouable)
+{ "evenement": "message.tague", "message_id": "…", "axe": "` + t.axe + `",
+  "valeur": "` + t.val + `", "ref_externe": "` + f.ref + `", "pieces_jointes": ` + m.pj + ` }
+
+-- rien n'est émis dans la transaction d'ingestion : on empile, un worker vide
+INSERT INTO evenement_sortant (application_id, type, charge, etat, prochaine_tentative)
+VALUES (:app, 'message.tague', :json::jsonb, 'a_emettre', now());`,
+        "index PARTIEL (prochaine_tentative) WHERE etat <> 'emis' — la file reste minuscule après des " +
+        "millions d'événements, et une application injoignable ne bloque jamais la réception",
+        false, "api"],
+    }[bt.dataset.e];
+    q(E[0], E[1], E[2], E[3], E[4]);
   });
 }
 
@@ -590,8 +896,9 @@ function renderQ() {
       <button class="hbtn" id="qclr">vider</button></div>
     <div class="note">Le livrable du POC, au-delà des écrans (D79) : chaque geste note la
       question qu'il pose aux données. C'est cette liste qui dictera les index.</div>
-    ${QLOG.map(i => `<div class="qi">
-      <div class="lbl">${i.t.toTimeString().slice(0,8)} — ${esc(i.label)}</div>
+    ${QLOG.map(i => `<div class="qi${i.kind ? " " + i.kind : ""}">
+      <div class="lbl">${i.t.toTimeString().slice(0,8)} — ${esc(i.label)}
+        ${i.kind === "api" ? `<span class="badge">API</span>` : ""}</div>
       <code>${esc(i.sql)}</code>
       ${i.index ? `<div class="idx${i.warn ? " w" : ""}">${i.warn ? "⚠ " : "↳ "}${esc(i.index)}</div>` : ""}
     </div>`).join("")}`;
