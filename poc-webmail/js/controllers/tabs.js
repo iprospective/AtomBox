@@ -21,13 +21,21 @@
     /* prov = onglet provisoire : remplacé par le clic suivant, épinglé au double-clic. */
     ouvrir(spec, prov) {
       const ui = St.ui;
-      const key = spec.type === "msg" ? "m:" + spec.id : (spec.key || "c:" + (++St.seq));
+      const key = spec.type === "msg"   ? "m:" + spec.id
+                : spec.type === "admin" ? "admin"
+                : spec.type === "pj"    ? "pj"
+                : (spec.key || "c:" + (++St.seq));
       let t = ui.tabs.find(x => x.key === key);
       if (!t) {
         if (prov) { const i = ui.tabs.findIndex(x => x.prov); if (i >= 0) ui.tabs.splice(i, 1); }
         t = { ...spec, key, prov: !!prov };
         ui.tabs.push(t);
-      } else if (!prov) t.prov = false;
+      } else {
+        /* Un onglet unique (admin, pièces jointes) est RÉUTILISÉ : le rouvrir sur
+           un autre volet doit changer le volet, pas empiler un second onglet. */
+        if (spec.type !== "msg") Object.assign(t, spec, { key });
+        if (!prov) t.prov = false;
+      }
 
       const avant = ui.tab;
       ui.tab = key;
@@ -53,6 +61,7 @@
         ABX.Controllers.App.peindre("tabs");
         ABX.Controllers.App.peindre("detail");
       }
+      if (ABX.Controllers.App.MOBILE()) ABX.Controllers.App.setVue("detail");
     },
 
     fermer(key) {

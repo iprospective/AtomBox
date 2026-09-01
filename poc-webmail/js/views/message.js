@@ -10,9 +10,6 @@
     render(m, ui) {
       const fil = C.tous.filter(x => x.thread === m.thread && x.fid === m.fid)
                         .sort((a, b) => a.date - b.date).slice(0, 4);
-      const dossiers = Fx.UTIL.map(u =>
-        `<option value="${F.esc(u.id)}"${m.dossier === u.id ? " selected" : ""}>${F.esc(u.label)}</option>`).join("");
-
       return `
         <div class="backbar"><button data-vue="liste">‹ ${F.esc(ui.folder.label)}</button></div>
         <div class="dhead">
@@ -24,13 +21,24 @@
             ${m.dossier === "trash" ? ` · <span class="tag">corbeille</span>` : ""}</div>
           <div class="dacts">
             <button class="hbtn" data-c="rep">↩ Répondre</button>
-            <button class="hbtn" data-c="reptous">↩↩ Répondre à tous</button>
+            <button class="hbtn" data-c="reptous">↩↩ Tous</button>
             <button class="hbtn" data-c="tr">➦ Transférer</button>
-            ${ABX.Views.Message.actionsEtat(m)}
-            <button class="hbtn" data-a="orig">⤓ .eml</button>
-            <select class="sortsel" id="dep" style="margin-left:0">
-              <option value="">Déplacer vers…</option>${dossiers}</select>
+            ${ABX.Views.Message.statutHtml(m)}
+            <button class="hbtn ic" data-x="${m.lu ? "nonLu" : "lire"}"
+              title="${m.lu ? "Marquer non lu" : "Marquer lu"}">${m.lu ? "◻" : "◼"}</button>
+            <span class="pousse"></span>
+            <button class="hbtn ic" id="plus" title="Autres actions">⋯</button>
+            ${(m.dossier || m.fid) === "trash"
+              ? `<button class="hbtn ic" data-x="restaurer" title="Restaurer">↩</button>
+                 <button class="hbtn ic dgr" data-x="supprimer" title="Supprimer définitivement">✕</button>`
+              : `<button class="hbtn ic" data-x="${(m.dossier || m.fid) === "junk" ? "nonJunk" : "junk"}"
+                   title="${(m.dossier || m.fid) === "junk"
+                     ? "Ce n'est pas un indésirable" : "Marquer indésirable"}">${
+                     (m.dossier || m.fid) === "junk" ? "✓" : "🚫"}</button>
+                 <button class="hbtn ic dgr" data-x="corbeille"
+                   title="Mettre à la corbeille">🗑</button>`}
           </div>
+          ${ABX.Views.Message.menuHtml(m)}
         </div>
         ${ABX.Views.Message.lienHtml(m)}
         ${R.render("message.tags", { m })}
@@ -42,25 +50,38 @@
           R.render("thread.item", { x, courant: x.id === m.id })).join("")}</div>`;
     },
 
-    /* La barre d'actions suit l'état : à la corbeille on restaure ou on efface,
-       en quarantaine on désapprend, sorti de la file on y revient (Q09). */
-    actionsEtat(m) {
-      const ou = m.dossier || m.fid;
-      if (ou === "trash") return `
-        <button class="hbtn" data-x="restaurer">↩ Restaurer</button>
-        <button class="hbtn dgr" data-x="supprimer">✕ Supprimer définitivement</button>`;
-      const lu = `<button class="hbtn" data-x="${m.lu ? "nonLu" : "lire"}">${
-        m.lu ? "◻ Non lu" : "◼ Lu"}</button>`;
-      if (ou === "junk") return `
-        <button class="hbtn" data-x="nonJunk">✓ Ce n'est pas un indésirable</button>
-        ${lu}<button class="hbtn dgr" data-x="corbeille">🗑 Corbeille</button>`;
-      return `${m.motif
-          ? `<button class="hbtn" data-x="refile">↺ Remettre dans la file</button>`
-          : `<button class="hbtn" data-x="traiter">✓ Traité</button>
-             <button class="hbtn" data-x="archiver">🗄 Archiver</button>`}
-        ${lu}
-        <button class="hbtn" data-x="junk">🚫 Indésirable</button>
-        <button class="hbtn" data-x="corbeille">🗑 Corbeille</button>`;
+    /* Le STATUT est l'action principale d'un message : ni un tag ni un dossier,
+       c'est où en est son traitement. Un sélecteur, donc, et pas trois boutons —
+       l'ordre des états compte, et il doit se voir. */
+    statutHtml(m) {
+      if (m.motif === "archive") return `<span class="tag">archivé</span>
+        <button class="hbtn" data-x="refile" title="Remettre dans la file">↺ Reprendre</button>`;
+      return `<select class="statsel st-${F.esc(m.statut || "nouveau")}" id="stat"
+          title="Statut de traitement">
+        ${Fx.STATUTS.map(x => `<option value="${x.id}"${x.id === m.statut ? " selected" : ""}
+          >${x.ic} ${F.esc(x.label)}</option>`).join("")}</select>`;
+    },
+
+    /* Le menu « ⋯ » : ce qui est utile mais rare, et ce qui appartient à une
+       capacité enfichable plutôt qu'au message lui-même. Le nom du fournisseur
+       branché y est visible — l'utilisateur doit savoir où part sa tâche. */
+    menuHtml(m) {
+      const cap = c => ABX.Providers.actif(c);
+      return `<div class="menu" id="menu" hidden>
+        <div class="mgrp">Ce message</div>
+        <button data-m="orig">⤓ Télécharger le .eml original</button>
+        <button data-m="archiver">🗄 Archiver sans traiter</button>
+        <div class="mgrp">Déplacer vers</div>
+        ${Fx.UTIL.map(u => `<button data-move="${F.esc(u.id)}">${u.icon} ${F.esc(u.label)}</button>`).join("")}
+        <button data-move="">↩ Retirer du dossier</button>
+        <div class="mgrp">Suite collaborative</div>
+        <button data-m="tache">${cap("taches").ic} Créer une tâche
+          <span class="mprov">${F.esc(cap("taches").label)}</span></button>
+        <button data-m="contact">${cap("contacts").ic} Fiche du correspondant
+          <span class="mprov">${F.esc(cap("contacts").label)}</span></button>
+        ${m.pj ? `<button data-m="fichiers">${cap("fichiers").ic} Enregistrer les pièces jointes
+          <span class="mprov">${F.esc(cap("fichiers").label)}</span></button>` : ""}
+      </div>`;
     },
 
     /* Un transfert par référence n'est pas une copie : c'est un pointeur, et un

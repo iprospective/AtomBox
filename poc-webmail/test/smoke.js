@@ -164,10 +164,9 @@ const qj = A.QueryLog.entrees[0];
 eq(qj.etapes.filter(e => e.t === "sql").length, 2, "le geste classe ET apprend");
 vrai(qj.etapes.some(e => (e.detail || "").includes("apprentissage_spam")),
      "l'apprentissage est tracé");
-vrai(A.Views.Message.actionsEtat(spam).includes("nonJunk"),
-     "la barre propose « ce n'est pas un indésirable »");
-vrai(!A.Views.Message.actionsEtat(spam).includes('data-x="junk"'),
-     "et ne propose plus de le remarquer indésirable");
+const barre = A.Views.Message.render(spam, A.Store.ui);
+vrai(barre.includes('data-x="nonJunk"'), "la barre propose « ce n'est pas un indésirable »");
+vrai(!barre.includes('data-x="junk"'), "et ne propose plus de le remarquer indésirable");
 A.MessageService.nonJunk(spam);
 eq(spam.dossier, null, "sorti de la quarantaine");
 vrai(A.QueryLog.entrees[0].etapes.some(e => (e.detail || "").includes("'ham'")),
@@ -210,6 +209,81 @@ vrai(api.etapes[0].detail.startsWith("GET "), "l'appel vient en premier");
 const rendu = A.Views.QueryLog.render(A.QueryLog.entrees);
 vrai(rendu.includes('class="casc"'), "la vue rend la cascade");
 vrai(rendu.includes("réseau — aller-retour"), "et marque le passage du réseau");
+
+console.log("— workflow de statut ————————————————————————————");
+const w = A.Corpus.par(lignes[6].dataset.id);
+eq(w.statut, w.statut, "statut initial : " + w.statut);
+A.MessageService.statuer(w, "a_faire");
+eq(w.statut, "a_faire", "passé à faire");
+eq(w.motif, null, "à faire ne sort PAS de la file");
+const qw = A.QueryLog.entrees[0];
+vrai(qw.etapes.some(e => (e.detail || "").includes("SET statut")), "le statut est une colonne");
+vrai(qw.etapes.some(e => e.t === "note" && (e.index || "").includes("un tag est ouvert")),
+     "la trace explique pourquoi ce n'est pas un tag");
+A.MessageService.statuer(w, "en_cours");
+eq(w.statut, "en_cours", "puis en cours");
+A.MessageService.statuer(w, "traite");
+eq(w.motif, "traite", "« traité » sort de la file");
+vrai(w.sorti > 0, "et pose sorti_le");
+vrai(A.QueryLog.entrees[0].etapes.some(e => e.warn), "en avertissant du changement de partition");
+A.MessageService.statuer(w, "a_faire");
+eq(w.motif, null, "revenir en arrière remet dans la file (Q09)");
+vrai(A.Corpus.aFaire().includes(w), "il apparaît dans la file de travail");
+eq(A.Corpus.filtrer(dossierAxe, "file", "date_desc", "tous", "en_cours")
+    .every(m => m.statut === "en_cours"), true, "le filtre par statut fonctionne");
+vrai(A.Corpus.cnt(w.fid).f >= 1, "les compteurs suivent la file de travail");
+
+console.log("— capacités enfichables —————————————————————————");
+const P = A.Providers;
+eq(P.actif("taches").id, "natif", "défaut : suite autonome");
+eq(Object.keys(P.CAPACITES).length, 4, "quatre capacités");
+vrai(Object.keys(P.CAPACITES.contacts.fournisseurs).length >= 4,
+     "contacts : natif, CardDAV, Dolibarr, LDAP");
+A.QueryLog.vider();
+A.Capacites.creerTache(client);
+const tn = A.QueryLog.entrees[0];
+vrai(tn.label.includes("natif"), "la trace nomme le fournisseur");
+vrai(tn.etapes.every(e => e.t !== "http"), "en natif : aucun appel réseau");
+vrai(tn.etapes.some(e => (e.detail || "").includes("INSERT INTO tache")), "une table locale");
+P.choisir("taches", "dolibarr");
+A.QueryLog.vider();
+A.Capacites.creerTache(client);
+const td = A.QueryLog.entrees[0];
+vrai(td.etapes.some(e => e.t === "http"), "en connecteur : un appel sortant");
+vrai(td.etapes.some(e => e.warn), "et l'avertissement sur le lien qui peut mourir");
+eq(tn.etapes[0].label, td.etapes[0].label, "le geste de départ est le MÊME");
+P.choisir("taches", "natif");
+
+console.log("— administration ————————————————————————————————");
+A.Controllers.Admin.ouvrir("apps");
+const adm = p.doc.getElementById("detail").innerHTML;
+vrai(adm.includes("dolibarr-mmi"), "les applications sont listées");
+vrai(adm.includes("abx_tk_"), "avec leurs jetons");
+vrai(A.QueryLog.entrees[0].etapes.some(e => (e.index || "").includes("empreinte")),
+     "et la trace rappelle qu'on ne stocke pas le secret");
+A.Controllers.Admin.geste("tok:dolibarr-mmi");
+vrai(A.QueryLog.entrees[0].label.includes("Révoquer"), "révocation tracée");
+A.Controllers.Admin.ouvrir("suite");
+vrai(p.doc.getElementById("detail").innerHTML.includes("Gestionnaire de tâches"),
+     "le volet suite liste les capacités");
+
+console.log("— pièces jointes ————————————————————————————————");
+A.Controllers.Admin.ouvrirPJ();
+const vpj = p.doc.getElementById("detail").innerHTML;
+vrai(vpj.includes("pjrow"), "la liste des pièces jointes est peinte");
+vrai(vpj.includes("réellement stockés"), "avec le gain de déduplication");
+const x0 = A.Views.Attachments.filtrer("", "tous")[0];
+const blobAvant = x0.b.sha, refsAvant = x0.b.refs;
+A.Controllers.Admin.renommer(x0, "facture-renommee.pdf");
+eq(x0.p.nom, "facture-renommee.pdf", "renommé");
+eq(x0.b.sha, blobAvant, "le blob n'a pas bougé");
+eq(x0.b.refs, refsAvant, "ni ses liaisons");
+const qr = A.QueryLog.entrees[0];
+vrai(qr.etapes.some(e => (e.detail || "").includes("UPDATE message_piece_jointe")),
+     "c'est la liaison qui est modifiée");
+vrai(qr.etapes.some(e => e.warn && (e.index || "").includes("pas de « partout »")),
+     "et la trace dit ce qu'on ne peut PAS faire");
+eq(A.Views.Attachments.filtrer("facture-renommee", "tous").length, 1, "la recherche le retrouve");
 
 console.log("— déterminisme ————————————————————————————————");
 const p3 = demarrer(creerStockage());   // stockage vierge

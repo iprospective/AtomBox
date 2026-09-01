@@ -19,7 +19,7 @@
     /* état d'interface, persisté pour retrouver la session telle qu'on l'a laissée */
     ui: {
       folder: { id:"inbox", label:"Boîte de réception", kind:"special" },
-      filtre: "file", tri: "date_desc", sens: "tous",
+      filtre: "file", tri: "date_desc", sens: "tous", statut: "tous",
       navq: "", ouverts: {}, plus: {},
       tabs: [], tab: null,
     },
@@ -31,7 +31,7 @@
       Object.assign(this.ratt, d.ratt || {});
       (d.crees || []).forEach(m => this.crees.push(m));
       this.seq = d.seq || 0;
-      ["folder","filtre","tri","sens"].forEach(k => { if (d.ui && d.ui[k]) this.ui[k] = d.ui[k]; });
+      ["folder","filtre","tri","sens","statut"].forEach(k => { if (d.ui && d.ui[k]) this.ui[k] = d.ui[k]; });
       if (d.ui) { this.ui.tabs = d.ui.tabs || []; this.ui.tab = d.ui.tab || null; }
       return d;
     },
@@ -40,7 +40,8 @@
       try { localStorage.setItem(CLE, JSON.stringify({
         v: 2, seq: this.seq, ratt: this.ratt, crees: this.crees,
         ui: { folder: this.ui.folder, filtre: this.ui.filtre, tri: this.ui.tri,
-              sens: this.ui.sens, tabs: this.ui.tabs, tab: this.ui.tab },
+              sens: this.ui.sens, statut: this.ui.statut,
+              tabs: this.ui.tabs, tab: this.ui.tab },
       })); } catch (e) { /* quota ou navigation privée : le POC reste utilisable */ }
     },
 

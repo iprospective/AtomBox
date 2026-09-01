@@ -27,6 +27,8 @@
         <small>Clique un message pour l'ouvrir, double-clique pour l'épingler.<br>
         Chaque geste alimente le journal des requêtes : c'est lui qui dictera les index.</small></div>`);
       if (t.type === "compo") return ABX.Controllers.Compose.peindre(t);
+      if (t.type === "admin") return ABX.Controllers.Admin.peindre(t);
+      if (t.type === "pj")    return ABX.Controllers.Admin.peindrePJ();
       return ABX.Controllers.Message.peindre(t);
     },
 

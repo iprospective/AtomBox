@@ -22,6 +22,8 @@
   };
   D.byId("bq").onclick   = () => App.setQ(!App.qOuvert());
   D.byId("bnew").onclick = () => ABX.Controllers.Compose.demarrer("new", null);
+  D.byId("badmin").onclick = () => ABX.Controllers.Admin.ouvrir(St.ui.adminVolet);
+  D.byId("bpj").onclick = () => ABX.Controllers.Admin.ouvrirPJ();
   D.byId("breset").onclick = () => {
     if (!confirm("Oublier l'état local (lectures, archivages, corbeille, brouillons, onglets) "
                + "et repartir des fixtures ?")) return;
@@ -50,12 +52,14 @@
 
   /* ---- amorçage ----------------------------------------------------------- */
   const repris = St.charge();
+  ABX.Providers.charge(St.ui.providers);
   const gen = C.engendre();
   C.applique();
   C.recompte();
 
   /* Un onglet dont le message a disparu (corbeille vidée) ne se restaure pas. */
-  St.ui.tabs = (St.ui.tabs || []).filter(t => t.type === "compo" || C.par(t.id));
+  St.ui.tabs = (St.ui.tabs || []).filter(t =>
+    t.type === "compo" || t.type === "admin" || t.type === "pj" || C.par(t.id));
   if (!St.ui.tabs.some(t => t.key === St.ui.tab))
     St.ui.tab = St.ui.tabs.length ? St.ui.tabs[0].key : null;
   if (!repris) St.ui.ouverts.fournisseur = true;

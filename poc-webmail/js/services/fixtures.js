@@ -48,6 +48,24 @@
     }
   });
 
+  /* LE WORKFLOW DE TRAITEMENT — un statut, pas un tag.
+     Un tag CLASSE : il est ouvert, interopérable, partagé entre applications,
+     soumis à une ACL d'axe. Un statut PILOTE : il est ordonné, fermé, propre au
+     compte, et c'est lui qui décide de ce qui reste à faire. Les confondre, c'est
+     se retrouver avec « à faire » dans le même espace de noms que « Belair SAS »,
+     et une application connectée capable de vider votre file de travail.
+
+     `lu_le` reste à part : c'est un FAIT daté (D41), pas un état — un message peut
+     être lu et à faire, non lu et déjà pris en charge par un collègue. */
+  const STATUTS = [
+    { id:"nouveau",  label:"Nouveau",    ic:"○", ordre:0 },
+    { id:"a_faire",  label:"À faire",    ic:"◔", ordre:1 },
+    { id:"en_cours", label:"En cours",   ic:"◑", ordre:2 },
+    { id:"attente",  label:"En attente", ic:"◕", ordre:3, note:"relance attendue" },
+    { id:"traite",   label:"Traité",     ic:"●", ordre:4, sortie:"traite" },
+  ];
+  const statut = id => STATUTS.find(s => s.id === id) || STATUTS[0];
+
   /* Dossiers spéciaux. « Traités » et « Archives » sont des VUES sur
      motif_sortie, pas des dossiers : c'est D30 lu par D51. */
   const SPECIAUX = [
@@ -82,6 +100,33 @@
   ]};
   const interne = a => /@iprospective\.(eu|fr)$/i.test((a || "").trim());
 
+  /* Administration : ce qu'un exploitant doit pouvoir régler sans base de données. */
+  const DOMAINES = [
+    { nom:"iprospective.eu", role:"pilote", boites:3, alias:7, mx:"mx1.iprospective.fr",
+      ingestion:"IMAP (lecture seule)", note:"domaine de test, D49" },
+    { nom:"iprospective.fr", role:"recette", boites:9, alias:41, mx:"mx1.iprospective.fr",
+      ingestion:"IMAP (lecture seule)", note:"production intacte, D50" },
+  ];
+  const BOITES = [
+    { adresse:"mathieu@iprospective.eu",   type:"personnelle", quota:"12 Go", acces:1, msg:1284 },
+    { adresse:"contact@iprospective.eu",   type:"commune",     quota:"40 Go", acces:4, msg:8210 },
+    { adresse:"commandes@iprospective.eu", type:"commune",     quota:"40 Go", acces:3, msg:5602 },
+    { adresse:"info@iprospective.eu",      type:"alias",       cible:"contact@iprospective.eu" },
+    { adresse:"sav@iprospective.eu",       type:"alias",       cible:"contact@iprospective.eu" },
+  ];
+  const APPLICATIONS = [
+    { code:"dolibarr-mmi",  label:"Dolibarr — MMI Négoce", type:"dolibarr",
+      axes:["client","fournisseur"], droits:"lire, écrire", portee:"3 boîtes",
+      jeton:"abx_tk_7f3c…", vu:"il y a 4 min" },
+    { code:"redmine-ipro",  label:"Redmine — support", type:"redmine",
+      axes:["sav","projet"], droits:"lire, écrire", portee:"sav@iprospective.eu",
+      jeton:"abx_tk_91ba…", vu:"il y a 2 h" },
+    { code:"nextcloud-mmi", label:"Nextcloud — partage", type:"nextcloud",
+      axes:["partenaire"], droits:"lire", portee:"tout le domaine",
+      jeton:"abx_tk_c40e…", vu:"il y a 3 j" },
+  ];
+
   ABX.Fixtures = { AXES, valeurs, SPECIAUX, UTIL, SUJETS, CORPS, MOI, interne, nom, pers,
+                   STATUTS, statut, DOMAINES, BOITES, APPLICATIONS,
                    estAxe: id => AXES.some(a => a.id === id) };
 })(window.ABX = window.ABX || {});

@@ -212,6 +212,28 @@
     },
 
     /* ------------------------------------------------------------------ */
+    /* Une capacité enfichable : la MÊME intention, deux cascades très
+       différentes selon le fournisseur branché. C'est ce contraste qui doit
+       décider — pas une préférence de principe. */
+    capacite(cap, geste, m, natifEtapes, distantEtapes) {
+      const P = ABX.Providers, f = P.actif(cap);
+      const e = [
+        { t:"ui", label:"clic sur « " + geste + " »",
+          detail:"views/message.js → Capacites." + cap + "(message)" },
+        { t:"svc", label:"le contrat, pas l'implémentation",
+          detail:"Capacites.resoudre('" + cap + "') → « " + f.label + " »",
+          index:"l'écran ne sait pas lequel est branché ; il appelle " +
+                P.CAPACITES[cap].contrat[0] + " et c'est tout" },
+      ];
+      ABX.log({ label: geste + " — via " + f.label,
+        etapes: e.concat(f.id === "natif" ? natifEtapes(f) : distantEtapes(f)).concat([
+          { t:"render", label:"le même écran, quel que soit le fournisseur",
+            detail:"aucune vue conditionnelle",
+            index: f.note },
+        ]) });
+    },
+
+    /* ------------------------------------------------------------------ */
     /* L'envoi : le seul geste qui écrit un message plutôt qu'un rattachement,
        et le seul qui sorte d'AtomBox. */
     envoyer(m, d, internes, externes) {

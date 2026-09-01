@@ -126,6 +126,85 @@ Deux d'entre eux méritent le détour :
 - **Remettre dans la file** rouvre Q09 : si `sorti_le` est la clé de partition, un retour
   est un déplacement de partition. Le geste existe, reste à décider s'il est courant.
 
+## Le statut de traitement — un workflow, pas un tag
+
+C'est la décision la plus structurante de ce tour. Un tag « à faire » aurait été un abus :
+
+| | Tag | Statut |
+|---|---|---|
+| Rôle | **classer** | **piloter** |
+| Forme | ouvert, extensible | **fermé**, un petit nombre d'états connus |
+| Ordre | aucun | **ordonné** — nouveau → à faire → en cours → en attente → traité |
+| Portée | le **message** (D17), interopérable entre applications | le **rattachement** — chacun sa file |
+| Écriture | soumise à l'ACL de l'axe (D18) — **une application connectée peut en poser** | l'utilisateur seul |
+
+La dernière ligne suffit à trancher : avec un tag, Dolibarr pourrait vider votre file de
+travail. Deux mécaniques, deux tables.
+
+`lu_le` reste à part : c'est un **fait daté** (D41), pas un état. Un message peut être lu
+et à faire, non lu et déjà pris en charge par un collègue.
+
+Seul **« traité »** sort de la file — il pose `sorti_le` et déplace donc la partition
+(D14/D30). Les autres états sont des positions *dans* la file. Revenir en arrière est
+possible, et rouvre Q09 : la trace le signale à chaque fois.
+
+## La suite collaborative — capacités enfichables
+
+AtomBox se propose aussi comme une **suite collaborative centrée sur la messagerie** :
+tâches, contacts, fichiers et calendrier naissent d'un email. Là où Nextcloud part du
+fichier et un ERP du client, AtomBox part de l'échange.
+
+Chaque capacité est un **contrat**, pas une fonctionnalité :
+
+| Capacité | Fournisseurs |
+|---|---|
+| **Tâches** | AtomBox · Dolibarr · Redmine · Nextcloud Deck |
+| **Contacts** | AtomBox · CardDAV · Dolibarr · LDAP |
+| **Fichiers** | AtomBox (le magasin) · Nextcloud WebDAV |
+| **Calendrier** | AtomBox · CalDAV |
+
+Le **natif n'est pas un repli** : c'est le produit vendu seul, et c'est la configuration à
+laquelle il faut que le produit soit bon. En V1, des outils **légers** — une tâche avec un
+titre, une échéance et un statut ; un contact qui est le correspondant qu'on a déjà ; un
+fichier qui est la pièce jointe qu'on stocke déjà. Ce qui est léger et cohérent bat ce qui
+est complet et à moitié fait.
+
+Les connecteurs servent l'autre cas : s'insérer chez qui vit déjà dans Dolibarr ou
+Nextcloud, sans dupliquer ses données. **L'écran ne sait pas lequel est branché** — seule la
+cascade change, et le POC affiche les deux :
+
+- **tâche native** : un `INSERT`, une clé étrangère vers le message, et « mes emails à
+  traiter » + « mes tâches » se lisent dans la même requête ;
+- **tâche Dolibarr** : un `POST`, une référence externe, un lien qui **peut mourir**, et une
+  file de travail qui demande un appel de plus à chaque affichage.
+- **fichier natif** : « enregistrer » ne copie **rien** — l'octet est déjà stocké et
+  dédupliqué (D24) ;
+- **fichier Nextcloud** : l'octet existe alors **deux fois**, et la déduplication ne protège
+  plus le second exemplaire.
+
+C'est ce contraste qui doit décider, pas une préférence de principe.
+
+## Administration
+
+Un onglet, quatre volets : **domaines et boîtes** (les alias sont de vraies boîtes, D39),
+**applications et jetons** (empreinte stockée, jamais le secret ; révoquer ne réécrit pas
+les tags déjà posés), **axes et tags** (le mécanisme d'ACL existe, la politique de Q05 non),
+**suite collaborative** (le choix des fournisseurs, quatre lignes de configuration).
+
+## Pièces jointes — chercher, renommer, taguer, enregistrer
+
+Un écran à part, qui rend visible ce que rien d'autre ne montre : **le nom appartient à la
+liaison, les octets au blob**. Renommer une pièce jointe renomme *sa liaison* — les autres
+messages qui portent le même octet gardent leur nom, et le message d'origine reste
+reconstructible à l'identique (D25/D32).
+
+C'est aussi le seul écran qui cherche du **texte hors du corps**, et il le paie : un
+`ILIKE '%…%'` sur `nom_fichier` ne s'indexe pas sans trigramme. À quatre millions de
+liaisons, ce n'est plus un détail.
+
+L'en-tête affiche le total « nommé » face au total « réellement stocké » : c'est la mesure
+directe du gain de déduplication, sur le corpus affiché.
+
 ## Sens, tags, quarantaine
 
 **Reçus / envoyés** est un axe de filtre **à part**, croisé avec le reste : on veut « non

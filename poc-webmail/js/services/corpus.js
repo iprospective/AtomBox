@@ -38,8 +38,11 @@
         date: Date.now() - P.int(0, 300) * 864e5 - P.int(0, 86399) * 1000,
         lu: sortant ? true : !luTirage,
         thread: P.int(1, 4), tags: [],
+        statut: "nouveau",
         sorti: null, motif: null, dossier: null, ref: null, compo: null,
       };
+      /* Un corpus où tout serait « nouveau » ne montrerait pas la file de travail. */
+      if (!sortant && P.next() < .28) m.statut = P.pick(["a_faire","a_faire","en_cours","attente"]);
       m.snippet = m.body.split("\n")[2] || "…";
       At.attacher(m);
       if (Fx.estAxe(axe)) m.tags.push({ axe, val: label, src: "dolibarr-mmi" });
@@ -96,7 +99,9 @@
     /* UNE passe sur le corpus pour les ~300 branches de l'arborescence (D78). */
     recompte() {
       compte = {};
-      const bump = (k, m) => { (compte[k] = compte[k] || { t:0, u:0 }).t++; if (!m.lu) compte[k].u++; };
+      const bump = (k, m) => { const c = compte[k] = compte[k] || { t:0, u:0, f:0 };
+        c.t++; if (!m.lu) c.u++;
+        if (m.statut === "a_faire" || m.statut === "en_cours") c.f++; };
       for (const m of tous) {
         if (m.dossier === "trash") { bump("trash", m); continue; }
         if (m.motif) { bump(m.motif === "archive" ? "archives" : "traites", m); continue; }
@@ -108,7 +113,11 @@
       return compte;
     },
 
-    cnt: k => compte[k] || { t:0, u:0 },
+    cnt: k => compte[k] || { t:0, u:0, f:0 },
+
+    /* La file de travail, tous dossiers confondus : « ce qu'il me reste à faire ». */
+    aFaire: () => tous.filter(m => !m.motif && m.dossier !== "trash" &&
+      (m.statut === "a_faire" || m.statut === "en_cours" || m.statut === "attente")),
 
     /* Le contenu d'un dossier, avant filtre de liste. */
     vue(folder) {
@@ -129,9 +138,10 @@
 
     /* Filtre + tri de la liste. Le SENS est un second axe, indépendant du premier :
        on veut « non lus ET reçus », pas l'un ou l'autre. */
-    filtrer(folder, filtre, tri, sens) {
+    filtrer(folder, filtre, tri, sens, statut) {
       let a = Corpus.vue(folder);
       if (sens === "in" || sens === "out") a = a.filter(m => (m.sens || "in") === sens);
+      if (statut && statut !== "tous") a = a.filter(m => (m.statut || "nouveau") === statut);
       if (!VUES[folder.id]) a = filtre === "sortis" ? a.filter(m => m.motif) : a.filter(m => !m.motif);
       if (filtre === "non_lus") a = a.filter(m => !m.lu);
       if (filtre === "recents") a = a.filter(m => Date.now() - m.date < 30 * 864e5);

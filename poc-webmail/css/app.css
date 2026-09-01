@@ -263,3 +263,50 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .tagx{border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:4px;
   cursor:pointer;font-size:10px;line-height:1;padding:2px 4px;margin-left:5px}
 .tagx:hover{border-color:var(--danger);color:var(--danger)}
+
+/* ---- barre d'actions du message : gauche = travail, droite = destruction ---- */
+.dacts{align-items:center}
+.dacts .pousse{flex:1}
+.dacts .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
+.hbtn.ic{padding:6px 8px;line-height:1.2}
+.statsel{border:1px solid var(--line);border-radius:7px;padding:5px 8px;background:var(--panel2);
+  font-size:12px;font-weight:600;cursor:pointer}
+.statsel.st-a_faire{border-color:var(--warn);color:var(--warn)}
+.statsel.st-en_cours{border-color:var(--accent);color:var(--accent)}
+.statsel.st-attente{border-color:var(--muted)}
+.statsel.st-traite{border-color:var(--ok);color:var(--ok)}
+
+/* ---- menu « ⋯ » ---- */
+.dhead{position:relative}
+.menu{position:absolute;right:14px;top:100%;z-index:20;min-width:270px;
+  background:var(--panel);border:1px solid var(--line);border-radius:9px;
+  box-shadow:0 8px 24px var(--shadow);padding:5px;margin-top:-4px}
+.menu button{display:flex;align-items:center;gap:7px;width:100%;text-align:left;border:0;
+  background:none;padding:6px 9px;border-radius:6px;cursor:pointer;font-size:12.5px}
+.menu button:hover{background:var(--accent-soft);color:var(--accent)}
+.menu .mgrp{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+  padding:7px 9px 3px}
+.menu .mprov{margin-left:auto;font-size:10.5px;color:var(--muted)}
+
+/* ---- administration ---- */
+.admin{padding:0 4px 14px}
+.erpl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--muted);font-weight:600;padding:3px 8px 5px 0;border-bottom:1px solid var(--line)}
+.capa{border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:8px;
+  background:var(--panel2)}
+.capa .capt{display:flex;align-items:baseline;gap:9px;margin-bottom:6px;flex-wrap:wrap}
+.capa .capt .hash{font-size:10px}
+.capa .chips{margin-bottom:5px}
+
+/* ---- gestion des pièces jointes ---- */
+.pjrow{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;
+  border-bottom:1px solid var(--line)}
+.pjrow:hover{background:var(--panel2)}
+.pjrow .pic{font-size:17px;flex:none;line-height:1.3}
+.pjrow .pjn{flex:1;min-width:0}
+.pjname{width:100%;max-width:420px;border:1px solid transparent;border-radius:5px;
+  padding:2px 5px;background:none;font-weight:600}
+.pjname:hover{border-color:var(--line)}
+.pjname:focus{border-color:var(--accent);background:var(--panel2);outline:none}
+.pjrow .ps{color:var(--muted);font-size:11px;padding-left:5px}
+.pjacts{display:flex;gap:3px;flex:none}

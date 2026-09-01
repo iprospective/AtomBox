@@ -14,7 +14,20 @@
 
       const suivre = el.querySelector("#suivre");
       if (suivre) suivre.onclick = () => ABX.Controllers.Tabs.ouvrir({ type:"msg", id:m.ref }, false);
-      el.querySelector("#dep").onchange = e => M.deplacer(m, e.target.value);
+
+      const stat = el.querySelector("#stat");
+      if (stat) stat.onchange = e => M.statuer(m, e.target.value);
+
+      /* Le menu « ⋯ » : ouvert au clic, fermé au clic suivant ou sur Échap. */
+      const menu = el.querySelector("#menu"), plus = el.querySelector("#plus");
+      if (plus) {
+        plus.onclick = e => { e.stopPropagation(); menu.hidden = !menu.hidden; };
+        el.onclick = e => { if (!menu.hidden && !e.target.closest("#menu")
+                            && !e.target.closest("#plus")) menu.hidden = true; };
+        D.on(el, "[data-move]", "onclick", b => { menu.hidden = true;
+                                                  M.deplacer(m, b.dataset.move); });
+        D.on(el, "[data-m]", "onclick", b => { menu.hidden = true; Message.menu(m, b.dataset.m); });
+      }
 
       D.on(el, "[data-x]", "onclick", b => M[b.dataset.x](m));
       D.on(el, "[data-untag]", "onclick", b => M.retirerTag(m, +b.dataset.untag));
@@ -41,6 +54,15 @@
       const ajouter = () => M.ajouterTag(m, axe.value, val.value);
       el.querySelector("#t_add").onclick = ajouter;
       val.onkeydown = e => { if (e.key === "Enter") ajouter(); };
+    },
+
+    /* Les entrées du menu : trois vont au message, trois aux capacités. */
+    menu(m, quoi) {
+      if (quoi === "archiver") return M.archiver(m);
+      if (quoi === "tache")    return ABX.Capacites.creerTache(m);
+      if (quoi === "contact")  return ABX.Capacites.ficheContact(m);
+      if (quoi === "fichiers") return m.pjs.forEach((_, i) => ABX.Capacites.deposerFichier(m, i));
+      return Message.logMessage(quoi, m);
     },
 
     logMessage(quoi, m) {

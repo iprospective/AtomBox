@@ -12,6 +12,8 @@
   <button class="hbtn prim" id="bnew" title="Nouveau message">✚ Nouveau</button>
   <div class="hsearch"><input id="gsearch" placeholder="Rechercher dans tous les messages…"></div>
   <div class="hspacer"></div>
+  <button class="hbtn ic" id="bpj" title="Pièces jointes">📎</button>
+  <button class="hbtn ic" id="badmin" title="Administration">⚙</button>
   <button class="hbtn" id="btheme" title="Thème">◐</button>
   <button class="hbtn dgr" id="breset" title="Oublier l'état local et repartir des fixtures">⟲</button>
   <button class="hbtn on" id="bq" title="Journal des requêtes">⟨/⟩ requêtes <span id="qn">0</span></button>
@@ -42,6 +44,7 @@
 <script src="js/services/query-log.js"></script>
 <script src="js/services/attachments.js"></script>
 <script src="js/services/erp.js"></script>
+<script src="js/services/providers.js"></script>
 <script src="js/services/fixtures.js"></script>
 <script src="js/services/corpus.js"></script>
 <script src="js/services/messages.js"></script>
@@ -56,10 +59,13 @@
 <script src="js/views/compose.js"></script>
 <script src="js/views/tabs.js"></script>
 <script src="js/views/query-log.js"></script>
+<script src="js/views/admin.js"></script>
+<script src="js/views/attachments.js"></script>
 
 <!-- la surface d'API, décrite par les gestes qui l'appellent : le support de CDC.
      Après les vues, dont il lit le choix de variante. -->
 <script src="js/services/api-trace.js"></script>
+<script src="js/services/capabilities.js"></script>
 
 <!-- contrôleurs : peignent les vues et câblent les événements -->
 <script src="js/controllers/app.js"></script>
@@ -68,6 +74,7 @@
 <script src="js/controllers/tabs.js"></script>
 <script src="js/controllers/message.js"></script>
 <script src="js/controllers/compose.js"></script>
+<script src="js/controllers/admin.js"></script>
 
 <script src="js/app.js"></script>
 </body></html>

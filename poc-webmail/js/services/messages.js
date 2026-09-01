@@ -158,6 +158,45 @@ VALUES (:id, 'spam', :moi, now());`,
 VALUES (:id, 'ham', :moi, now());` },
       ] }),
 
+    /* Le workflow de traitement. « Traité » sort de la file — les autres états
+       sont des positions DANS la file, pas des sorties. */
+    statuer(m, id) {
+      const st = ABX.Fixtures.statut(id);
+      const patch = { statut: id };
+      if (st.sortie) { patch.motif = st.sortie; patch.sorti = Date.now(); }
+      else if (m.motif === "traite") { patch.motif = null; patch.sorti = null; }
+      appliquer(m, patch, x => ABX.Traces.muter(x, {
+        label:"Statut : " + st.label, nom:"statuer",
+        corps:{ statut: id },
+        retour:{ message_id: x.id, statut: id,
+                 sorti_le: st.sortie ? "2026-09-01T14:02:11+02:00" : null,
+                 motif_sortie: st.sortie || null },
+      }, [
+        { t:"sql", label:"une colonne, pas une ligne de plus",
+          detail:
+`UPDATE rattachement SET statut = :statut` + (st.sortie
+  ? `, sorti_le = now(), motif_sortie = '` + st.sortie + `'` : `, sorti_le = NULL, motif_sortie = NULL`) + `
+ WHERE message_id = :id AND compte_id = :moi;`,
+          index: st.sortie
+            ? "⚠ « traité » est le seul statut qui SORT de la file : il pose sorti_le, donc " +
+              "déplace la partition (D14/D30). Les autres se contentent de bouger dans la file"
+            : "statut est un ENUM ordonné sur le rattachement : fermé, donc indexable, et propre " +
+              "au compte, donc deux personnes d'une boîte commune ont deux files (Q35)",
+          warn: !!st.sortie },
+        { t:"sql", label:"le changement d'état est un fait, comme la lecture",
+          detail:
+`INSERT INTO activite (compte_id, message_id, type, detail, at)
+VALUES (:moi, :id, 'statut', :statut, now());`,
+          index:"c'est ce qui permettra de mesurer un délai de traitement — la seule métrique " +
+                "que personne ne pense à stocker avant d'en avoir besoin" },
+        { t:"note", label:"pourquoi pas un tag « à faire » ?",
+          detail:"parce qu'un tag classe et qu'un statut pilote",
+          index:"un tag est ouvert, interopérable et soumis à l'ACL d'un axe (D17/D18) : une " +
+                "application connectée pourrait vider votre file de travail. Un statut est " +
+                "fermé, ordonné, propre au compte — deux mécaniques, deux tables" },
+      ]));
+    },
+
     /* Les tags sont posés sur le MESSAGE, pas sur le rattachement (D17) : c'est ce
        qui les rend interopérables entre applications. Un tag posé par un connecteur
        et retiré à la main sera reposé au passage suivant — l'écran doit le dire. */

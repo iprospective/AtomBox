@@ -8,8 +8,11 @@
 
   ABX.Views = ABX.Views || {};
   ABX.Views.Tabs = {
+    ICONES: { compo:"✎", msg:"✉", admin:"⚙", pj:"📎" },
     titre(t) {
       if (t.type === "compo") return t.data.sujet || "(sans sujet)";
+      if (t.type === "admin") return "Administration";
+      if (t.type === "pj")    return "Pièces jointes";
       const m = C.par(t.id);
       return m ? m.subject : "(message effacé)";
     },
@@ -18,7 +21,7 @@
         const titre = ABX.Views.Tabs.titre(t);
         return `<div class="tab${t.key === ui.tab ? " on" : ""}${t.prov ? " prov" : ""}"
           data-k="${F.esc(t.key)}" title="${F.esc(titre)}">
-          <span>${t.type === "compo" ? "✎" : "✉"}</span>
+          <span>${ABX.Views.Tabs.ICONES[t.type] || "✉"}</span>
           <span class="tl">${F.esc(titre)}</span>
           ${t.type === "compo" && t.sale ? `<span class="dot">●</span>` : ""}
           <span class="tx" data-close="${F.esc(t.key)}">✕</span></div>`;
