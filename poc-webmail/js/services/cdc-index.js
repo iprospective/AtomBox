@@ -3,11 +3,11 @@
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
    ce que dit le registre, et rien d'autre.
 
-   Généré le 2026-09-01 — 100 décisions, 39 questions, 16 chapitres. */
+   Généré le 2026-09-02 — 115 décisions, 44 questions, 17 chapitres. */
 (function (ABX) {
   "use strict";
   ABX.CDC = {
-  "genere": "2026-09-01",
+  "genere": "2026-09-02",
   "ticket": "RM2881",
   "depot": "iprospective/tools/atombox-webmail-core",
   "chapitres": [
@@ -75,6 +75,11 @@
       "n": "12",
       "fichier": "cdc-rm2881-12-navigation.md",
       "titre": "12"
+    },
+    {
+      "n": "13",
+      "fichier": "cdc-rm2881-13-emission-delivrabilite.md",
+      "titre": "13"
     },
     {
       "n": "90",
@@ -589,6 +594,81 @@
       "etat": "propose"
     },
     {
+      "id": "D99",
+      "objet": "Cycle de vie de l'émission : une ligne d'envoi par destinataire, envoi programmé, DSN corrélé",
+      "etat": "valide"
+    },
+    {
+      "id": "D100",
+      "objet": "Retours DMARC (rapports agrégés et forensiques) ingérés et exploités pour la délivrabilité",
+      "etat": "valide"
+    },
+    {
+      "id": "D101",
+      "objet": "Note interne attachée au message, invisible du correspondant",
+      "etat": "valide"
+    },
+    {
+      "id": "D102",
+      "objet": "Identité d'expédition : nom affiché, signature, réponses types — distincte de la boîte",
+      "etat": "valide"
+    },
+    {
+      "id": "D103",
+      "objet": "reveil_le et echeance_le sur le rattachement : reporter, relancer, alerter",
+      "etat": "valide"
+    },
+    {
+      "id": "D104",
+      "objet": "Rétention et gel par type de contenu et par boîte ; le gel prime sur toute purge",
+      "etat": "valide"
+    },
+    {
+      "id": "D105",
+      "objet": "Affichage sûr : HTML assaini, images externes bloquées, bannière expéditeur externe, aucun MDN",
+      "etat": "valide"
+    },
+    {
+      "id": "D106",
+      "objet": "Paramétrage en cascade instance → domaine → compte → boîte, surchargeable et verrouillable",
+      "etat": "valide"
+    },
+    {
+      "id": "D107",
+      "objet": "Import d'historique (IMAP, mbox, PST) : une fonction de V1, pas un script d'exploitation",
+      "etat": "valide"
+    },
+    {
+      "id": "D108",
+      "objet": "SDK et composants embarquables : l'ERP affiche AtomBox, il ne fait pas que l'appeler",
+      "etat": "valide"
+    },
+    {
+      "id": "D109",
+      "objet": "Complétion des destinataires depuis l'historique — le carnet gratuit de la V1",
+      "etat": "valide"
+    },
+    {
+      "id": "D110",
+      "objet": "Impression et export PDF d'un message ou d'un fil",
+      "etat": "valide"
+    },
+    {
+      "id": "D111",
+      "objet": "Pièce jointe par lien : dépôt chez un fournisseur de fichiers, lien de téléchargement",
+      "etat": "valide"
+    },
+    {
+      "id": "D112",
+      "objet": "Mobile : l'interface responsive d'abord, l'accès IMAP en repli assumé",
+      "etat": "valide"
+    },
+    {
+      "id": "D113",
+      "objet": "Absence et réponse automatique, avec renvoi sur un collègue — porté par le moteur de filtres",
+      "etat": "valide"
+    },
+    {
       "id": "D25",
       "objet": "Extraction réversible (exigence)",
       "etat": "autre"
@@ -828,6 +908,36 @@
       "objet": "Périmètre fonctionnel des composants V3, CRM compris",
       "bloque": "chiffrage V3",
       "urgence": "basse"
+    },
+    {
+      "id": "Q40",
+      "objet": "Qui émet réellement : le relais du client, ou une file de sortie AtomBox ?",
+      "bloque": "D99, surface d'API (Q08)",
+      "urgence": "haute"
+    },
+    {
+      "id": "Q41",
+      "objet": "D'où viennent les rapports DMARC, et à qui appartiennent-ils ?",
+      "bloque": "D100",
+      "urgence": "moyenne"
+    },
+    {
+      "id": "Q42",
+      "objet": "From d'une boîte partagée : voix d'équipe, Sender, ou nom dans l'affichage ?",
+      "bloque": "D102, Q26",
+      "urgence": "moyenne"
+    },
+    {
+      "id": "Q43",
+      "objet": "Jusqu'où un gestionnaire peut-il verrouiller un réglage contre l'utilisateur ?",
+      "bloque": "D106",
+      "urgence": "moyenne"
+    },
+    {
+      "id": "Q44",
+      "objet": "La purge de rétention efface-t-elle l'octet, ou seulement le rattachement ?",
+      "bloque": "D104, D87",
+      "urgence": "haute"
     }
   ]
 };

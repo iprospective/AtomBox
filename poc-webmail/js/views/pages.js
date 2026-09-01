@@ -72,6 +72,7 @@
       ["Quarantaine et apprentissage anti-spam", 1, "maquetté", "D71, D91"],
       ["Livraison LMTP (sans Dovecot)", 2, "décidé", "D42, D45"],
       ["Module de stockage Dovecot", 2, "à trancher", "Q24"],
+      ["Import d'historique (IMAP, mbox, PST)", 1, "décidé", "D107"],
     ]],
     ["Classement et recherche", [
       ["Tags par axes, paramétrables, avec ACL", 1, "maquetté", "D02, D16, D18"],
@@ -79,6 +80,7 @@
       ["Dossiers utilisateur classiques", 1, "maquetté", "D51"],
       ["Recherche plein texte sur la zone active", 1, "décidé", "D34"],
       ["Recherche dans les pièces jointes (nom)", 1, "maquetté", "D96"],
+      ["Moteur de filtres (remplace Sieve)", 1, "décidé", "D74"],
       ["Archivage par sortie de file", 1, "maquetté", "D14, D30"],
     ]],
     ["Travail au quotidien", [
@@ -88,6 +90,12 @@
       ["Transfert par référence, sans copie", 1, "maquetté", "D58, D67"],
       ["Envoi interne hors SMTP", 2, "décidé", "D12"],
       ["File de travail partagée sur boîte commune", 1, "à trancher", "Q35"],
+      ["Note interne d'équipe, jamais transmise", 1, "décidé", "D101"],
+      ["Identités d'expédition et signatures", 1, "décidé", "D102"],
+      ["Réponses types partagées", 1, "décidé", "D102"],
+      ["Réveil et échéance sur un message", 1, "décidé", "D103"],
+      ["Complétion des destinataires", 1, "décidé", "D109"],
+      ["Impression et export PDF", 1, "décidé", "D110"],
     ]],
     ["Collaboration et accès", [
       ["Boîtes communes, alias = vraies boîtes", 1, "maquetté", "D38, D39"],
@@ -95,6 +103,9 @@
       ["Journal d'activité (qui a lu, traité)", 1, "décidé", "D54, D56"],
       ["Rôles d'administration", 1, "maquetté", "D72"],
       ["Authentification par jeton, SSO possible", 1, "décidé", "D63"],
+      ["Paramétrage en cascade, verrouillable", 1, "décidé", "D106"],
+      ["Interface responsive (mobile)", 1, "décidé", "D112"],
+      ["Accès IMAP en repli assumé", 2, "à trancher", "Q24, D112"],
     ]],
     ["Intégration", [
       ["API REST — hypothèse de travail", 1, "à trancher", "Q07, Q08"],
@@ -102,6 +113,28 @@
       ["Applications connectées, jetons, portée", 1, "maquetté", "D20, D37"],
       ["Événements sortants (webhooks) rejouables", 1, "maquetté", "D86"],
       ["Mise en cache du contexte métier", 1, "à trancher", "Q31"],
+      ["SDK par langage (PHP, puis JS)", 1, "décidé", "D108"],
+      ["Composants d'interface embarquables", 1, "décidé", "D108"],
+    ]],
+    ["Émission et délivrabilité", [
+      ["Cycle de vie de l'envoi, par destinataire", 1, "décidé", "D99"],
+      ["Envoi programmé, annulable avant l'heure", 1, "décidé", "D99"],
+      ["Retours de non-remise corrélés (DSN)", 1, "décidé", "D99, D66"],
+      ["Rapports DMARC agrégés, délivrabilité", 1, "décidé", "D100"],
+      ["Absence et réponse auto, renvoi sur collègue", 1, "décidé", "D113, D74"],
+      ["Pièce jointe par lien de téléchargement", 1, "décidé", "D111"],
+      ["File de sortie SMTP propre à AtomBox", 1, "à trancher", "Q40"],
+      ["Rapports DMARC forensiques", 1, "à trancher", "Q41"],
+    ]],
+    ["Sécurité et conformité", [
+      ["HTML assaini à l'affichage, pas à l'ingestion", 1, "décidé", "D105, D25"],
+      ["Images externes bloquées, proxy serveur", 1, "décidé", "D105"],
+      ["Bannière « expéditeur externe »", 1, "décidé", "D105"],
+      ["Aucun accusé de lecture émis ni demandé", 1, "décidé", "D105"],
+      ["Rétention par type de contenu et par boîte", 1, "décidé", "D104"],
+      ["Gel sur litige — prime sur toute purge", 1, "décidé", "D104"],
+      ["Portée de la purge : rattachement ou octet ?", 1, "à trancher", "Q44"],
+      ["Analyse des traceurs d'images (option)", 5, "à venir", "D105"],
     ]],
     ["Suite collaborative", [
       ["Contacts — lecture du correspondant", 1, "maquetté", "D35, D95b"],
@@ -191,7 +224,11 @@
         "Tags par axes, dossiers virtuels, archivage",
         "Webmail : lecture, composition, statut de traitement",
         "API et applications connectées (Dolibarr, Redmine, Nextcloud)",
-        "Suite collaborative : par connecteur, ou absente"],
+        "Suite collaborative : par connecteur, ou absente",
+        "Émission suivie : état par destinataire, envoi programmé, DSN corrélés",
+        "Délivrabilité : rapports DMARC agrégés",
+        "Affichage sûr, rétention et gel, paramétrage en cascade",
+        "Import d'historique, SDK et composants embarquables"],
       note:"Le produit est utilisable seul : une messagerie qui classe et qui se branche." },
     { v:2, titre:"La livraison", etat:"cadré",
       contenu:["Livraison LMTP sans passer par Dovecot",
@@ -206,6 +243,12 @@
       contenu:["SMS", "WhatsApp Business", "Téléphonie (CTI, journal d'appels)"],
       note:"AtomBox cesse d'être une messagerie pour devenir un hub de communication. " +
            "Le pivot reste le correspondant — c'est lui qui unifie un mail, un SMS et un appel." },
+    { v:5, titre:"L'horizon — et il n'est pas un plan", etat:"réserve",
+      contenu:["Analyse des images externes : distinguer le contenu du pixel espion (option)"],
+      note:"Une seule entrée, et c'est volontaire : ce jalon existe pour empêcher de faire " +
+           "l'analyse de traceurs en V1 « puisqu'on y est ». Un jalon qui ne contient qu'une " +
+           "ligne est un jalon honnête ; le remplir d'idées serait l'erreur que le phasage " +
+           "sert justement à éviter." },
   ];
 
   function roadmap() {
@@ -214,7 +257,7 @@
         priorité</b>. Ce qui compte ici est ce qu'on s'interdit de faire trop tôt — écrire un
         CRM interne pendant qu'on écrit un moteur de stockage, c'est rater les deux.</div></div>
     ${ROADMAP.map(r => `<div class="box"><h4>
-      <span class="jalon${r.v > 1 ? " v" + Math.min(r.v, 4) : ""}">V${r.v}</span>
+      <span class="jalon${r.v > 1 ? " v" + r.v : ""}">V${r.v}</span>
       ${F.esc(r.titre)} — <span class="st ${r.v === 1 ? "wait" : ""}">${r.etat}</span></h4>
       <ul>${r.contenu.map(c => `<li>${F.esc(c)}</li>`).join("")}</ul>
       <div class="hint">${F.esc(r.note)}</div></div>`).join("")}
