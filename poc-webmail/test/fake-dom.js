@@ -57,9 +57,17 @@ function matche(el, sel) {
 
 function creerDocument() {
   const racine = {};
+  /* Les éléments écrits en dur dans index.html (barre du POC) : le harnais ne
+     parse pas le HTML, il les fabrique à la demande pour que le câblage tienne. */
+  const STATIQUES = {
+    ".pocnav [data-page]": ["aide", "features", "cdc", "roadmap"]
+      .map(p => mkEl("button", { "data-page": p })),
+  };
   const doc = {
-    _els: racine,
+    _els: racine, _statiques: STATIQUES,
     getElementById(id) { return racine[id] = racine[id] || mkEl("div", { id }); },
+    querySelectorAll(sel) { return STATIQUES[sel] || []; },
+    querySelector(sel) { return (STATIQUES[sel] || [])[0] || null; },
     documentElement: { _t: null, getAttribute() { return this._t; }, setAttribute(k, v) { this._t = v; } },
   };
   return doc;

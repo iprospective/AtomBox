@@ -29,6 +29,7 @@
       if (t.type === "compo") return ABX.Controllers.Compose.peindre(t);
       if (t.type === "admin") return ABX.Controllers.Admin.peindre(t);
       if (t.type === "pj")    return ABX.Controllers.Admin.peindrePJ();
+      if (t.type === "page")  return ABX.Controllers.Pages.peindre(t);
       return ABX.Controllers.Message.peindre(t);
     },
 

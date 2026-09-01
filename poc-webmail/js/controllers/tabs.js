@@ -24,6 +24,7 @@
       const key = spec.type === "msg"   ? "m:" + spec.id
                 : spec.type === "admin" ? "admin"
                 : spec.type === "pj"    ? "pj"
+                : spec.type === "page"  ? "page"
                 : (spec.key || "c:" + (++St.seq));
       let t = ui.tabs.find(x => x.key === key);
       if (!t) {

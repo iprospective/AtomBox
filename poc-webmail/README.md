@@ -1,7 +1,15 @@
 # POC interface AtomBox (D79/D80)
 
+**En ligne : <https://atombox.dev.iprospective.fr/>**
+
 Maquette **statique**, sur **fixtures** — aucun backend, aucune installation.
-Ouvrir `index.html` dans un navigateur : c'est tout.
+Ouvrir `index.html` dans un navigateur suffit aussi.
+
+Un bandeau en tête rappelle qu'il s'agit d'un POC et donne accès à quatre pages
+d'accompagnement : **Aide** (comment lire la maquette et où regarder),
+**Fonctionnalités** (une quarantaine, par domaine, avec leur jalon et leur état),
+**CDC** (l'index du cahier des charges — *généré* depuis le registre réel, il ne peut donc
+pas en diverger) et **Feuille de route** (V1 → V4).
 
 > Les scripts sont **classiques**, pas des modules ES : `import` est bloqué par CORS
 > en `file://`, et ce POC doit rester ouvrable par double-clic. L'ordre de chargement
@@ -335,13 +343,30 @@ l'application, ce que la maquette signale comme le premier besoin de cache (Q31)
 ## Tests
 
 ```
-node test/smoke.js     # parcours fonctionnel complet (50 assertions)
+node test/smoke.js     # parcours fonctionnel complet (180 assertions)
+node test/bundle.js    # la page autonome se comporte comme les sources
 node test/metrics.js   # cardinalité et volumes du corpus
 ```
 
 Le harnais lit les `<script src>` de `index.html` **dans l'ordre déclaré** : une dépendance
 mal placée casse le test avant de casser le navigateur. `test/fake-dom.js` est un DOM
 minimal — il ne rend rien, il vérifie que le câblage tient.
+
+## Outillage et déploiement
+
+```
+python3 outils/gen-cdc-index.py   # régénère js/services/cdc-index.js depuis le CDC
+python3 outils/bundle.py          # produit dist/index.html, page autonome de ~240 Ko
+bash    outils/deploy.sh          # les trois ci-dessus + tests + mise en ligne
+```
+
+`js/services/cdc-index.js` est **généré** : le retaper garantirait qu'il diverge du CDC.
+À régénérer après chaque décision consignée.
+
+Le déploiement remplace le contenu de `/home/siteadm/atombox/public/dev` sur
+`dev.iprospective.net`. Le vhost Apache est dans `outils/vhost-atombox.conf` — site
+statique, pas de PHP, `Options -Indexes`, `robots.txt` interdisant l'indexation. La page
+autonome est servie à part, sur `/autonome.html`, pour qui veut l'emporter en un fichier.
 
 ## Responsive — quatre paliers
 

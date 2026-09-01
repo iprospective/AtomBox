@@ -300,6 +300,35 @@ vrai(qr.etapes.some(e => e.warn && (e.index || "").includes("pas de « partout �
      "et la trace dit ce qu'on ne peut PAS faire");
 eq(A.Views.Attachments.filtrer("facture-renommee", "tous").length, 1, "la recherche le retrouve");
 
+console.log("— barre du POC et pages —————————————————————————");
+const nav = p.doc.querySelectorAll(".pocnav [data-page]");
+eq(nav.length, 4, "quatre entrées dans la barre du POC");
+nav.forEach(b => { b.onclick(); });
+eq(A.Store.ui.tabs.filter(t => t.type === "page").length, 1,
+   "les pages partagent UN onglet, elles ne s'empilent pas");
+["aide","features","cdc","roadmap"].forEach(pg => {
+  A.Controllers.Pages.ouvrir(pg);
+  const h = p.doc.getElementById("detail").innerHTML;
+  vrai(h.length > 800, "page « " + pg + " » : " + h.length + " octets");
+  vrai(!h.includes("undefined"), "page « " + pg + " » sans undefined");
+});
+A.Controllers.Pages.ouvrir("cdc");
+const hc = p.doc.getElementById("detail").innerHTML;
+vrai(!!A.CDC, "index du CDC chargé");
+vrai(A.CDC.decisions.length >= 90, A.CDC.decisions.length + " décisions indexées");
+vrai(A.CDC.questions.length >= 30, A.CDC.questions.length + " questions indexées");
+eq(A.CDC.chapitres.length, 16, "16 chapitres");
+vrai(hc.includes("D98"), "la dernière décision est affichée");
+vrai(hc.includes("Q38"), "et les questions ouvertes aussi");
+vrai(hc.includes(A.CDC.genere), "la page date son index");
+A.Controllers.Pages.ouvrir("features");
+const hf = p.doc.getElementById("detail").innerHTML;
+const nFeat = A.Views.Pages.FEATURES.reduce((s, [, l]) => s + l.length, 0);
+vrai(nFeat >= 40, nFeat + " fonctionnalités listées");
+vrai(hf.includes("V4"), "les jalons y figurent");
+A.Controllers.Pages.ouvrir("roadmap");
+eq(A.Views.Pages.ROADMAP.length, 4, "quatre jalons dans la feuille de route");
+
 console.log("— déterminisme ————————————————————————————————");
 const p3 = demarrer(creerStockage());   // stockage vierge
 const C = p3.ABX;

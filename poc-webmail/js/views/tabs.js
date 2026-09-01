@@ -8,11 +8,12 @@
 
   ABX.Views = ABX.Views || {};
   ABX.Views.Tabs = {
-    ICONES: { compo:"✎", msg:"✉", admin:"⚙", pj:"📎" },
+    ICONES: { compo:"✎", msg:"✉", admin:"⚙", pj:"📎", page:"📖" },
     titre(t) {
       if (t.type === "compo") return t.data.sujet || "(sans sujet)";
       if (t.type === "admin") return "Administration";
       if (t.type === "pj")    return "Pièces jointes";
+      if (t.type === "page")  return ABX.Views.Pages.titre(t.page);
       const m = C.par(t.id);
       return m ? m.subject : "(message effacé)";
     },
