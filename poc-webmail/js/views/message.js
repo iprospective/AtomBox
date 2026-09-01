@@ -1,0 +1,99 @@
+/* VUE MESSAGE — l'onglet ouvert sur un message.
+   La barre d'actions change selon l'état du message : un message à la corbeille
+   ne s'archive pas, un message sorti de la file se remet en file (Q09). */
+(function (ABX) {
+  "use strict";
+  const R = ABX.Registry, F = ABX.Fmt, Fx = ABX.Fixtures, C = ABX.Corpus;
+
+  ABX.Views = ABX.Views || {};
+  ABX.Views.Message = {
+    render(m, ui) {
+      const fil = C.tous.filter(x => x.thread === m.thread && x.fid === m.fid)
+                        .sort((a, b) => a.date - b.date).slice(0, 4);
+      return `
+        <div class="backbar"><button data-vue="liste">‹ ${F.esc(ui.folder.label)}</button></div>
+        <div class="dhead">
+          <div class="dsubj">${F.esc(m.subject)}</div>
+          <div class="dmeta">${F.esc(m.from)} &lt;${F.esc(m.mail)}&gt; ·
+            ${new Date(m.date).toLocaleString("fr-FR")} · reçu sur <b>${F.esc(m.boite)}</b>
+            ${m.pj ? " · 📎 " + m.pj : ""}
+            ${m.motif ? " · " + R.render("statut.chip", { m }) : ""}
+            ${m.dossier === "trash" ? ` · <span class="tag">corbeille</span>` : ""}</div>
+          <div class="dacts">
+            <button class="hbtn" data-c="rep">↩ Répondre</button>
+            <button class="hbtn" data-c="reptous">↩↩ Tous</button>
+            <button class="hbtn" data-c="tr">➦ Transférer</button>
+            ${ABX.Views.Message.statutHtml(m)}
+            <button class="hbtn ic" data-x="${m.lu ? "nonLu" : "lire"}"
+              title="${m.lu ? "Marquer non lu" : "Marquer lu"}">${m.lu ? "◻" : "◼"}</button>
+            <span class="pousse"></span>
+            <button class="hbtn ic" id="plus" title="Autres actions">⋯</button>
+            ${(m.dossier || m.fid) === "trash"
+              ? `<button class="hbtn ic" data-x="restaurer" title="Restaurer">↩</button>
+                 <button class="hbtn ic dgr" data-x="supprimer" title="Supprimer définitivement">✕</button>`
+              : `<button class="hbtn ic" data-x="${(m.dossier || m.fid) === "junk" ? "nonJunk" : "junk"}"
+                   title="${(m.dossier || m.fid) === "junk"
+                     ? "Ce n'est pas un indésirable" : "Marquer indésirable"}">${
+                     (m.dossier || m.fid) === "junk" ? "✓" : "🚫"}</button>
+                 <button class="hbtn ic dgr" data-x="corbeille"
+                   title="Mettre à la corbeille">🗑</button>`}
+          </div>
+          ${ABX.Views.Message.menuHtml(m)}
+        </div>
+        ${ABX.Views.Message.lienHtml(m)}
+        ${R.render("message.tags", { m })}
+        ${R.render("erp.panel", { m })}
+        ${R.render("attachment.list", { m })}
+        <div class="box"><h4>Fil de discussion (${fil.length} messages)</h4>
+          <div class="dmeta">thread_id matérialisé — D55</div></div>
+        <div class="thread">${fil.map(x =>
+          R.render("thread.item", { x, courant: x.id === m.id })).join("")}</div>`;
+    },
+
+    /* Le STATUT est l'action principale d'un message : ni un tag ni un dossier,
+       c'est où en est son traitement. Un sélecteur, donc, et pas trois boutons —
+       l'ordre des états compte, et il doit se voir. */
+    statutHtml(m) {
+      if (m.motif === "archive") return `<span class="tag">archivé</span>
+        <button class="hbtn" data-x="refile" title="Remettre dans la file">↺ Reprendre</button>`;
+      return `<select class="statsel st-${F.esc(m.statut || "nouveau")}" id="stat"
+          title="Statut de traitement">
+        ${Fx.STATUTS.map(x => `<option value="${x.id}"${x.id === m.statut ? " selected" : ""}
+          >${x.ic} ${F.esc(x.label)}</option>`).join("")}</select>`;
+    },
+
+    /* Le menu « ⋯ » : ce qui est utile mais rare, et ce qui appartient à une
+       capacité enfichable plutôt qu'au message lui-même. Le nom du fournisseur
+       branché y est visible — l'utilisateur doit savoir où part sa tâche. */
+    menuHtml(m) {
+      const cap = c => ABX.Providers.actif(c);
+      return `<div class="menu" id="menu" hidden>
+        <div class="mgrp">Ce message</div>
+        <button data-m="orig">⤓ Télécharger le .eml original</button>
+        <button data-m="archiver">🗄 Archiver sans traiter</button>
+        <div class="mgrp">Déplacer vers</div>
+        ${Fx.UTIL.map(u => `<button data-move="${F.esc(u.id)}">${u.icon} ${F.esc(u.label)}</button>`).join("")}
+        <button data-move="">↩ Retirer du dossier</button>
+        <div class="mgrp">Suite collaborative</div>
+        <button data-m="tache">${cap("taches").ic} Créer une tâche
+          <span class="mprov">${F.esc(cap("taches").label)}</span></button>
+        <button data-m="contact">${cap("contacts").ic} Fiche du correspondant
+          <span class="mprov">${F.esc(cap("contacts").label)}</span></button>
+        ${m.pj ? `<button data-m="fichiers">${cap("fichiers").ic} Enregistrer les pièces jointes
+          <span class="mprov">${F.esc(cap("fichiers").label)}</span></button>` : ""}
+      </div>`;
+    },
+
+    /* Un transfert par référence n'est pas une copie : c'est un pointeur, et un
+       pointeur peut mourir (Q30). L'écran doit le dire, pas le cacher. */
+    lienHtml(m) {
+      if (!m.ref) return "";
+      const src = C.par(m.ref);
+      return `<div class="lien" style="margin:12px 16px">➦ <b>Message transféré par référence</b> —
+        aucune copie n'a été faite : ce message pointe
+        « ${F.esc(src ? src.subject : "message supprimé")} » (D58/D67).
+        ${src ? `<button class="hbtn" id="suivre" style="margin-top:6px">Ouvrir l'original</button>`
+              : `<span class="tag">l'original n'existe plus — le lien est mort (Q30)</span>`}</div>`;
+    },
+  };
+})(window.ABX = window.ABX || {});

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AtomBox — POC interface</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app">
+ <div class="pocbar">
+  <span class="pocb">POC</span>
+  <span class="poct">Maquette d'interface — données inventées, aucun serveur.
+    <b>Rien de ce que vous ferez ici n'a d'effet ailleurs.</b></span>
+  <nav class="pocnav">
+   <button data-page="aide">Aide</button>
+   <button data-page="features">Fonctionnalités</button>
+   <button data-page="cdc">CDC</button>
+   <button data-page="roadmap">Feuille de route</button>
+  </nav>
+ </div>
+ <header>
+  <button class="hbtn" id="bnav" style="display:none" title="Dossiers">☰</button>
+  <div class="logo">Atom<span>Box</span></div>
+  <button class="hbtn prim" id="bnew" title="Nouveau message">✚ Nouveau</button>
+  <div class="hsearch"><input id="gsearch" placeholder="Rechercher dans tous les messages…"></div>
+  <div class="hspacer"></div>
+  <button class="hbtn ic" id="bpj" title="Pièces jointes">📎</button>
+  <button class="hbtn ic" id="badmin" title="Administration">⚙</button>
+  <button class="hbtn" id="btheme" title="Thème">◐</button>
+  <button class="hbtn dgr" id="breset" title="Oublier l'état local et repartir des fixtures">⟲</button>
+  <button class="hbtn on" id="bq" title="Journal des requêtes">⟨/⟩ requêtes <span id="qn">0</span></button>
+ </header>
+ <div class="tabs" id="tabs"></div>
+ <div class="scrim" id="scrim"></div>
+ <div class="main qopen" id="main" data-vue="liste">
+  <div class="col" id="nav"></div>
+  <div class="col" id="list"></div>
+  <div class="col" id="detail"></div>
+  <div class="col q" id="qpanel"></div>
+ </div>
+</div>
+
+<!-- Scripts CLASSIQUES, pas des modules ES : les imports ES sont bloqués par
+     CORS en file://, et ce POC doit rester ouvrable par double-clic, sans
+     serveur. L'ordre ci-dessous est donc la déclaration des dépendances. -->
+
+<!-- noyau : aucune dépendance métier -->
+<script src="js/core/prng.js"></script>
+<script src="js/core/format.js"></script>
+<script src="js/core/dom.js"></script>
+<script src="js/core/bus.js"></script>
+<script src="js/core/registry.js"></script>
+<script src="js/core/store.js"></script>
+
+<!-- services : l'état et les règles, sans aucune connaissance du DOM -->
+<script src="js/services/query-log.js"></script>
+<script src="js/services/attachments.js"></script>
+<script src="js/services/erp.js"></script>
+<script src="js/services/cdc-index.js"></script>
+<script src="js/services/providers.js"></script>
+<script src="js/services/fixtures.js"></script>
+<script src="js/services/corpus.js"></script>
+<script src="js/services/messages.js"></script>
+<script src="js/services/compose.js"></script>
+
+<!-- vues : des fonctions (contexte) -> HTML, sans effet de bord -->
+<script src="js/views/partials.js"></script>
+<script src="js/views/partials-overrides.js"></script>
+<script src="js/views/nav.js"></script>
+<script src="js/views/list.js"></script>
+<script src="js/views/message.js"></script>
+<script src="js/views/compose.js"></script>
+<script src="js/views/tabs.js"></script>
+<script src="js/views/query-log.js"></script>
+<script src="js/views/admin.js"></script>
+<script src="js/views/attachments.js"></script>
+<script src="js/views/pages.js"></script>
+
+<!-- la surface d'API, décrite par les gestes qui l'appellent : le support de CDC.
+     Après les vues, dont il lit le choix de variante. -->
+<script src="js/services/api-trace.js"></script>
+<script src="js/services/capabilities.js"></script>
+
+<!-- contrôleurs : peignent les vues et câblent les événements -->
+<script src="js/controllers/app.js"></script>
+<script src="js/controllers/nav.js"></script>
+<script src="js/controllers/list.js"></script>
+<script src="js/controllers/tabs.js"></script>
+<script src="js/controllers/message.js"></script>
+<script src="js/controllers/compose.js"></script>
+<script src="js/controllers/admin.js"></script>
+<script src="js/controllers/pages.js"></script>
+
+<script src="js/app.js"></script>
+</body></html>
