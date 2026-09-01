@@ -48,7 +48,11 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 
 /* ---- arborescence ---- */
 .navsearch{position:sticky;top:0;background:var(--panel);padding:8px;border-bottom:1px solid var(--line);z-index:2}
-.navsearch input{width:100%;padding:5px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel2)}
+.navsearch input{width:100%;padding:5px 26px 5px 9px;border:1px solid var(--line);border-radius:6px;
+  background:var(--panel2)}
+.navx{position:absolute;right:13px;top:50%;transform:translateY(-50%);border:0;background:none;
+  color:var(--muted);cursor:pointer;font-size:13px;line-height:1;padding:3px 4px;border-radius:4px}
+.navx:hover{background:var(--line);color:var(--fg)}
 .grp{padding:9px 10px 3px;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 .node{display:flex;align-items:center;gap:7px;padding:4px 10px;cursor:pointer;user-select:none}
 .node:hover{background:var(--panel2)}
@@ -471,7 +475,8 @@ function renderNav() {
   const n = document.getElementById("nav");
   const f = S.navq.trim().toLowerCase();
   let h = `<div class="navsearch"><input id="navq" placeholder="Filtrer les dossiers…"
-     value="${esc(S.navq)}"></div>`;
+     value="${esc(S.navq)}">${S.navq
+       ? `<button class="navx" id="navx" title="Effacer le filtre (Échap)">✕</button>` : ""}</div>`;
 
   const node = (o, cls, sel) =>
     `<div class="node ${cls}${sel ? " sel" : ""}" data-id="${esc(o.id)}" data-label="${esc(o.label)}"
@@ -505,6 +510,12 @@ function renderNav() {
   n.innerHTML = h;
 
   const inp = document.getElementById("navq");
+  const videFiltre = () => { S.navq = ""; renderNav(); document.getElementById("navq").focus(); };
+  const croix = document.getElementById("navx");
+  if (croix) croix.onclick = videFiltre;
+  inp.onkeydown = e => { if (e.key === "Escape" && S.navq) {
+    e.stopPropagation();          // sinon l'Échap global fermerait le panneau des requêtes
+    videFiltre(); } };
   inp.oninput = e => { S.navq = e.target.value; const p = e.target.selectionStart;
     renderNav(); const i2 = document.getElementById("navq"); i2.focus(); i2.setSelectionRange(p, p);
     if (S.navq.length === 1)

@@ -8,7 +8,7 @@ navigateur, rien à installer.
 | | Décision |
 |---|---|
 | Arborescence **engendrée** depuis les axes (200 fournisseurs, 52 clients…) | D76, D77 |
-| Recherche **dans** l'arborescence + « voir les N autres » | D77 |
+| Recherche **dans** l'arborescence (croix / `Échap` pour l'effacer) + « voir les N autres » | D77 |
 | Dossiers **spéciaux** (vues) vs **utilisateur** vs **virtuels** | D51, D75 |
 | Recherche **récursive** = le prédicat parent, sans parcours d'arbre | D77 |
 | Filtres (non lus / récents / avec PJ / lourds) × tris (date, expéditeur, sujet, taille) | D16 |
