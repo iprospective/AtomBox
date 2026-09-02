@@ -25,7 +25,11 @@
          ce qu'on en a reçu : sans les envois, un dossier client raconte la moitié
          de l'histoire, et le fil de discussion est amputé. */
       const tirage = P.next(), luTirage = P.next() < .3;
-      const sortant = !!o.sortant || (Fx.estAxe(axe) && tirage < .25);
+      /* On répond à un client, à un fournisseur, à un ticket — jamais à une
+         alerte de supervision ni à un réseau social. Un axe « sans retour » ne
+         porte donc que du courrier entrant. */
+      const sansRetour = axe === "notification" || axe === "social";
+      const sortant = !!o.sortant || (Fx.estAxe(axe) && !sansRetour && tirage < .25);
       const m = {
         id: fid + "/m" + i, fid,
         sens: sortant ? "out" : "in",
@@ -33,7 +37,7 @@
         mail: sortant ? boite : adr,
         to:   sortant ? [adr]  : [boite],
         boite,                                    // la boîte qui a reçu ou émis — Q26
-        subject: (P.next() < .3 ? "Re: " : "") + P.pick(Fx.SUJETS).replace("{n}", "" + P.int(1000, 9999)),
+        subject: sujet(axe, label),
         body: P.pick(Fx.CORPS),
         date: Date.now() - P.int(0, 300) * 864e5 - P.int(0, 86399) * 1000,
         lu: sortant ? true : !luTirage,
@@ -61,12 +65,31 @@
                  P.with("spoofdom/" + m.id, () => P.pick(Fx.DOMAINES_LIBRES));
       }
       At.attacher(m);
-      if (Fx.estAxe(axe)) m.tags.push({ axe, val: label, src: "dolibarr-mmi" });
+      /* La SOURCE du tag est l'application qui l'a poussé (D19/D20) : Dolibarr
+         tient les tiers, Redmine tient les tickets. Deux axes, deux ACL, et
+         c'est ce qui rend Q34 concrète — retirer à la main un tag posé par un
+         connecteur n'a pas le même sens selon qui l'a posé. */
+      if (Fx.estAxe(axe))
+        m.tags.push({ axe, val: label,
+                      src: (Fx.AXES.find(a => a.id === axe) || {}).app || "dolibarr-mmi" });
       if (P.next() < .25) m.tags.push({ axe:"projet", val:"RM" + P.int(2800, 2900), src:"redmine-ipro" });
       if (P.next() < .18) m.tags.push({ axe:"type", val:P.pick(["facture","devis","contrat"]), src:"filtre" });
       out.push(m);
     }
     return out.sort((a, b) => b.date - a.date);
+  }
+
+  /* Un ticket de développement ne parle pas de bons de livraison : le sujet suit
+     l'axe, sinon l'arborescence engendrée n'a plus l'air d'être la même donnée
+     que les messages qu'elle range. */
+  function sujet(axe, label) {
+    if (axe === "developpement") {
+      const num = (label.match(/RM(\d+)/) || [0, "2881"])[1];
+      const titre = label.split(" · ")[1] || "le ticket";
+      return P.pick(Fx.SUJETS_RM).replace("{t}", titre).replace("{n}", num);
+    }
+    return (P.next() < .3 ? "Re: " : "") +
+           P.pick(Fx.SUJETS).replace("{n}", "" + P.int(1000, 9999));
   }
 
   /* Les vues qui ne sont pas des dossiers : elles lisent motif_sortie (D30/D51). */
