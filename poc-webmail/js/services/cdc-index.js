@@ -3,7 +3,7 @@
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
    ce que dit le registre, et rien d'autre.
 
-   Généré le 2026-09-02 — 117 décisions, 44 questions, 17 chapitres. */
+   Généré le 2026-09-02 — 120 décisions, 45 questions, 17 chapitres. */
 (function (ABX) {
   "use strict";
   ABX.CDC = {
@@ -679,6 +679,21 @@
       "etat": "valide"
     },
     {
+      "id": "D116",
+      "objet": "Boîte partagée : le From est celui de la boîte, avec un « au nom de » optionnel",
+      "etat": "valide"
+    },
+    {
+      "id": "D117",
+      "objet": "Est verrouillable ce qui protège l'entreprise ; jamais le confort du poste de travail",
+      "etat": "valide"
+    },
+    {
+      "id": "D118",
+      "objet": "Supprimer, c'est détacher ; le message orphelin tombe en déchetterie, restaurable",
+      "etat": "valide"
+    },
+    {
       "id": "D25",
       "objet": "Extraction réversible (exigence)",
       "etat": "autre"
@@ -933,20 +948,26 @@
     },
     {
       "id": "Q42",
-      "objet": "From d'une boîte partagée : voix d'équipe, Sender, ou nom dans l'affichage ?",
-      "bloque": "D102, Q26",
-      "urgence": "moyenne"
+      "objet": "From d'une boîte partagée",
+      "bloque": "—",
+      "urgence": "tranchee"
     },
     {
       "id": "Q43",
-      "objet": "Jusqu'où un gestionnaire peut-il verrouiller un réglage contre l'utilisateur ?",
-      "bloque": "D106",
-      "urgence": "moyenne"
+      "objet": "Jusqu'où verrouiller un réglage ?",
+      "bloque": "—",
+      "urgence": "tranchee"
     },
     {
       "id": "Q44",
-      "objet": "La purge de rétention efface-t-elle l'octet, ou seulement le rattachement ?",
-      "bloque": "D104, D87",
+      "objet": "La purge efface-t-elle l'octet ?",
+      "bloque": "—",
+      "urgence": "tranchee"
+    },
+    {
+      "id": "Q45",
+      "objet": "Que voit un administrateur dans la déchetterie : le contenu, ou les métadonnées ?",
+      "bloque": "D118, D54",
       "urgence": "haute"
     }
   ]

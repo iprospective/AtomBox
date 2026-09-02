@@ -92,6 +92,7 @@
       ["File de travail partagée sur boîte commune", 1, "à trancher", "Q35"],
       ["Note interne d'équipe, jamais transmise", 1, "décidé", "D101"],
       ["Identités d'expédition et signatures", 1, "décidé", "D102"],
+      ["Boîte partagée : « au nom de » optionnel", 1, "décidé", "D116"],
       ["Réponses types partagées", 1, "décidé", "D102"],
       ["Réveil et échéance sur un message", 1, "décidé", "D103"],
       ["Complétion des destinataires", 1, "décidé", "D109"],
@@ -133,7 +134,9 @@
       ["Aucun accusé de lecture émis ni demandé", 1, "décidé", "D105"],
       ["Rétention par type de contenu et par boîte", 1, "décidé", "D104"],
       ["Gel sur litige — prime sur toute purge", 1, "décidé", "D104"],
-      ["Portée de la purge : rattachement ou octet ?", 1, "à trancher", "Q44"],
+      ["Suppression = détachement, déchetterie", 1, "décidé", "D118"],
+      ["Ce que l'admin voit de la déchetterie", 1, "à trancher", "Q45"],
+      ["Verrouillage : jamais le poste de travail", 1, "décidé", "D117"],
       ["Analyse des traceurs d'images (option)", 5, "à venir", "D105"],
     ]],
     ["Suite collaborative", [
