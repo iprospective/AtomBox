@@ -3,7 +3,7 @@
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
    ce que dit le registre, et rien d'autre.
 
-   Généré le 2026-09-02 — 123 décisions, 45 questions, 17 chapitres. */
+   Généré le 2026-09-02 — 131 décisions, 49 questions, 17 chapitres. */
 (function (ABX) {
   "use strict";
   ABX.CDC = {
@@ -709,6 +709,46 @@
       "etat": "valide"
     },
     {
+      "id": "D122",
+      "objet": "Groupes de discussion internes par service — du chat, pas du courrier",
+      "etat": "valide"
+    },
+    {
+      "id": "D123",
+      "objet": "Le message de groupe vit en base, jamais dans le magasin d'octets",
+      "etat": "valide"
+    },
+    {
+      "id": "D124",
+      "objet": "Le groupe est une boîte ; un seul rattachement, et une position de lecture par membre",
+      "etat": "propose"
+    },
+    {
+      "id": "D125",
+      "objet": "Le chat rend le temps réel obligatoire — et Q38 devient un prérequis",
+      "etat": "propose"
+    },
+    {
+      "id": "D126",
+      "objet": "Le nom affiché n'est pas une identité : From/To normalisés sur le carnet",
+      "etat": "valide"
+    },
+    {
+      "id": "D127",
+      "objet": "Moteur d'analyse par indices : score *et* détail des règles, stockés et explicables",
+      "etat": "valide"
+    },
+    {
+      "id": "D128",
+      "objet": "Catalogue des règles anti-usurpation, par famille et par force de signal",
+      "etat": "valide"
+    },
+    {
+      "id": "D129",
+      "objet": "La règle que seul AtomBox peut poser : la cohérence avec le contexte métier",
+      "etat": "propose"
+    },
+    {
       "id": "D25",
       "objet": "Extraction réversible (exigence)",
       "etat": "autre"
@@ -984,6 +1024,30 @@
       "objet": "Ce qu'un administrateur voit de la déchetterie",
       "bloque": "—",
       "urgence": "tranchee"
+    },
+    {
+      "id": "Q46",
+      "objet": "Les groupes internes sont-ils V1 ou V2 ? Ils ne dépendent pas de LMTP",
+      "bloque": "D122, phasage",
+      "urgence": "haute"
+    },
+    {
+      "id": "Q47",
+      "objet": "Un message de groupe est-il modifiable / supprimable par son auteur ?",
+      "bloque": "D122, D54",
+      "urgence": "moyenne"
+    },
+    {
+      "id": "Q48",
+      "objet": "Un nouveau membre voit-il l'historique du groupe ?",
+      "bloque": "D124, acces",
+      "urgence": "moyenne"
+    },
+    {
+      "id": "Q49",
+      "objet": "Que fait AtomBox d'un message suspect : alerter, mettre en quarantaine, refuser ?",
+      "bloque": "D128, D71",
+      "urgence": "haute"
     }
   ]
 };

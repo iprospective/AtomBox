@@ -44,6 +44,22 @@
       /* Un corpus où tout serait « nouveau » ne montrerait pas la file de travail. */
       if (!sortant && P.next() < .28) m.statut = P.pick(["a_faire","a_faire","en_cours","attente"]);
       m.snippet = m.body.split("\n")[2] || "…";
+      /* D126 — un correspondant est « connu » quand il est enregistré : ceux qui
+         portent un axe métier le sont, une notification ou un réseau social non.
+         D128 (B1) — on fabrique quelques usurpations : le NOM d'un correspondant
+         connu, posé sur une adresse qui n'est pas la sienne. C'est le meilleur
+         signal du catalogue, et le seul qui se voie à l'écran.
+         Tirage hors flux principal (P.with) pour ne pas décaler le corpus. */
+      m.connu = !sortant && Fx.estAxe(axe);
+      /* 1 % : FRÉQUENCE DE DÉMONSTRATION, volontairement gonflée. Dans un corpus
+         réel, une usurpation par nom est rare — quelques-unes par an et par boîte.
+         Ce taux est choisi pour qu'on en croise sans chercher, pas mesuré. */
+      if (m.connu && P.with("spoof/" + m.id, () => P.next()) < .01) {
+        m.spoof = true;
+        m.connu = false;
+        m.mail = ABX.Fmt.slug(qui).replace(/-/g, ".") + "@" +
+                 P.with("spoofdom/" + m.id, () => P.pick(Fx.DOMAINES_LIBRES));
+      }
       At.attacher(m);
       if (Fx.estAxe(axe)) m.tags.push({ axe, val: label, src: "dolibarr-mmi" });
       if (P.next() < .25) m.tags.push({ axe:"projet", val:"RM" + P.int(2800, 2900), src:"redmine-ipro" });

@@ -16,6 +16,28 @@ vrai(A.Registry.liste().length >= 15, "partielles enregistrées : " + A.Registry
 vrai(p.doc.getElementById("nav").innerHTML.includes("Fournisseurs"), "arborescence peinte");
 vrai(p.doc.getElementById("list").innerHTML.includes("msg"), "liste peinte");
 
+console.log("— expéditeur normalisé (D126) et usurpation (D128) —————");
+const ent = A.Corpus.tous.filter(m => m.sens !== "out");
+const connu = ent.find(m => m.connu);
+const inconnu = ent.find(m => !m.connu && !m.spoof);
+const usurpe = ent.find(m => m.spoof);
+vrai(!!connu && !!inconnu && !!usurpe, "le corpus porte les trois cas");
+const hCon = A.Registry.render("expediteur", { m: connu });
+const hInc = A.Registry.render("expediteur", { m: inconnu });
+const hUsu = A.Registry.render("expediteur", { m: usurpe });
+vrai(hCon.includes(connu.from) && !hCon.includes("adr-av"),
+     "un correspondant connu s'affiche par son nom de carnet");
+vrai(hInc.includes(inconnu.mail) && hInc.includes("adr-av"),
+     "un inconnu s'affiche par son ADRESSE, mise en avant");
+vrai(hInc.includes("«"), "et son nom déclaré est relégué entre guillemets");
+vrai(hUsu.includes("usurpe"), "l'usurpation par nom porte son signal");
+vrai(!A.Views.Message.spoofHtml(inconnu),
+     "aucun bandeau sur un simple inconnu — le silence est une fonctionnalité");
+vrai(A.Views.Message.spoofHtml(usurpe).includes("B1"),
+     "le bandeau nomme la règle qui l'a déclenché");
+vrai(usurpe.mail.split("@")[1] !== connu.mail.split("@")[1],
+     "l'adresse usurpatrice est sur un autre domaine que le carnet");
+
 console.log("— surcharge de vues partielles ——————————————————");
 const nSurcharges = A.Registry.liste().filter(n => n.includes("@")).length;
 vrai(nSurcharges >= 5, nSurcharges + " partielles spécialisées");

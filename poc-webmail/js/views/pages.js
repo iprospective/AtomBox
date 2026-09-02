@@ -54,6 +54,17 @@
           nom dans <i>ce</i> message change.</li>
       </ul></div>
 
+    <div class="box"><h4>Les expéditeurs, et le nom qu'ils déclarent</h4>
+      <p>Un correspondant <b>enregistré</b> s'affiche par le nom de votre carnet. Un
+        <b>inconnu</b> s'affiche par son <b>adresse</b>, mise en avant, son nom déclaré
+        relégué entre guillemets : le nom d'un email est choisi par l'émetteur, et rien
+        ne l'authentifie (D126).</p>
+      <p>Quelques messages portent une <b>usurpation par nom</b> — celui d'un contact que
+        vous connaissez, posé sur une adresse qui n'est pas la sienne. Ils sont signalés
+        dans la liste, et le message ouvert nomme la règle déclenchée (D128, B1). Cette
+        fréquence est <b>volontairement gonflée</b> pour qu'on en croise sans chercher :
+        dans la réalité c'est rare, et c'est justement ce qui rend l'alerte crédible.</p></div>
+
     <div class="box"><h4>Ce que la maquette ne prouve pas</h4>
       <p>Rien sur la <b>performance</b> : tout est instantané sur des données inventées, et
         les requêtes affichées ne sont jamais exécutées. Une interface validée ici peut
@@ -89,6 +100,10 @@
       ["Composition : nouveau, réponse, transfert", 1, "maquetté", "Q26, D58"],
       ["Transfert par référence, sans copie", 1, "maquetté", "D58, D67"],
       ["Envoi interne hors SMTP", 2, "décidé", "D12"],
+      ["Groupes de discussion par service", 2, "décidé", "D122, Q46"],
+      ["Messages de groupe stockés en base, pas en fichiers", 2, "décidé", "D123"],
+      ["Position de lecture par membre", 2, "décidé", "D124"],
+      ["Temps réel (arrivée, prise en charge)", 2, "décidé", "D125"],
       ["File de travail partagée sur boîte commune", 1, "à trancher", "Q35"],
       ["Note interne d'équipe, jamais transmise", 1, "décidé", "D101"],
       ["Identités d'expédition et signatures", 1, "décidé", "D102"],
@@ -140,6 +155,11 @@
       ["Suppression = détachement, déchetterie", 1, "décidé", "D118"],
       ["Déchetterie : métadonnées, restauration à l'origine", 1, "décidé", "D121"],
       ["Verrouillage : jamais le poste de travail", 1, "décidé", "D117"],
+      ["Expéditeur normalisé sur le carnet", 1, "maquetté", "D126"],
+      ["Signal d'usurpation par nom (règle B1)", 1, "maquetté", "D128"],
+      ["Catalogue de règles anti-usurpation", 1, "décidé", "D127, D128"],
+      ["Cohérence IBAN / tiers de l'ERP", 1, "décidé", "D129"],
+      ["Alerter, mettre en quarantaine, ou refuser ?", 1, "à trancher", "Q49"],
       ["Analyse des traceurs d'images (option)", 5, "à venir", "D105"],
     ]],
     ["Suite collaborative", [

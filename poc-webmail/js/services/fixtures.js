@@ -107,6 +107,12 @@
     { nom:"iprospective.fr", role:"recette", boites:9, alias:41, mx:"mx1.iprospective.fr",
       ingestion:"IMAP (lecture seule)", note:"production intacte, D50" },
   ];
+  /* D128 (B1) — les domaines sur lesquels une usurpation par nom se pose : le nom
+     d'un correspondant connu, une adresse qui ne lui appartient pas. Deux d'entre
+     eux sont des SOSIES du domaine pilote (règle A8) — la lettre change, pas le
+     coup d'œil. */
+  const DOMAINES_LIBRES = ["gmail.com", "outlook.fr", "free.fr",
+                           "iprospective-eu.com", "iprospectlve.eu"];
   const BOITES = [
     { adresse:"mathieu@iprospective.eu",   type:"personnelle", quota:"12 Go", acces:1, msg:1284 },
     { adresse:"contact@iprospective.eu",   type:"commune",     quota:"40 Go", acces:4, msg:8210 },
@@ -127,6 +133,6 @@
   ];
 
   ABX.Fixtures = { AXES, valeurs, SPECIAUX, UTIL, SUJETS, CORPS, MOI, interne, nom, pers,
-                   STATUTS, statut, DOMAINES, BOITES, APPLICATIONS,
+                   STATUTS, statut, DOMAINES, DOMAINES_LIBRES, BOITES, APPLICATIONS,
                    estAxe: id => AXES.some(a => a.id === id) };
 })(window.ABX = window.ABX || {});
