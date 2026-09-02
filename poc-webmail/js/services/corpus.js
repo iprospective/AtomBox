@@ -82,7 +82,9 @@
       if (!sortant && !m.spoof) {
         const t = P.with("nature/" + m.id, () => P.next());
         if      (axe === "notification")     m.nature = "notification";
-        else if (axe === "social")           m.nature = "liste";
+        /* Une liste de discussion est une diffusion par nature : le forum entre
+           dans la branche Abonnements sans qu'on ait rien à déclarer (D133). */
+        else if (axe === "social" || axe === "forum") m.nature = "liste";
         /* 5 % / 45 % : CALAGE DE DÉMONSTRATION. Une vraie PME reçoit bien plus de
            courrier de machines que ça — souvent la moitié. Les taux sont baissés
            pour que la maquette montre le mécanisme sans noyer le reste ; il ne
@@ -150,6 +152,9 @@
       const titre = label.split(" · ")[1] || "le ticket";
       return P.pick(Fx.SUJETS_RM).replace("{t}", titre).replace("{n}", num);
     }
+    const propre = Fx.SUJETS_AXE[axe];
+    if (propre)
+      return P.pick(propre).replace("{n}", "" + P.int(1000, 9999)).replace("{v}", label);
     return (P.next() < .3 ? "Re: " : "") +
            P.pick(Fx.SUJETS).replace("{n}", "" + P.int(1000, 9999));
   }

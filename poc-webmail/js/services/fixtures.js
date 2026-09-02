@@ -31,12 +31,25 @@
     { id:"client",       label:"Clients",         icon:"🏢", n:52,  sub:"en cours" },
     { id:"partenaire",   label:"Partenaires",     icon:"🤝", n:14 },
     { id:"collaborateur",label:"Collaborateurs",  icon:"👥", n:11 },
+    { id:"prospect",     label:"Prospects",       icon:"🎯", n:8,  poids:[2, 8] },
     { id:"sav",          label:"SAV",             icon:"🛟", n:23,  ticket:true },
     /* Un axe poussé par une AUTRE application que l'ERP (D19/D20) : Redmine tient
        les tickets, Dolibarr les clients. Deux applications, deux axes, deux ACL —
        et la même arborescence engendrée (D77). */
     { id:"developpement",label:"Développement",   icon:"🧩", n:34,  rm:true,
       app:"redmine-ipro" },
+    /* Trois axes calés sur l'arborescence IMAP réelle (chapitre 14) : le nombre
+       de messages de chacun approche celui mesuré en production — 116 pour
+       l'administratif, 498 pour les demandes, 29 pour les listes. */
+    { id:"contact",      label:"Demandes et contact", icon:"📨", n:4, poids:[80, 150],
+      fixed:["Formulaire du site","Contact général","Demande de devis","Webmaster"] },
+    { id:"administratif",label:"Administratif",   icon:"🏛", n:7, poids:[8, 26],
+      fixed:["URSSAF","Impôts","Greffe du tribunal","Banque","Assurance",
+             "Retraite","Mutuelle"] },
+    /* Une liste de discussion EST une diffusion : cet axe alimente donc aussi la
+       branche Abonnements (D130, D133), sans qu'on ait rien à déclarer. */
+    { id:"forum",        label:"Forums et listes",icon:"💡", n:5, poids:[3, 9],
+      fixed:["Dolibarr","PostgreSQL","Debian","Dovecot","Symfony"] },
     { id:"notification", label:"Notifications",   icon:"🔔", n:6,
       fixed:["Urgences","Debug","Monitoring","Sauvegardes","CI/CD","Sécurité"] },
     { id:"social",       label:"Réseaux sociaux", icon:"💬", n:5,
@@ -60,7 +73,8 @@
                   : nom();
       valeurs[a.id].push({
         id: a.id + ":" + F.slug(label), label, axe: a.id,
-        poids: a.id === "notification" ? P.int(20, 60) : P.int(4, 26),
+        poids: a.poids ? P.int(a.poids[0], a.poids[1])
+             : a.id === "notification" ? P.int(20, 60) : P.int(4, 26),
         actif: P.next() < .45,        // « clients en cours »
         last: 0,                      // renseigné après génération du corpus
       });
@@ -108,6 +122,18 @@
   const SUJETS = ["Devis {n}","Facture {n}","Relance facture {n}","Commande {n} expédiée",
     "Re: Commande {n}","Bon de livraison {n}","Contrat de maintenance","Demande d'information",
     "Réclamation client","Planning d'intervention","Avoir {n}","Confirmation de rendez-vous"];
+  /* Un dossier « URSSAF » qui parle de bons de livraison trahit la maquette :
+     le sujet suit l'axe, comme pour les tickets de développement. */
+  const SUJETS_AXE = {
+    administratif: ["Déclaration trimestrielle","Avis d'échéance","Attestation de vigilance",
+      "Relevé annuel de situation","Appel de cotisation {n}","Accusé de dépôt"],
+    contact: ["Nouvelle entrée : Contact","Demande d'information via le site",
+      "Demande de devis","Question sur vos prestations","Rappel demandé"],
+    forum: ["[{v}] Re: problème de configuration","[{v}] Annonce de version",
+      "[{v}] Re: retour d'expérience","[{v}] Question de débutant"],
+    prospect: ["Suite à notre échange","Présentation de nos services",
+      "Demande de rendez-vous","Relance — proposition {n}"],
+  };
   const CORPS = [
     "Bonjour,\n\nComme convenu lors de notre échange, vous trouverez ci-joint les éléments demandés.\n\nBien cordialement,",
     "Bonjour,\n\nNous accusons réception de votre demande. Un retour vous sera fait sous 48 heures.\n\nCordialement,",
@@ -157,5 +183,6 @@
 
   ABX.Fixtures = { AXES, valeurs, SPECIAUX, UTIL, SUJETS, CORPS, MOI, interne, nom, pers,
                    STATUTS, statut, DOMAINES, DOMAINES_LIBRES, BOITES, APPLICATIONS, SUJETS_RM,
+                   SUJETS_AXE,
                    estAxe: id => AXES.some(a => a.id === id) };
 })(window.ABX = window.ABX || {});
