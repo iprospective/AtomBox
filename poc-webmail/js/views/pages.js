@@ -35,7 +35,7 @@
           (en italique), remplacé au clic suivant</td></tr>
         <tr><td><b>Double-clic</b></td><td>épingle l'onglet — il reste ouvert</td></tr>
         <tr><td>Clic du <b>milieu</b>, ou la croix</td><td>ferme l'onglet</td></tr>
-        <tr><td>Champ <b>Filtrer les dossiers</b></td><td>cherche dans les 345 dossiers ;
+        <tr><td>Champ <b>Filtrer les dossiers</b></td><td>cherche dans les 370 dossiers ;
           la croix ou <kbd>Échap</kbd> l'efface</td></tr>
         <tr><td>Survol d'un message</td><td>fait apparaître ses actions rapides</td></tr>
       </table></div>
@@ -73,6 +73,12 @@
         « <b>quelqu'un attend-il quelque chose de moi ?</b> ». Une diffusion ne remplit pas
         la file des non traités ; une notification y entre, parce qu'une facture est une
         machine qui attend un paiement.</p>
+      <p>Les diffusions se rangent d'elles-mêmes sous <b>Abonnements</b> : un dossier par
+        liste, <b>déduit du corpus</b> et non saisi (D133). Le message n'a pas bougé pour
+        autant — il est toujours chez son correspondant, et il apparaît ici <i>en plus</i>.
+        C'est l'arborescence engendrée de D77 prise au mot : ouvrez « Fournisseurs › une
+        société » puis « Abonnements › la même société », vous verrez les mêmes messages
+        d'un côté parmi les factures, de l'autre seuls.</p>
       <p>À l'ouverture d'un tel message, le bouton <b>Répondre</b> cesse d'être l'action
         principale, et une ligne dit pourquoi. Sur quelques messages, il est carrément
         <b>refusé</b> — et là, l'écran ne devine pas : il vous montre le rejet
@@ -109,6 +115,7 @@
       ["Moteur de filtres (remplace Sieve)", 1, "décidé", "D74"],
       ["Nature du message : diffusion, notification, service", 1, "maquetté", "D130"],
       ["Newsletters hors de la file, factures dedans", 1, "maquetté", "D130, D13"],
+      ["Un dossier par liste, déduit du corpus", 1, "maquetté", "D133, D77"],
       ["Archivage par sortie de file", 1, "maquetté", "D14, D30"],
     ]],
     ["Travail au quotidien", [

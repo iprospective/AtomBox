@@ -39,7 +39,10 @@
         const lim = ui.plus[a.id] ? vals.length : PAGE;
         vals.slice(0, lim).forEach(v => h += noeud(
           { ...v, unread: C.cnt(v.id).u, total: C.cnt(v.id).t,
-            icon: a.id === "client" && v.actif ? "🟢" : "•", kind:"virtuel" },
+            icon: a.id === "client" && v.actif ? "🟢" : "•",
+            /* Un axe dérivé ne se sélectionne pas par chemin : ses dossiers sont
+               un prédicat sur le corpus, pas un rangement (D133). */
+            kind: a.derive ? "abo" : "virtuel" },
           "child", ui.folder.id === v.id));
         if (vals.length > lim)
           h += `<div class="more" data-more="${a.id}">voir les ${vals.length - lim} autres…</div>`;

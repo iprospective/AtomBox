@@ -16,6 +16,15 @@
   function fabriqueMessages(fid, label, n, opt) {
     const out = [], o = opt || {};
     const axe = fid.split(":")[0];
+    /* D133 — être abonné à une newsletter est un fait qui porte sur le
+       CORRESPONDANT, pas sur le message : on ne reçoit pas une lettre d'OVH une
+       fois, on la reçoit tous les mois. Le tirage se fait donc une fois par
+       dossier, hors flux (P.with), et non message par message — sinon on
+       obtiendrait deux cents listes d'un seul message, ce qu'aucune boîte réelle
+       ne montre. Fournisseurs et partenaires seulement : un client n'envoie pas
+       de newsletter. */
+    const emetteurListe = (axe === "fournisseur" || axe === "partenaire") &&
+                          P.with("nl/" + fid, () => P.next()) < .10;
     for (let i = 0; i < n; i++) {
       const qui = fid.startsWith("collaborateur") ? label : Fx.pers();
       const dom = ABX.Fmt.slug(label).slice(0, 14) + ".fr";
@@ -74,12 +83,13 @@
         const t = P.with("nature/" + m.id, () => P.next());
         if      (axe === "notification")     m.nature = "notification";
         else if (axe === "social")           m.nature = "liste";
-        /* 5 % / 4 % : CALAGE DE DÉMONSTRATION. Une vraie PME reçoit bien plus de
-           courrier de machines que ça — souvent la moitié. Le taux est baissé
+        /* 5 % / 45 % : CALAGE DE DÉMONSTRATION. Une vraie PME reçoit bien plus de
+           courrier de machines que ça — souvent la moitié. Les taux sont baissés
            pour que la maquette montre le mécanisme sans noyer le reste ; il ne
-           faut pas le lire comme une mesure. */
+           faut pas les lire comme une mesure. Un émetteur de newsletter envoie
+           aussi des factures : d'où les 45 %, et non 100 %. */
         else if (Fx.estAxe(axe) && t < .05)  m.nature = "notification";
-        else if (Fx.estAxe(axe) && t < .09)  m.nature = "liste";
+        else if (emetteurListe && t < .45)   m.nature = "liste";
       }
       if (m.nature !== "humain") {
         /* Une boîte fonctionnelle n'est pas une personne : elle ne peut pas être
@@ -88,7 +98,13 @@
         m.connu  = false;
         m.from   = m.nature === "liste" ? label : label + " — notifications";
         m.mail   = (m.nature === "liste" ? "news@" : "noreply@") + d;
-        m.listId = m.nature === "liste" ? "<" + ABX.Fmt.slug(label) + "." + d + ">" : null;
+        if (m.nature === "liste") {
+          /* Le List-Id est l'identifiant de la liste, pas de l'émetteur : c'est
+             lui qui regroupe (D130) et lui que vise le désabonnement (D132). */
+          m.listId    = "<newsletter." + d + ">";
+          m.listeLbl  = label;
+          m.listeId   = "abonnement:" + ABX.Fmt.slug(label);
+        }
         /* Le point de D130 : une diffusion n'entre pas dans la file des non
            traités — une notification, si. Une facture est une machine qui
            attend un paiement ; un booléen « automatique » les confondait. */
@@ -138,6 +154,22 @@
            P.pick(Fx.SUJETS).replace("{n}", "" + P.int(1000, 9999));
   }
 
+  /* D133 — l'arborescence des abonnements n'est pas saisie, elle est DÉDUITE du
+     corpus : un dossier par liste rencontrée. C'est D77 pris au mot, et le seul
+     axe du POC dont les dossiers ne viennent ni d'une saisie ni d'un connecteur.
+     Le message n'est pas déplacé : il reste chez son correspondant et apparaît
+     ici en plus — deux vues, un seul message. */
+  function deriveAbonnements() {
+    const par = {};
+    for (const m of tous) {
+      if (m.nature !== "liste" || !m.listeId) continue;
+      const v = par[m.listeId] = par[m.listeId] ||
+        { id: m.listeId, label: m.listeLbl, axe: "abonnement", last: 0, listId: m.listId };
+      if (m.date > v.last) v.last = m.date;
+    }
+    Fx.valeurs.abonnement = Object.values(par).sort((x, y) => y.last - x.last);
+  }
+
   /* Les vues qui ne sont pas des dossiers : elles lisent motif_sortie (D30/D51). */
   const VUES = {
     trash:    m => m.dossier === "trash",
@@ -165,6 +197,7 @@
       }));
       Fx.AXES.forEach(a => Fx.valeurs[a.id].sort((x, y) => y.last - x.last));
       tous = Object.values(parId);
+      deriveAbonnements();
       return { n: tous.length, ms: Date.now() - t0 };
     },
 
@@ -174,6 +207,7 @@
         (dossiers[m.fid] = dossiers[m.fid] || []).unshift(m); });
       Object.entries(St.ratt).forEach(([id, r]) => { const m = parId[id]; if (m) Object.assign(m, r); });
       tous = Object.values(parId).filter(m => !m.suppr);
+      deriveAbonnements();
     },
 
     ajoute(m) { parId[m.id] = m; tous.push(m);
@@ -194,6 +228,13 @@
         bump(k, m);
         const ax = k.split(":")[0];
         if (Fx.estAxe(ax)) bump("axe:" + ax, m);
+        /* Le même message compte DEUX fois : dans l'axe de son correspondant et
+           dans son abonnement. Ce n'est pas un doublon, c'est le multi-classement
+           (D17/D77) — et c'est la raison pour laquelle les compteurs se calculent
+           en une passe plutôt qu'en une requête par branche (D78). */
+        if (m.nature === "liste" && m.listeId) {
+          bump(m.listeId, m); bump("axe:abonnement", m);
+        }
       }
       return compte;
     },
@@ -208,6 +249,10 @@
     vue(folder) {
       if (VUES[folder.id]) return tous.filter(VUES[folder.id]);
       const hors = m => m.dossier !== "trash";
+      if (folder.kind === "abo")
+        return tous.filter(m => hors(m) && m.listeId === folder.id);
+      if (folder.kind === "axe" && folder.axe === "abonnement")
+        return tous.filter(m => hors(m) && m.nature === "liste");
       if (folder.kind === "axe")
         return tous.filter(m => hors(m) && (m.dossier || m.fid).startsWith(folder.axe + ":"));
       return tous.filter(m => hors(m) && (m.dossier || m.fid) === folder.id);

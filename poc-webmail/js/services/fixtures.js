@@ -41,12 +41,17 @@
       fixed:["Urgences","Debug","Monitoring","Sauvegardes","CI/CD","Sécurité"] },
     { id:"social",       label:"Réseaux sociaux", icon:"💬", n:5,
       fixed:["LinkedIn","Facebook","Instagram","X","YouTube"] },
+    /* Un axe DÉRIVÉ (D133) : ses dossiers ne sont pas des tiers, ils sont
+       CALCULÉS depuis le corpus — un par liste de diffusion rencontrée. Rien
+       n'est fabriqué pour lui : les messages qu'il montre vivent déjà dans
+       l'axe de leur correspondant, et ils n'ont pas bougé (D77). */
+    { id:"abonnement",   label:"Abonnements",     icon:"📰", n:0, derive:true },
   ];
 
   const valeurs = {};
   AXES.forEach(a => {
     valeurs[a.id] = [];
-    const n = a.fixed ? a.fixed.length : a.n;
+    const n = a.derive ? 0 : a.fixed ? a.fixed.length : a.n;
     for (let i = 0; i < n; i++) {
       const label = a.fixed ? a.fixed[i]
                   : a.id === "collaborateur" ? pers()
