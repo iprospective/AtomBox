@@ -125,6 +125,9 @@
       ["Absence et réponse auto, renvoi sur collègue", 1, "décidé", "D113, D74"],
       ["Pièce jointe par lien de téléchargement", 1, "décidé", "D111"],
       ["Émission via le relais du client", 1, "décidé", "D114"],
+      ["Retour d'enveloppe unique (VERP)", 1, "décidé", "D119"],
+      ["Réécriture d'enveloppe (SRS) sur les renvois", 1, "décidé", "D120"],
+      ["Journal du MTA : sort connu en secondes", 1, "décidé", "D119"],
       ["Boîte de collecte DMARC + dépouillement", 1, "décidé", "D115"],
     ]],
     ["Sécurité et conformité", [
@@ -135,7 +138,7 @@
       ["Rétention par type de contenu et par boîte", 1, "décidé", "D104"],
       ["Gel sur litige — prime sur toute purge", 1, "décidé", "D104"],
       ["Suppression = détachement, déchetterie", 1, "décidé", "D118"],
-      ["Ce que l'admin voit de la déchetterie", 1, "à trancher", "Q45"],
+      ["Déchetterie : métadonnées, restauration à l'origine", 1, "décidé", "D121"],
       ["Verrouillage : jamais le poste de travail", 1, "décidé", "D117"],
       ["Analyse des traceurs d'images (option)", 5, "à venir", "D105"],
     ]],
