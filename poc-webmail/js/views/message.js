@@ -14,7 +14,7 @@
         <div class="backbar"><button data-vue="liste">‹ ${F.esc(ui.folder.label)}</button></div>
         <div class="dhead">
           <div class="dsubj">${F.esc(m.subject)}</div>
-          <div class="dmeta">${F.esc(m.from)} &lt;${F.esc(m.mail)}&gt; ·
+          <div class="dmeta">${R.render("expediteur", { m, long: true })} ·
             ${new Date(m.date).toLocaleString("fr-FR")} · reçu sur <b>${F.esc(m.boite)}</b>
             ${m.pj ? " · 📎 " + m.pj : ""}
             ${m.motif ? " · " + R.render("statut.chip", { m }) : ""}
@@ -40,6 +40,7 @@
           </div>
           ${ABX.Views.Message.menuHtml(m)}
         </div>
+        ${ABX.Views.Message.spoofHtml(m)}
         ${ABX.Views.Message.lienHtml(m)}
         ${R.render("message.tags", { m })}
         ${R.render("erp.panel", { m })}
@@ -82,6 +83,26 @@
         ${m.pj ? `<button data-m="fichiers">${cap("fichiers").ic} Enregistrer les pièces jointes
           <span class="mprov">${F.esc(cap("fichiers").label)}</span></button>` : ""}
       </div>`;
+    },
+
+    /* D126/D128 — le bandeau ne crie que sur un signal FORT (une règle ★ de B),
+       jamais sur « expéditeur inconnu » seul : la moitié du courrier d'une PME
+       vient d'un inconnu, et une alerte qui se déclenche une fois sur deux n'est
+       plus lue au bout d'une semaine. Le silence est une fonctionnalité. */
+    spoofHtml(m) {
+      if (!m.spoof) return "";
+      const sosie = /iprospect/.test(m.mail.split("@")[1] || "");
+      return `<div class="alerte-bloc">⚠ <b>Ce message se présente sous un nom connu,
+        depuis une adresse qui ne l'est pas.</b>
+        <div class="hint">« ${F.esc(m.from)} » est enregistré au carnet, mais pas à
+          l'adresse <b>${F.esc(m.mail)}</b>. Règle <b>B1</b> du catalogue (D128) —
+          le meilleur signal du lot, et celui qu'aucun anti-spam générique ne peut
+          produire : il demande de connaître <i>vos</i> correspondants.
+          ${sosie ? `<br>S'y ajoute la règle <b>A8</b> : le domaine est un
+            <b>sosie</b> d'un domaine que vous connaissez.` : ""}
+          <br>AtomBox <b>alerte</b>, il ne rejette pas — l'analyse d'usurpation est
+          probabiliste, et un rejet silencieux coûte plus cher qu'une bannière de
+          trop (Q49).</div></div>`;
     },
 
     /* Un transfert par référence n'est pas une copie : c'est un pointeur, et un

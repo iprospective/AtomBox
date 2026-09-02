@@ -16,9 +16,27 @@
   R.define("statut.chip", ({ m }) => m.motif
     ? `<span class="tag">${m.motif === "archive" ? "archivé" : "traité"}</span>` : "");
 
+  /* ---- l'expediteur, normalise (D126) ------------------------------------
+     Le nom affiche n'est PAS une identite : il est choisi par l'emetteur et rien
+     ne l'authentifie. On montre donc le nom du carnet quand l'adresse est connue,
+     et L'ADRESSE quand elle ne l'est pas — le nom declare passe en second, en
+     gris, entre guillemets. L'usurpation par nom (D128, regle B1) porte en plus
+     son propre signal. */
+  R.define("expediteur", ({ m, long }) => {
+    if (m.sens === "out") return `<span class="from">${F.esc(m.from)}</span>`;
+    if (m.connu)
+      return `<span class="from" title="${F.esc(m.mail)}">${F.esc(m.from)}</span>` +
+             (long ? ` <span class="adr">&lt;${F.esc(m.mail)}&gt;</span>` : "");
+    /* inconnu : l'adresse d'abord, le nom declare relegue */
+    return `<span class="from adr-av">${F.esc(m.mail)}</span>` +
+           `<span class="decl">« ${F.esc(m.from)} »</span>` +
+           (m.spoof ? `<span class="alerte" title="Le nom correspond a un contact connu,`
+                    + ` mais l'adresse n'est pas la sienne (D128, B1)">⚠ nom usurpe</span>` : "");
+  });
+
   /* ---- carte de message (liste) ----------------------------------------- */
   R.define("message.card.header", ({ m }) =>
-    `<div class="r1"><span class="from">${F.esc(m.from)}</span>
+    `<div class="r1">${R.render("expediteur", { m })}
        <span class="dt">${F.dt(m.date)}</span></div>`);
 
   R.define("message.card.body", ({ m }) =>
