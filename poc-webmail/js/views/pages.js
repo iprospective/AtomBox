@@ -123,8 +123,8 @@
       ["Rapports DMARC agrégés, délivrabilité", 1, "décidé", "D100"],
       ["Absence et réponse auto, renvoi sur collègue", 1, "décidé", "D113, D74"],
       ["Pièce jointe par lien de téléchargement", 1, "décidé", "D111"],
-      ["File de sortie SMTP propre à AtomBox", 1, "à trancher", "Q40"],
-      ["Rapports DMARC forensiques", 1, "à trancher", "Q41"],
+      ["Émission via le relais du client", 1, "décidé", "D114"],
+      ["Boîte de collecte DMARC + dépouillement", 1, "décidé", "D115"],
     ]],
     ["Sécurité et conformité", [
       ["HTML assaini à l'affichage, pas à l'ingestion", 1, "décidé", "D105, D25"],

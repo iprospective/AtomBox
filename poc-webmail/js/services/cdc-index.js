@@ -3,7 +3,7 @@
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
    ce que dit le registre, et rien d'autre.
 
-   Généré le 2026-09-02 — 115 décisions, 44 questions, 17 chapitres. */
+   Généré le 2026-09-02 — 117 décisions, 44 questions, 17 chapitres. */
 (function (ABX) {
   "use strict";
   ABX.CDC = {
@@ -669,6 +669,16 @@
       "etat": "valide"
     },
     {
+      "id": "D114",
+      "objet": "L'émission passe par le relais du client en V1 ; le sort des envois vient des DSN",
+      "etat": "valide"
+    },
+    {
+      "id": "D115",
+      "objet": "Les rapports DMARC arrivent dans une boîte de collecte ingérée comme les autres, dépouillée par une tâche interne",
+      "etat": "valide"
+    },
+    {
       "id": "D25",
       "objet": "Extraction réversible (exigence)",
       "etat": "autre"
@@ -911,15 +921,15 @@
     },
     {
       "id": "Q40",
-      "objet": "Qui émet réellement : le relais du client, ou une file de sortie AtomBox ?",
-      "bloque": "D99, surface d'API (Q08)",
-      "urgence": "haute"
+      "objet": "Qui émet réellement : relais du client ou file de sortie ?",
+      "bloque": "—",
+      "urgence": "tranchee"
     },
     {
       "id": "Q41",
-      "objet": "D'où viennent les rapports DMARC, et à qui appartiennent-ils ?",
-      "bloque": "D100",
-      "urgence": "moyenne"
+      "objet": "D'où viennent les rapports DMARC ?",
+      "bloque": "—",
+      "urgence": "tranchee"
     },
     {
       "id": "Q42",

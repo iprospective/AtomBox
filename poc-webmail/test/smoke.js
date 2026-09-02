@@ -318,7 +318,7 @@ vrai(!!A.CDC, "index du CDC chargé");
 vrai(A.CDC.decisions.length >= 90, A.CDC.decisions.length + " décisions indexées");
 vrai(A.CDC.questions.length >= 30, A.CDC.questions.length + " questions indexées");
 eq(A.CDC.chapitres.length, 17, "17 chapitres — 13 = émission et délivrabilité");
-vrai(hc.includes("D113"), "la dernière décision est affichée");
+vrai(hc.includes("D115"), "la dernière décision est affichée");
 vrai(hc.includes("Q44"), "et les questions ouvertes aussi");
 vrai(hc.includes(A.CDC.genere), "la page date son index");
 A.Controllers.Pages.ouvrir("features");
