@@ -65,6 +65,26 @@ vrai(hRefus.includes("550") && /il y a \d+ jours/.test(hRefus),
 vrai(A.Corpus.tous.every(m => m.repond !== "non" || m.nature !== "humain"),
      "on ne refuse jamais la réponse à un message écrit par une personne");
 
+console.log("— abonnements : un dossier par liste (D133) ——————————");
+const abos = A.Fixtures.valeurs.abonnement;
+vrai(abos.length >= 10, abos.length + " dossiers d'abonnement déduits du corpus");
+vrai(abos.every(v => v.label && v.id.startsWith("abonnement:")),
+     "chacun porte le nom de sa liste");
+const abo = abos[0];
+const dansAbo = A.Corpus.vue({ id: abo.id, kind: "abo" });
+vrai(dansAbo.length > 0, "le dossier « " + abo.label + " » contient " + dansAbo.length + " messages");
+vrai(dansAbo.every(m => m.nature === "liste"), "et rien d'autre que des diffusions");
+const unAbo = dansAbo[0];
+vrai(A.Corpus.vue({ id: unAbo.fid, kind: "virtuel" }).includes(unAbo),
+     "le message est AUSSI dans le dossier de son correspondant — il n'a pas bougé (D77)");
+vrai(A.Corpus.cnt(abo.id).t === dansAbo.length,
+     "les compteurs de la branche dérivée sont calculés dans la même passe (D78)");
+vrai(A.Corpus.cnt("axe:abonnement").t ===
+     A.Corpus.tous.filter(m => m.nature === "liste").length,
+     "« Tous — Abonnements » compte toutes les diffusions");
+vrai(A.Views.Nav.render(A.Store.ui).includes("Abonnements"),
+     "l'axe apparaît dans l'arborescence");
+
 console.log("— surcharge de vues partielles ——————————————————");
 const nSurcharges = A.Registry.liste().filter(n => n.includes("@")).length;
 vrai(nSurcharges >= 5, nSurcharges + " partielles spécialisées");

@@ -3,7 +3,7 @@
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
    ce que dit le registre, et rien d'autre.
 
-   Généré le 2026-09-03 — 134 décisions, 51 questions, 18 chapitres. */
+   Généré le 2026-09-03 — 135 décisions, 52 questions, 18 chapitres. */
 (function (ABX) {
   "use strict";
   ABX.CDC = {
@@ -769,6 +769,11 @@
       "etat": "propose"
     },
     {
+      "id": "D133",
+      "objet": "Un dossier par liste, dérivé du List-Id — le premier axe qu'aucune application ne déclare",
+      "etat": "valide"
+    },
+    {
       "id": "D25",
       "objet": "Extraction réversible (exigence)",
       "etat": "autre"
@@ -1071,8 +1076,14 @@
     },
     {
       "id": "Q50",
-      "objet": "Une newsletter reste-t-elle dans la boîte, ou part-elle dans un dossier engendré « Abonnements » ?",
-      "bloque": "D130, D77, D13",
+      "objet": "Une newsletter part-elle dans un dossier engendré ?",
+      "bloque": "—",
+      "urgence": "tranchee"
+    },
+    {
+      "id": "Q52",
+      "objet": "Que devient une branche engendrée dont la source se tarit (liste éteinte, désabonnement) ?",
+      "bloque": "D133, D77",
       "urgence": "moyenne"
     },
     {
