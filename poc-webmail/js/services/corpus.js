@@ -64,6 +64,52 @@
         m.mail = ABX.Fmt.slug(qui).replace(/-/g, ".") + "@" +
                  P.with("spoofdom/" + m.id, () => P.pick(Fx.DOMAINES_LIBRES));
       }
+      /* D130 — la NATURE du message. Une PME reçoit plus de machines que de
+         personnes ; les ranger toutes pareil, c'est noyer les trois qui comptent.
+         La ligne de partage n'est pas humain/machine, c'est « quelqu'un attend-il
+         quelque chose de moi ? » — d'où quatre valeurs, pas un booléen.
+         Tirage hors flux (P.with) : la nature s'ajoute sans décaler le corpus. */
+      m.nature = "humain";
+      if (!sortant && !m.spoof) {
+        const t = P.with("nature/" + m.id, () => P.next());
+        if      (axe === "notification")     m.nature = "notification";
+        else if (axe === "social")           m.nature = "liste";
+        /* 5 % / 4 % : CALAGE DE DÉMONSTRATION. Une vraie PME reçoit bien plus de
+           courrier de machines que ça — souvent la moitié. Le taux est baissé
+           pour que la maquette montre le mécanisme sans noyer le reste ; il ne
+           faut pas le lire comme une mesure. */
+        else if (Fx.estAxe(axe) && t < .05)  m.nature = "notification";
+        else if (Fx.estAxe(axe) && t < .09)  m.nature = "liste";
+      }
+      if (m.nature !== "humain") {
+        /* Une boîte fonctionnelle n'est pas une personne : elle ne peut pas être
+           un correspondant du carnet — le modèle le disait déjà de no-reply@. */
+        const d = m.mail.split("@")[1];
+        m.connu  = false;
+        m.from   = m.nature === "liste" ? label : label + " — notifications";
+        m.mail   = (m.nature === "liste" ? "news@" : "noreply@") + d;
+        m.listId = m.nature === "liste" ? "<" + ABX.Fmt.slug(label) + "." + d + ">" : null;
+        /* Le point de D130 : une diffusion n'entre pas dans la file des non
+           traités — une notification, si. Une facture est une machine qui
+           attend un paiement ; un booléen « automatique » les confondait. */
+        if (m.nature === "liste") m.statut = "nouveau";
+      }
+      /* D131 — trois niveaux. « avertir » se DÉDUIT de la nature ; « non » ne se
+         déduit de rien : il s'APPREND d'un retour de non-remise (D119). C'est la
+         seule preuve qu'une adresse ne lit pas ses réponses — le mot « noreply »
+         n'en est pas une, il existe des noreply@ relevés par un humain. */
+      m.repond = m.nature === "humain" ? "oui" : "avertir";
+      if (m.nature !== "humain" &&
+          P.with("dsn/" + m.id, () => P.next()) < .3) {
+        m.repond = "non";
+        m.dsn = { jours: P.with("dsnj/" + m.id, () => P.int(12, 240)),
+                  code: "550 5.1.1 mailbox unavailable" };
+      }
+      /* Ne jamais refuser sans dire à qui écrire : le carnet connaît souvent
+         quelqu'un du même domaine (D131). Montré, jamais présélectionné. */
+      if (m.repond !== "oui" && Fx.estAxe(axe) &&
+          axe !== "notification" && axe !== "social")
+        m.alt = { nom: label, mail: "contact@" + m.mail.split("@")[1] };
       At.attacher(m);
       /* La SOURCE du tag est l'application qui l'a poussé (D19/D20) : Dolibarr
          tient les tiers, Redmine tient les tickets. Deux axes, deux ACL, et

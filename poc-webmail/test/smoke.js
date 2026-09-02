@@ -38,6 +38,33 @@ vrai(A.Views.Message.spoofHtml(usurpe).includes("B1"),
 vrai(usurpe.mail.split("@")[1] !== connu.mail.split("@")[1],
      "l'adresse usurpatrice est sur un autre domaine que le carnet");
 
+console.log("— nature du message (D130) et refus de réponse (D131) ——");
+const diff = ent.find(m => m.nature === "liste");
+const noti = ent.find(m => m.nature === "notification");
+const refus = ent.find(m => m.repond === "non");
+vrai(!!diff && !!noti && !!refus, "le corpus porte les trois cas de nature");
+vrai(diff.mail.startsWith("news@") && noti.mail.startsWith("noreply@"),
+     "une machine écrit depuis une boîte fonctionnelle, pas depuis une personne");
+vrai(!diff.connu && !noti.connu,
+     "une boîte fonctionnelle n'est jamais un correspondant du carnet");
+const hDiff = A.Registry.render("expediteur", { m: diff });
+vrai(!hDiff.includes("adr-av"),
+     "une diffusion n'est PAS affichée comme un inconnu suspect");
+vrai(hDiff.includes("diffusion"), "sa nature est dite, en clair");
+vrai(A.Corpus.tous.every(m => m.nature !== "liste" || m.statut === "nouveau"),
+     "aucune diffusion n'entre dans la file de travail (D130)");
+vrai(A.Corpus.tous.some(m => m.nature === "notification" && m.statut !== "nouveau"),
+     "des notifications y entrent — une facture attend un paiement");
+vrai(!A.Views.Message.repondHtml(connu),
+     "aucun bandeau de réponse sur un message humain");
+vrai(A.Views.Message.repondHtml(diff).includes("désabonner"),
+     "sur une diffusion, l'action utile proposée est le désabonnement (D132)");
+const hRefus = A.Views.Message.repondHtml(refus);
+vrai(hRefus.includes("550") && /il y a \d+ jours/.test(hRefus),
+     "un refus s'appuie sur un rejet DATÉ, pas sur le mot « noreply » (D131)");
+vrai(A.Corpus.tous.every(m => m.repond !== "non" || m.nature !== "humain"),
+     "on ne refuse jamais la réponse à un message écrit par une personne");
+
 console.log("— surcharge de vues partielles ——————————————————");
 const nSurcharges = A.Registry.liste().filter(n => n.includes("@")).length;
 vrai(nSurcharges >= 5, nSurcharges + " partielles spécialisées");

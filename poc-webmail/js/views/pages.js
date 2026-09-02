@@ -65,6 +65,21 @@
         fréquence est <b>volontairement gonflée</b> pour qu'on en croise sans chercher :
         dans la réalité c'est rare, et c'est justement ce qui rend l'alerte crédible.</p></div>
 
+    <div class="box"><h4>Les machines, et ce qu'elles attendent de vous</h4>
+      <p>Une PME reçoit plus de messages de machines que de personnes. Chaque message porte
+        donc une <b>nature</b> (D130) : <i>diffusion</i> pour une newsletter,
+        <i>notification</i> pour une facture ou une alerte, <i>service</i> pour un avis de
+        non-remise. La ligne de partage n'est pas humain/machine — c'est
+        « <b>quelqu'un attend-il quelque chose de moi ?</b> ». Une diffusion ne remplit pas
+        la file des non traités ; une notification y entre, parce qu'une facture est une
+        machine qui attend un paiement.</p>
+      <p>À l'ouverture d'un tel message, le bouton <b>Répondre</b> cesse d'être l'action
+        principale, et une ligne dit pourquoi. Sur quelques messages, il est carrément
+        <b>refusé</b> — et là, l'écran ne devine pas : il vous montre le rejet
+        <code>550</code> reçu la dernière fois qu'on a écrit à cette adresse (D131). C'est
+        ce que le cycle de vie de l'émission permet, et qu'un filtre sur le mot
+        « noreply » ne saura jamais faire.</p></div>
+
     <div class="box"><h4>Ce que la maquette ne prouve pas</h4>
       <p>Rien sur la <b>performance</b> : tout est instantané sur des données inventées, et
         les requêtes affichées ne sont jamais exécutées. Une interface validée ici peut
@@ -92,6 +107,8 @@
       ["Recherche plein texte sur la zone active", 1, "décidé", "D34"],
       ["Recherche dans les pièces jointes (nom)", 1, "maquetté", "D96"],
       ["Moteur de filtres (remplace Sieve)", 1, "décidé", "D74"],
+      ["Nature du message : diffusion, notification, service", 1, "maquetté", "D130"],
+      ["Newsletters hors de la file, factures dedans", 1, "maquetté", "D130, D13"],
       ["Archivage par sortie de file", 1, "maquetté", "D14, D30"],
     ]],
     ["Travail au quotidien", [
@@ -144,11 +161,15 @@
       ["Réécriture d'enveloppe (SRS) sur les renvois", 1, "décidé", "D120"],
       ["Journal du MTA : sort connu en secondes", 1, "décidé", "D119"],
       ["Boîte de collecte DMARC + dépouillement", 1, "décidé", "D115"],
+      ["Adresse non répondable apprise d'un DSN 5xx", 2, "maquetté", "D131, D119"],
+      ["Désabonnement en un clic (List-Unsubscribe)", 2, "décidé", "D132, Q51"],
     ]],
     ["Sécurité et conformité", [
       ["HTML assaini à l'affichage, pas à l'ingestion", 1, "décidé", "D105, D25"],
       ["Images externes bloquées, proxy serveur", 1, "décidé", "D105"],
       ["Bannière « expéditeur externe »", 1, "décidé", "D105"],
+      ["Avertir avant de répondre à un « noreply@ »", 1, "maquetté", "D131"],
+      ["Réorienter vers un contact connu du domaine", 1, "décidé", "D131"],
       ["Aucun accusé de lecture émis ni demandé", 1, "décidé", "D105"],
       ["Rétention par type de contenu et par boîte", 1, "décidé", "D104"],
       ["Gel sur litige — prime sur toute purge", 1, "décidé", "D104"],

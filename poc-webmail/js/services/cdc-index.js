@@ -3,7 +3,7 @@
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
    ce que dit le registre, et rien d'autre.
 
-   Généré le 2026-09-02 — 131 décisions, 49 questions, 17 chapitres. */
+   Généré le 2026-09-02 — 134 décisions, 51 questions, 17 chapitres. */
 (function (ABX) {
   "use strict";
   ABX.CDC = {
@@ -749,6 +749,21 @@
       "etat": "propose"
     },
     {
+      "id": "D130",
+      "objet": "La nature du message (humain / liste / notification / service) remplace le booléen origine_automatique",
+      "etat": "valide"
+    },
+    {
+      "id": "D131",
+      "objet": "Répondre à un noreply@ : avertir, réorienter, refuser seulement sur preuve",
+      "etat": "valide"
+    },
+    {
+      "id": "D132",
+      "objet": "Désabonnement en un clic (List-Unsubscribe), jamais automatique",
+      "etat": "propose"
+    },
+    {
       "id": "D25",
       "objet": "Extraction réversible (exigence)",
       "etat": "autre"
@@ -1047,6 +1062,18 @@
       "id": "Q49",
       "objet": "Que fait AtomBox d'un message suspect : alerter, mettre en quarantaine, refuser ?",
       "bloque": "D128, D71",
+      "urgence": "haute"
+    },
+    {
+      "id": "Q50",
+      "objet": "Une newsletter reste-t-elle dans la boîte, ou part-elle dans un dossier engendré « Abonnements » ?",
+      "bloque": "D130, D77, D13",
+      "urgence": "moyenne"
+    },
+    {
+      "id": "Q51",
+      "objet": "Le POST de désabonnement sortant est-il acceptable, et sous quelles restrictions ?",
+      "bloque": "D132, sécurité serveur",
       "urgence": "haute"
     }
   ]

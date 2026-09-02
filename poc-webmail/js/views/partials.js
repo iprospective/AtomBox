@@ -27,11 +27,30 @@
     if (m.connu)
       return `<span class="from" title="${F.esc(m.mail)}">${F.esc(m.from)}</span>` +
              (long ? ` <span class="adr">&lt;${F.esc(m.mail)}&gt;</span>` : "");
+    /* D130 — une machine n'est pas un inconnu suspect. Mettre l'adresse d'une
+       newsletter en evidence, comme on le fait d'un inconnu, ferait crier l'ecran
+       sur du courrier parfaitement normal : on affiche le service, et sa NATURE. */
+    if (m.nature && m.nature !== "humain")
+      return `<span class="from srv">${F.esc(m.from)}</span>` +
+             R.render("nature.chip", { m }) +
+             (long ? ` <span class="adr">&lt;${F.esc(m.mail)}&gt;</span>` : "");
     /* inconnu : l'adresse d'abord, le nom declare relegue */
     return `<span class="from adr-av">${F.esc(m.mail)}</span>` +
            `<span class="decl">« ${F.esc(m.from)} »</span>` +
            (m.spoof ? `<span class="alerte" title="Le nom correspond a un contact connu,`
                     + ` mais l'adresse n'est pas la sienne (D128, B1)">⚠ nom usurpe</span>` : "");
+  });
+
+  /* La nature ne se lit pas comme une alerte : c'est un fait de classement.
+     Elle dit ce que le message attend de nous — rien, ou une action (D130). */
+  const NATURES = {
+    liste:        ["diffusion",    "nat-l", "Diffusion (List-Id) — n'entre pas dans la file des non traités"],
+    notification: ["notification", "nat-n", "Notification automatique — entre dans la file : une facture attend un paiement"],
+    service:      ["service",      "nat-s", "Message de service (DSN, absence) — se rattache à un envoi"],
+  };
+  R.define("nature.chip", ({ m }) => {
+    const n = NATURES[m.nature];
+    return n ? `<span class="nat ${n[1]}" title="${F.esc(n[2])} — D130">${n[0]}</span>` : "";
   });
 
   /* ---- carte de message (liste) ----------------------------------------- */
