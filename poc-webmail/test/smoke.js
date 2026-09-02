@@ -318,8 +318,12 @@ vrai(!!A.CDC, "index du CDC chargé");
 vrai(A.CDC.decisions.length >= 90, A.CDC.decisions.length + " décisions indexées");
 vrai(A.CDC.questions.length >= 30, A.CDC.questions.length + " questions indexées");
 eq(A.CDC.chapitres.length, 17, "17 chapitres — 13 = émission et délivrabilité");
-vrai(hc.includes("D118"), "la dernière décision est affichée");
-vrai(hc.includes("Q45"), "et les questions ouvertes aussi");
+const derniere = A.CDC.decisions[A.CDC.decisions.length - 1].id;
+vrai(hc.includes(derniere), "la dernière décision (" + derniere + ") est affichée");
+const ouverte = A.CDC.questions.find(q => q.urgence !== "tranchee");
+vrai(!!ouverte && hc.includes(ouverte.id),
+     "une question encore ouverte (" + (ouverte && ouverte.id) + ") est affichée");
+vrai(!hc.includes(">Q44<"), "une question tranchée ne figure plus dans les ouvertes");
 vrai(hc.includes(A.CDC.genere), "la page date son index");
 A.Controllers.Pages.ouvrir("features");
 const hf = p.doc.getElementById("detail").innerHTML;

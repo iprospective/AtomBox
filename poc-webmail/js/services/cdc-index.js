@@ -3,7 +3,7 @@
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
    ce que dit le registre, et rien d'autre.
 
-   Généré le 2026-09-02 — 120 décisions, 45 questions, 17 chapitres. */
+   Généré le 2026-09-02 — 123 décisions, 45 questions, 17 chapitres. */
 (function (ABX) {
   "use strict";
   ABX.CDC = {
@@ -694,6 +694,21 @@
       "etat": "valide"
     },
     {
+      "id": "D119",
+      "objet": "Savoir sans émettre : retour d'enveloppe unique (VERP), journal du MTA, NOTIFY",
+      "etat": "propose"
+    },
+    {
+      "id": "D120",
+      "objet": "Tout renvoi réécrit l'enveloppe (SRS), sans quoi il casse SPF",
+      "etat": "propose"
+    },
+    {
+      "id": "D121",
+      "objet": "Déchetterie : métadonnées seules, restauration vers l'origine, 30 jours réglables",
+      "etat": "valide"
+    },
+    {
       "id": "D25",
       "objet": "Extraction réversible (exigence)",
       "etat": "autre"
@@ -966,9 +981,9 @@
     },
     {
       "id": "Q45",
-      "objet": "Que voit un administrateur dans la déchetterie : le contenu, ou les métadonnées ?",
-      "bloque": "D118, D54",
-      "urgence": "haute"
+      "objet": "Ce qu'un administrateur voit de la déchetterie",
+      "bloque": "—",
+      "urgence": "tranchee"
     }
   ]
 };
