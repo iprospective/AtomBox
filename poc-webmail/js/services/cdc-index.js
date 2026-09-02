@@ -3,7 +3,7 @@
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
    ce que dit le registre, et rien d'autre.
 
-   Généré le 2026-09-03 — 135 décisions, 52 questions, 18 chapitres. */
+   Généré le 2026-09-03 — 135 décisions, 53 questions, 18 chapitres. */
 (function (ABX) {
   "use strict";
   ABX.CDC = {
@@ -974,9 +974,9 @@
     },
     {
       "id": "Q33",
-      "objet": "L'hypothèse de 100 ko par message tient-elle sur un corpus réel ?",
-      "bloque": "dimensionnement (ch. 08)",
-      "urgence": "moyenne"
+      "objet": "L'hypothèse de 100 ko par message",
+      "bloque": "—",
+      "urgence": "autre"
     },
     {
       "id": "Q34",
@@ -1085,6 +1085,12 @@
       "objet": "Que devient une branche engendrée dont la source se tarit (liste éteinte, désabonnement) ?",
       "bloque": "D133, D77",
       "urgence": "moyenne"
+    },
+    {
+      "id": "Q53",
+      "objet": "Où va le courrier personnel dans un archiveur d'entreprise ?",
+      "bloque": "portée, RGPD, D104",
+      "urgence": "haute"
     },
     {
       "id": "Q51",

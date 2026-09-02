@@ -35,7 +35,7 @@
           (en italique), remplacé au clic suivant</td></tr>
         <tr><td><b>Double-clic</b></td><td>épingle l'onglet — il reste ouvert</td></tr>
         <tr><td>Clic du <b>milieu</b>, ou la croix</td><td>ferme l'onglet</td></tr>
-        <tr><td>Champ <b>Filtrer les dossiers</b></td><td>cherche dans les 370 dossiers ;
+        <tr><td>Champ <b>Filtrer les dossiers</b></td><td>cherche dans les 399 dossiers ;
           la croix ou <kbd>Échap</kbd> l'efface</td></tr>
         <tr><td>Survol d'un message</td><td>fait apparaître ses actions rapides</td></tr>
       </table></div>
@@ -107,6 +107,7 @@
       ["Import d'historique (IMAP, mbox, PST)", 1, "décidé", "D107"],
     ]],
     ["Classement et recherche", [
+      ["Axes calés sur une arborescence IMAP réelle", 1, "maquetté", "D16, ch. 14"],
       ["Tags par axes, paramétrables, avec ACL", 1, "maquetté", "D02, D16, D18"],
       ["Dossiers virtuels = filtres enregistrés", 1, "maquetté", "D75, D77"],
       ["Dossiers utilisateur classiques", 1, "maquetté", "D51"],

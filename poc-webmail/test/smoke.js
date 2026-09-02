@@ -89,7 +89,9 @@ console.log("— surcharge de vues partielles ———————————�
 const nSurcharges = A.Registry.liste().filter(n => n.includes("@")).length;
 vrai(nSurcharges >= 5, nSurcharges + " partielles spécialisées");
 const notif = A.Corpus.tous.find(m => m.fid.startsWith("notification:"));
-const client = A.Corpus.tous.find(m => m.fid.startsWith("client:"));
+/* Un message SORTANT prend toujours la variante « sent » : pour tester l'absence
+   de surcharge d'axe, il faut un entrant — sinon le test dépend de l'ordre du corpus. */
+const client = A.Corpus.tous.find(m => m.fid.startsWith("client:") && m.sens !== "out");
 eq(A.Views.List.variante(notif), "notification", "variante déduite de l'axe");
 eq(A.Views.List.variante(client), null, "pas de variante pour un axe sans surcharge");
 const cardNotif = A.Registry.render("message.card", { m: notif, variant: "notification" });
