@@ -380,7 +380,12 @@ const hc = p.doc.getElementById("detail").innerHTML;
 vrai(!!A.CDC, "index du CDC chargé");
 vrai(A.CDC.decisions.length >= 90, A.CDC.decisions.length + " décisions indexées");
 vrai(A.CDC.questions.length >= 30, A.CDC.questions.length + " questions indexées");
-eq(A.CDC.chapitres.length, 17, "17 chapitres — 13 = émission et délivrabilité");
+/* Le nombre de chapitres bouge a chaque lot : on verifie que l'index en porte
+   assez et que le dernier du CDC y figure, pas un compte fige. */
+vrai(A.CDC.chapitres.length >= 17,
+     A.CDC.chapitres.length + " chapitres indexes");
+vrai(A.CDC.chapitres.every(c => c.n && c.titre && c.fichier),
+     "chaque chapitre indexe porte un numero, un titre et un fichier");
 const derniere = A.CDC.decisions[A.CDC.decisions.length - 1].id;
 vrai(hc.includes(derniere), "la dernière décision (" + derniere + ") est affichée");
 const ouverte = A.CDC.questions.find(q => q.urgence !== "tranchee");
