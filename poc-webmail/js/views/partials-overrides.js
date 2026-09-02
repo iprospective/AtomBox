@@ -36,6 +36,21 @@
       ${R.render("statut.chip", { m })}</div>`;
   });
 
+  /* --- Développement : le TICKET prime, et il vient d'une autre application
+         que l'ERP (Redmine, D19/D20). La carte montre le numéro plutôt que le
+         libellé complet : sous « RM2845 · moteur de filtres », répéter le titre
+         sur chaque ligne n'apprend rien. ------------------------------------ */
+  R.defineFor("message.card.meta", "developpement", ({ m }) => {
+    const t = m.tags.find(x => x.axe === "developpement");
+    const num = t ? (t.val.match(/RM\d+/) || [t.val])[0] : null;
+    return `<div class="meta">
+      ${num ? `<span class="tag ax" title="${F.esc(t.val)}">${F.esc(num)}</span>` : ""}
+      ${m.pj ? `<span class="pj">📎 ${m.pj} · ${F.poids(m.pj_ko)}</span>` : ""}
+      ${R.render("statut.chip", { m })}
+      ${m.tags.filter(x => x.axe !== "developpement")
+              .map(tag => R.render("tag.chip", { tag })).join("")}</div>`;
+  });
+
   /* --- Réseaux sociaux : ni pièces jointes ni tags, une source ------------ */
   R.defineFor("message.card.meta", "social", ({ m }) =>
     `<div class="meta"><span class="tag">${F.esc((m.tags[0] && m.tags[0].val) || "réseau")}</span>

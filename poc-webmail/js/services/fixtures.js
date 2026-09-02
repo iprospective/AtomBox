@@ -17,6 +17,14 @@
   const nom  = () => P.pick(MOTS) + " " + P.pick(SUFF);
   const pers = () => P.pick(PRENOMS) + " " + P.pick(NOMS);
 
+  /* De quoi parlent les tickets de développement — sans quoi l'arborescence dirait
+     « Devis 4271 » sous un ticket, ce qui ne trompe personne. */
+  const TITRES_RM = ["moteur de filtres","import mbox","refonte du parseur MIME",
+    "quarantaine spam","file d'envoi","corrélation des DSN","collecte DMARC",
+    "déduplication des PJ","recherche plein texte","arborescence engendrée",
+    "cascade de paramétrage","déchetterie","groupes internes","anti-usurpation",
+    "SDK PHP","composant embarquable","export PDF","position de lecture"];
+
   /* Les six familles de D76 : un AXE, ses VALEURS. */
   const AXES = [
     { id:"fournisseur",  label:"Fournisseurs",    icon:"📦", n:200 },
@@ -24,6 +32,11 @@
     { id:"partenaire",   label:"Partenaires",     icon:"🤝", n:14 },
     { id:"collaborateur",label:"Collaborateurs",  icon:"👥", n:11 },
     { id:"sav",          label:"SAV",             icon:"🛟", n:23,  ticket:true },
+    /* Un axe poussé par une AUTRE application que l'ERP (D19/D20) : Redmine tient
+       les tickets, Dolibarr les clients. Deux applications, deux axes, deux ACL —
+       et la même arborescence engendrée (D77). */
+    { id:"developpement",label:"Développement",   icon:"🧩", n:34,  rm:true,
+      app:"redmine-ipro" },
     { id:"notification", label:"Notifications",   icon:"🔔", n:6,
       fixed:["Urgences","Debug","Monitoring","Sauvegardes","CI/CD","Sécurité"] },
     { id:"social",       label:"Réseaux sociaux", icon:"💬", n:5,
@@ -38,6 +51,7 @@
       const label = a.fixed ? a.fixed[i]
                   : a.id === "collaborateur" ? pers()
                   : a.ticket ? "Ticket #" + (4200 + i * 7)
+                  : a.rm ? "RM" + (2830 + i * 3) + " · " + P.pick(TITRES_RM)
                   : nom();
       valeurs[a.id].push({
         id: a.id + ":" + F.slug(label), label, axe: a.id,
@@ -83,6 +97,9 @@
     { id:"u:juridique", label:"Juridique",        icon:"📁", poids:7 },
   ];
 
+  const SUJETS_RM = ["Re: {t}","{t} — relecture demandée","[RM{n}] nouvelle note",
+    "{t} : question de conception","{t} — MR prête à relire","[RM{n}] passage en recette",
+    "{t} : régression constatée","{t} — chiffrage à valider","[RM{n}] livré, à tester"];
   const SUJETS = ["Devis {n}","Facture {n}","Relance facture {n}","Commande {n} expédiée",
     "Re: Commande {n}","Bon de livraison {n}","Contrat de maintenance","Demande d'information",
     "Réclamation client","Planning d'intervention","Avoir {n}","Confirmation de rendez-vous"];
@@ -125,7 +142,8 @@
       axes:["client","fournisseur"], droits:"lire, écrire", portee:"3 boîtes",
       jeton:"abx_tk_7f3c…", vu:"il y a 4 min" },
     { code:"redmine-ipro",  label:"Redmine — support", type:"redmine",
-      axes:["sav","projet"], droits:"lire, écrire", portee:"sav@iprospective.eu",
+      axes:["sav","projet","developpement"], droits:"lire, écrire",
+      portee:"sav@iprospective.eu, dev@iprospective.eu",
       jeton:"abx_tk_91ba…", vu:"il y a 2 h" },
     { code:"nextcloud-mmi", label:"Nextcloud — partage", type:"nextcloud",
       axes:["partenaire"], droits:"lire", portee:"tout le domaine",
@@ -133,6 +151,6 @@
   ];
 
   ABX.Fixtures = { AXES, valeurs, SPECIAUX, UTIL, SUJETS, CORPS, MOI, interne, nom, pers,
-                   STATUTS, statut, DOMAINES, DOMAINES_LIBRES, BOITES, APPLICATIONS,
+                   STATUTS, statut, DOMAINES, DOMAINES_LIBRES, BOITES, APPLICATIONS, SUJETS_RM,
                    estAxe: id => AXES.some(a => a.id === id) };
 })(window.ABX = window.ABX || {});

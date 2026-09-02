@@ -35,7 +35,7 @@
           (en italique), remplacé au clic suivant</td></tr>
         <tr><td><b>Double-clic</b></td><td>épingle l'onglet — il reste ouvert</td></tr>
         <tr><td>Clic du <b>milieu</b>, ou la croix</td><td>ferme l'onglet</td></tr>
-        <tr><td>Champ <b>Filtrer les dossiers</b></td><td>cherche dans les 273 dossiers ;
+        <tr><td>Champ <b>Filtrer les dossiers</b></td><td>cherche dans les 345 dossiers ;
           la croix ou <kbd>Échap</kbd> l'efface</td></tr>
         <tr><td>Survol d'un message</td><td>fait apparaître ses actions rapides</td></tr>
       </table></div>

@@ -304,6 +304,20 @@ vrai(vc.includes("WhatsApp") && vc.includes("Téléphonie"), "le volet canaux an
 vrai(vc.includes("message.canal"), "et les précautions de schéma à prendre dès la V1");
 vrai(A.QueryLog.entrees[0].warn, "la trace insiste : ajouter la colonne en V4 coûte une migration");
 
+console.log("— arborescence Développement (D77) ——————————————");
+const tickets = A.Fixtures.valeurs.developpement;
+vrai(tickets.length === 34, tickets.length + " tickets sous Développement");
+vrai(/^RM\d+ · /.test(tickets[0].label), "un ticket est nommé RM<id> · titre");
+const mdev = A.Corpus.tous.find(m => m.fid.startsWith("developpement:"));
+vrai(!!mdev, "les tickets portent des messages");
+const tdev = mdev.tags.find(t => t.axe === "developpement");
+eq(tdev && tdev.src, "redmine-ipro", "le tag vient de Redmine, pas de l'ERP");
+eq(A.Views.List.variante(mdev), "developpement", "la carte a sa variante");
+vrai(A.Registry.render("message.card", { m: mdev, variant: "developpement" })
+      .includes("RM"), "et elle met le numéro de ticket en avant");
+const notifs = A.Corpus.tous.filter(m => m.fid.startsWith("notification:"));
+vrai(notifs.every(m => m.sens !== "out"), "on n'envoie rien à une alerte de supervision");
+
 console.log("— pièces jointes ————————————————————————————————");
 A.Controllers.Admin.ouvrirPJ();
 const vpj = p.doc.getElementById("detail").innerHTML;
