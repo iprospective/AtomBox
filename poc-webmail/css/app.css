@@ -353,3 +353,13 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .alerte-bloc{margin:12px 16px;padding:9px 11px;border:1px solid var(--danger);
   border-left-width:3px;border-radius:8px;background:var(--panel2)}
 .alerte-bloc>b{color:var(--danger)}
+
+/* ---- nature du message (D130) et refus de reponse (D131) ----
+   Une nature n'est pas une alerte : c'est un fait de classement. Elle se lit
+   en gris, jamais en rouge — sinon l'ecran crie sur du courrier normal. */
+.from.srv{font-weight:600}
+.nat{font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-left:6px;
+  padding:1px 5px;border-radius:4px;border:1px solid var(--line);color:var(--muted);
+  white-space:nowrap;vertical-align:1px}
+.nat-n{border-color:var(--accent);color:var(--accent)}
+.hbtn.off{opacity:.45;cursor:not-allowed}

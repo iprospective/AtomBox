@@ -20,8 +20,11 @@
             ${m.motif ? " · " + R.render("statut.chip", { m }) : ""}
             ${m.dossier === "trash" ? ` · <span class="tag">corbeille</span>` : ""}</div>
           <div class="dacts">
-            <button class="hbtn" data-c="rep">↩ Répondre</button>
-            <button class="hbtn" data-c="reptous">↩↩ Tous</button>
+            <button class="hbtn${m.repond === "non" ? " off" : ""}" data-c="rep"
+              ${m.repond === "non" ? `disabled title="Cette adresse a rejeté une réponse` +
+                ` — voir le bandeau ci-dessous (D131)"` : ""}>↩ Répondre</button>
+            <button class="hbtn${m.repond === "non" ? " off" : ""}" data-c="reptous"
+              ${m.repond === "non" ? "disabled" : ""}>↩↩ Tous</button>
             <button class="hbtn" data-c="tr">➦ Transférer</button>
             ${ABX.Views.Message.statutHtml(m)}
             <button class="hbtn ic" data-x="${m.lu ? "nonLu" : "lire"}"
@@ -40,6 +43,7 @@
           </div>
           ${ABX.Views.Message.menuHtml(m)}
         </div>
+        ${ABX.Views.Message.repondHtml(m)}
         ${ABX.Views.Message.spoofHtml(m)}
         ${ABX.Views.Message.lienHtml(m)}
         ${R.render("message.tags", { m })}
@@ -83,6 +87,40 @@
         ${m.pj ? `<button data-m="fichiers">${cap("fichiers").ic} Enregistrer les pièces jointes
           <span class="mprov">${F.esc(cap("fichiers").label)}</span></button>` : ""}
       </div>`;
+    },
+
+    /* D131 — on ne bloque JAMAIS sur une convention de nommage. « avertir » se
+       deduit de la nature ; « non » demande une preuve, et la seule qui existe
+       est un retour de non-remise sur une reponse deja tentee (D119). Un bouton
+       grise sans explication est percu comme une panne : le motif est dit, et
+       date. Et on ne refuse pas sans proposer a QUI ecrire. */
+    repondHtml(m) {
+      if (!m.repond || m.repond === "oui") return "";
+      const alt = m.alt
+        ? `<br>Plutôt que d'abandonner : <b>${F.esc(m.alt.nom)}</b>
+           &lt;${F.esc(m.alt.mail)}&gt; est à votre carnet, sur le même domaine —
+           montré, jamais présélectionné : une réponse destinée à un automate
+           n'était pas destinée à un humain.`
+        : "";
+      if (m.repond === "non")
+        return `<div class="alerte-bloc">⛔ <b>Cette adresse n'accepte pas les réponses —
+          et ce n'est pas une supposition.</b>
+          <div class="hint">Une réponse envoyée il y a ${m.dsn.jours} jours à
+            <b>${F.esc(m.mail)}</b> a été rejetée : <code>${F.esc(m.dsn.code)}</code>.
+            AtomBox le sait parce qu'il a <b>essayé</b>, et parce qu'il a gardé le retour
+            (D119, D131) — là où les autres messageries devinent à partir du mot
+            « noreply ». La marque porte une date et se réévalue : un 5xx n'est pas
+            éternel.${alt}</div></div>`;
+      return `<div class="lien" style="margin:12px 16px">✉ <b>${
+        m.nature === "liste" ? "Message de diffusion" : "Notification automatique"}</b> —
+        l'expéditeur déclare ne pas lire les réponses. Répondre reste possible en un clic ;
+        ce n'est simplement plus l'action principale (D131).
+        <div class="hint">${m.nature === "liste"
+          ? `L'action utile ici n'est pas « répondre », c'est <b>se désabonner</b> —
+             en-tête <code>List-Unsubscribe</code>, D132. Jamais automatiquement : un lien
+             de désabonnement suivi sans geste humain est un confirmateur d'adresse.`
+          : `Une notification <b>entre</b> dans la file des non traités : c'est une machine
+             qui attend quelque chose de vous (D130).`}${alt}</div></div>`;
     },
 
     /* D126/D128 — le bandeau ne crie que sur un signal FORT (une règle ★ de B),
