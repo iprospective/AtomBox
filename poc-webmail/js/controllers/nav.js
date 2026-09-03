@@ -24,7 +24,7 @@
         const i2 = D.byId("navq"); i2.focus(); i2.setSelectionRange(pos, pos);
         if (ui.navq.length === 1) ABX.log("Recherche dans l'arborescence",
 `SELECT axe_id, valeur, count(*) FILTER (WHERE r.lu_le IS NULL)
-  FROM tag t JOIN message_tag mt USING (tag_id) JOIN rattachement r USING (message_id)
+  FROM tag t JOIN comm_tag mt USING (tag_id) JOIN rattachement r USING (comm_id)
  WHERE r.compte_id = :moi AND t.valeur ILIKE :q || '%'
  GROUP BY axe_id, valeur LIMIT 50;`,
           "index (valeur text_pattern_ops) — sinon balayage de tous les tags", true);
@@ -64,8 +64,8 @@
         ui.plus[n.dataset.more] = true;
         Nav.peindre();
         ABX.log("Charger le reste d'un axe",
-`SELECT valeur, count(*) FROM tag t JOIN message_tag mt USING (tag_id)
-  JOIN rattachement r USING (message_id)
+`SELECT valeur, count(*) FROM tag t JOIN comm_tag mt USING (tag_id)
+  JOIN rattachement r USING (comm_id)
  WHERE r.compte_id = :moi AND t.axe_id = :axe
  GROUP BY valeur ORDER BY max(r.recu_le) DESC OFFSET :n LIMIT 200;`,
           "index (axe_id, valeur) — pagination de l'arborescence elle-même");
@@ -78,11 +78,11 @@
 `-- une seule requête pour les ~300 branches, pas une par dossier
 SELECT t.axe_id, t.valeur, count(*) AS non_lus
   FROM rattachement r
-  JOIN message_tag mt ON mt.message_id = r.message_id
+  JOIN comm_tag mt ON mt.comm_id = r.comm_id
   JOIN tag t          ON t.tag_id      = mt.tag_id
  WHERE r.compte_id = :moi AND r.lu_le IS NULL AND r.sorti_le IS NULL
  GROUP BY t.axe_id, t.valeur;`,
-        "index (compte_id, lu_le) partiel + (tag_id, message_id) — un seul parcours groupé");
+        "index (compte_id, lu_le) partiel + (tag_id, comm_id) — un seul parcours groupé");
     },
   };
 

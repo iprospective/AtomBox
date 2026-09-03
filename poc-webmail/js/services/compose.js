@@ -29,7 +29,7 @@
       if (mode !== "new") ABX.log(mode === "tr" ? "Préparer un transfert" : "Préparer une réponse",
 `-- l'identité d'envoi par défaut est celle de la BOÎTE qui a reçu, pas du compte
 SELECT b.adresse, b.boite_id FROM rattachement r JOIN boite b USING (boite_id)
- WHERE r.message_id = :id AND r.compte_id = :moi;`,
+ WHERE r.comm_id = :id AND r.compte_id = :moi;`,
         mode === "tr"
           ? "un transfert interne ne recopie rien : il pose un lien + une ACL (D58/D67)"
           : "répondre depuis le compte et non depuis la boîte ampute le fil pour les collègues (Q26)");
@@ -79,9 +79,9 @@ VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj
 
       if (!envoyer) {
         ABX.log("Enregistrer le brouillon",
-`INSERT INTO message (message_id, sujet, corps, brouillon, redige_par, maj_le)
+`INSERT INTO comm (comm_id, sujet, corps, brouillon, redige_par, maj_le)
 VALUES (:id, :sujet, :corps, true, :moi, now())
-ON CONFLICT (message_id) DO UPDATE SET corps = EXCLUDED.corps, maj_le = now();`,
+ON CONFLICT (comm_id) DO UPDATE SET corps = EXCLUDED.corps, maj_le = now();`,
           "un brouillon est un message comme un autre, marqué : sinon il faut une seconde table " +
           "et deux chemins de code pour le même objet");
       } else {

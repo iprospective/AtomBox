@@ -82,8 +82,8 @@
     logRestauration(n) {
       if (n < 2) return;
       ABX.log("Rouvrir " + n + " onglets",
-`SELECT m.*, r.lu_le FROM message m JOIN rattachement r USING (message_id)
- WHERE m.message_id = ANY (:ids) AND r.compte_id = :moi;`,
+`SELECT m.*, r.lu_le FROM comm m JOIN rattachement r USING (comm_id)
+ WHERE m.comm_id = ANY (:ids) AND r.compte_id = :moi;`,
         "UNE requête pour tous les onglets — sinon la restauration de session coûte N " +
         "allers-retours au démarrage, le moment où l'on peut le moins se le permettre");
     },

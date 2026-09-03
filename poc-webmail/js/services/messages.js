@@ -24,12 +24,12 @@
        cascade — inutile de la journaliser deux fois. */
     lire: (m, muet) => appliquer(m, { lu: true }, muet ? null : ["Marquer lu",
 `UPDATE rattachement SET lu_le = now()
- WHERE message_id = :id AND compte_id = :moi AND lu_le IS NULL;`,
+ WHERE comm_id = :id AND compte_id = :moi AND lu_le IS NULL;`,
       "une ÉCRITURE à chaque ouverture — le prix d'un compteur de non-lus juste, et d'un début " +
       "de workflow de traitement (D41). Le IS NULL évite de réécrire une ligne déjà lue"]),
 
     nonLu: m => appliquer(m, { lu: false }, ["Marquer non lu",
-`UPDATE rattachement SET lu_le = NULL WHERE message_id = :id AND compte_id = :moi;`,
+`UPDATE rattachement SET lu_le = NULL WHERE comm_id = :id AND compte_id = :moi;`,
       "le compteur redevient juste sans toucher au journal : la lecture reste tracée dans " +
       "activite, on n'efface pas un fait (D54/D59)"]),
 
@@ -37,20 +37,20 @@
       x => ABX.Traces.muter(x, {
         label:"Marquer traité", nom:"traiter",
         corps:{ sorti: true, motif_sortie: "traite" },
-        retour:{ message_id: x.id, sorti_le: "2026-09-01T14:02:11+02:00",
+        retour:{ comm_id: x.id, sorti_le: "2026-09-01T14:02:11+02:00",
                  motif_sortie: "traite", lu_le: "2026-09-01T14:01:58+02:00" },
       }, [
         { t:"sql", label:"l'état : le message quitte la file",
           detail:
 `UPDATE rattachement SET sorti_le = now(), motif_sortie = 'traite'
- WHERE message_id = :id AND compte_id = :moi;`,
+ WHERE comm_id = :id AND compte_id = :moi;`,
           index:"⚠ si sorti_le est la clé de partition (D14/D30), cet UPDATE n'écrit pas une " +
                 "ligne : il la DÉPLACE — suppression dans une partition, insertion dans une " +
                 "autre. Le pari « un seul déplacement par email » tient tant que Q09 reste rare",
           warn:true },
         { t:"sql", label:"le fait : « a traité », daté, non modifiable",
           detail:
-`INSERT INTO activite (compte_id, message_id, type, at)
+`INSERT INTO activite (compte_id, comm_id, type, at)
 VALUES (:moi, :id, 'traite', now());`,
           index:"deux écritures pour un clic, et c'est voulu : l'état courant d'un côté, le fait " +
                 "daté de l'autre. Les confondre, c'est perdre l'historique au premier changement " +
@@ -66,13 +66,13 @@ SELECT application_id, 'message.traite', :json, 'a_emettre', now()
 
     archiver: m => appliquer(m, { motif:"archive", sorti: Date.now() }, ["Archiver (sortir sans traiter)",
 `UPDATE rattachement SET sorti_le = now(), motif_sortie = 'archive'
- WHERE message_id = :id AND compte_id = :moi;`,
+ WHERE comm_id = :id AND compte_id = :moi;`,
       "motif_sortie distingue traité / archivé (D30) ; les vues « Traités » et « Archives » " +
       "n'en sont que la lecture (D51)"]),
 
     refile: m => appliquer(m, { motif:null, sorti:null }, ["Remettre dans la file",
 `UPDATE rattachement SET sorti_le = NULL, motif_sortie = NULL
- WHERE message_id = :id AND compte_id = :moi;`,
+ WHERE comm_id = :id AND compte_id = :moi;`,
       "⚠ retour de partition : c'est exactement Q09 (« un email sorti peut-il revenir ? »). " +
       "Autorisé ici — reste à décider si le cas est courant ou exceptionnel, la réponse " +
       "change le partitionnement", true]),
@@ -81,7 +81,7 @@ SELECT application_id, 'message.traite', :json, 'a_emettre', now()
       x => ABX.Traces.muter(x, {
         label:"Mettre à la corbeille", nom:"corbeille",
         corps:{ dossier: "trash" },
-        retour:{ message_id: x.id, dossier_id: "trash",
+        retour:{ comm_id: x.id, dossier_id: "trash",
                  dossier_origine: (x.fid || "inbox"), deplace_le: "2026-09-01T14:02:11+02:00" },
       }, [
         { t:"sql", label:"un déplacement, pas une suppression",
@@ -89,7 +89,7 @@ SELECT application_id, 'message.traite', :json, 'a_emettre', now()
 `UPDATE rattachement
    SET dossier_origine = COALESCE(dossier_origine, dossier_id),
        dossier_id = :trash, deplace_le = now()
- WHERE message_id = :id AND compte_id = :moi;`,
+ WHERE comm_id = :id AND compte_id = :moi;`,
           index:"le message est intact, et les autres comptes qui le portent ne voient rien (D10). " +
                 "COALESCE : on mémorise l'origine au PREMIER passage seulement, sinon un " +
                 "aller-retour corbeille ferait de la corbeille l'origine (D88)" },
@@ -106,19 +106,19 @@ SELECT application_id, 'message.traite', :json, 'a_emettre', now()
       enfants: [
         { label: "le message part en quarantaine",
           sql: `UPDATE rattachement SET dossier_id = :junk
- WHERE message_id = :id AND compte_id = :moi;`,
+ WHERE comm_id = :id AND compte_id = :moi;`,
           index: "la quarantaine est un dossier comme un autre — ce qui la distingue est sa " +
                  "purge automatique, à décider" },
         { label: "le filtre apprend",
           sql:
-`INSERT INTO apprentissage_spam (message_id, verdict, par, at)
+`INSERT INTO apprentissage_spam (comm_id, verdict, par, at)
 VALUES (:id, 'spam', :moi, now());`,
           index: "verdict par UTILISATEUR, pas global : ce que l'un juge indésirable, l'autre " +
                  "l'attend — un apprentissage partagé sur une boîte commune se retourne vite" },
       ] }),
 
     restaurer: m => appliquer(m, { dossier:null }, ["Restaurer depuis la corbeille",
-`UPDATE rattachement SET dossier_id = :origine WHERE message_id = :id AND compte_id = :moi;`,
+`UPDATE rattachement SET dossier_id = :origine WHERE comm_id = :id AND compte_id = :moi;`,
       "il faut donc conserver le dossier d'origine : une corbeille sans retour n'est qu'une " +
       "suppression déguisée"]),
 
@@ -128,17 +128,17 @@ VALUES (:id, 'spam', :moi, now());`,
              "point de vue d'un utilisateur n'est jamais un DELETE du message",
       enfants: [
         { label: "ce que le clic fait vraiment, tout de suite",
-          sql: `DELETE FROM rattachement WHERE message_id = :id AND compte_id = :moi;`,
+          sql: `DELETE FROM rattachement WHERE comm_id = :id AND compte_id = :moi;`,
           index: "immédiat, indexé, sans effet sur les autres porteurs" },
         { label: "ce que le ramasse-miettes fera plus tard, si personne ne le porte plus (D87)",
           sql:
-`DELETE FROM message m WHERE m.message_id = :id AND NOT EXISTS
-  (SELECT 1 FROM rattachement r WHERE r.message_id = m.message_id);`,
+`DELETE FROM comm m WHERE m.comm_id = :id AND NOT EXISTS
+  (SELECT 1 FROM rattachement r WHERE r.comm_id = m.comm_id);`,
           index: "⚠ jamais dans le clic : c'est un balayage, pas une cascade ON DELETE", warn: true },
       ] }),
 
     deplacer: (m, dest) => appliquer(m, { dossier: dest || null }, ["Déplacer vers un dossier",
-`UPDATE rattachement SET dossier_id = :dossier WHERE message_id = :id AND compte_id = :moi;`,
+`UPDATE rattachement SET dossier_id = :dossier WHERE comm_id = :id AND compte_id = :moi;`,
       "le dossier utilisateur est une colonne du RATTACHEMENT, pas du message : deux comptes " +
       "classent le même message différemment (D51/D36)"]),
 
@@ -149,12 +149,12 @@ VALUES (:id, 'spam', :moi, now());`,
       enfants: [
         { label: "retour au dossier d'origine",
           sql: `UPDATE rattachement SET dossier_id = :origine
- WHERE message_id = :id AND compte_id = :moi;`,
+ WHERE comm_id = :id AND compte_id = :moi;`,
           index: "d'où la nécessité de D88 : sans dossier d'origine mémorisé, on ne sait pas où " +
                  "le remettre" },
         { label: "le filtre désapprend",
           sql:
-`INSERT INTO apprentissage_spam (message_id, verdict, par, at)
+`INSERT INTO apprentissage_spam (comm_id, verdict, par, at)
 VALUES (:id, 'ham', :moi, now());` },
       ] }),
 
@@ -168,7 +168,7 @@ VALUES (:id, 'ham', :moi, now());` },
       appliquer(m, patch, x => ABX.Traces.muter(x, {
         label:"Statut : " + st.label, nom:"statuer",
         corps:{ statut: id },
-        retour:{ message_id: x.id, statut: id,
+        retour:{ comm_id: x.id, statut: id,
                  sorti_le: st.sortie ? "2026-09-01T14:02:11+02:00" : null,
                  motif_sortie: st.sortie || null },
       }, [
@@ -176,7 +176,7 @@ VALUES (:id, 'ham', :moi, now());` },
           detail:
 `UPDATE rattachement SET statut = :statut` + (st.sortie
   ? `, sorti_le = now(), motif_sortie = '` + st.sortie + `'` : `, sorti_le = NULL, motif_sortie = NULL`) + `
- WHERE message_id = :id AND compte_id = :moi;`,
+ WHERE comm_id = :id AND compte_id = :moi;`,
           index: st.sortie
             ? "⚠ « traité » est le seul statut qui SORT de la file : il pose sorti_le, donc " +
               "déplace la partition (D14/D30). Les autres se contentent de bouger dans la file"
@@ -185,7 +185,7 @@ VALUES (:id, 'ham', :moi, now());` },
           warn: !!st.sortie },
         { t:"sql", label:"le changement d'état est un fait, comme la lecture",
           detail:
-`INSERT INTO activite (compte_id, message_id, type, detail, at)
+`INSERT INTO activite (compte_id, comm_id, type, detail, at)
 VALUES (:moi, :id, 'statut', :statut, now());`,
           index:"c'est ce qui permettra de mesurer un délai de traitement — la seule métrique " +
                 "que personne ne pense à stocker avant d'en avoir besoin" },
@@ -219,7 +219,7 @@ RETURNING tag_id;`,
                      "l'utilisateur lui-même, qui en est une comme les autres" },
             { label: "la liaison",
               sql:
-`INSERT INTO message_tag (message_id, tag_id, pose_par, pose_le)
+`INSERT INTO comm_tag (comm_id, tag_id, pose_par, pose_le)
 VALUES (:id, :tag, :moi, now()) ON CONFLICT DO NOTHING;`,
               index: "pas d'unicité (message, axe) : un message peut relever de deux clients (D17)" },
           ] });
@@ -231,8 +231,8 @@ VALUES (:id, :tag, :moi, now()) ON CONFLICT DO NOTHING;`,
       const auto = t.src && t.src !== "utilisateur";
       appliquer(m, { tags: m.tags.filter((_, k) => k !== i) },
         ["Retirer le tag " + t.axe + " = " + t.val,
-`DELETE FROM message_tag
- WHERE message_id = :id AND tag_id = :tag AND pose_par = :moi;
+`DELETE FROM comm_tag
+ WHERE comm_id = :id AND tag_id = :tag AND pose_par = :moi;
 
 -- le tag lui-même n'est PAS supprimé : d'autres messages le portent`,
           auto
@@ -259,13 +259,13 @@ VALUES (:id, :tag, :moi, now()) ON CONFLICT DO NOTHING;`,
             index: "index (compte_id, dossier_id) — borné au compte, donc instantané" },
           { label: "2. tâche de fond — le message ne part que si plus personne ne le porte (D10)",
             sql:
-`DELETE FROM message m WHERE NOT EXISTS
-  (SELECT 1 FROM rattachement r WHERE r.message_id = m.message_id);`,
+`DELETE FROM comm m WHERE NOT EXISTS
+  (SELECT 1 FROM rattachement r WHERE r.comm_id = m.comm_id);`,
             index: "⚠ balayage de toute la table : à faire par lots, jamais dans le clic", warn: true },
           { label: "3. tâche de fond — le blob, que si plus aucune liaison ne le cite (D24)",
             sql:
 `DELETE FROM piece_jointe p WHERE NOT EXISTS
-  (SELECT 1 FROM message_piece_jointe l WHERE l.pj_id = p.pj_id);`,
+  (SELECT 1 FROM comm_piece_jointe l WHERE l.pj_id = p.pj_id);`,
             index: "⚠ idem, plus le retrait des octets du magasin — qui n'est pas transactionnel", warn: true },
         ] });
       ABX.Bus.emit("corpus:changed", {});

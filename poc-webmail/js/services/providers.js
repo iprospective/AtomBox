@@ -37,7 +37,7 @@
   const CAPACITES = {
     taches: {
       label: "Gestionnaire de tâches", ic: "☑",
-      contrat: ["creer(titre, echeance, message_id)", "lister(filtre)", "cloturer(id)"],
+      contrat: ["creer(titre, echeance, comm_id)", "lister(filtre)", "cloturer(id)"],
       fournisseurs: {
         aucun:     { label:"Aucun", ic:"—", absent:true, v:1,
                      note:"la capacité n'existe pas : l'entrée de menu disparaît. C'est un état " +
@@ -100,7 +100,7 @@
       } },
     calendrier: {
       label: "Calendrier", ic: "📅",
-      contrat: ["evenements(du, au)", "creer(titre, debut, fin, message_id)"],
+      contrat: ["evenements(du, au)", "creer(titre, debut, fin, comm_id)"],
       fournisseurs: {
         aucun:     { label:"Aucun", ic:"—", absent:true, v:1,
                      note:"les échéances restent dans le statut du message" },
