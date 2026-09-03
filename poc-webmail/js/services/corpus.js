@@ -128,6 +128,23 @@
       if (m.repond !== "oui" && Fx.estAxe(axe) &&
           axe !== "notification" && axe !== "social")
         m.alt = { nom: label, mail: "contact@" + m.mail.split("@")[1] };
+      /* D136/D137 — la FIABILITÉ de l'expéditeur, à deux niveaux. Elle n'est pas
+         un booléen « connu » de plus : elle combine ce que le domaine permet
+         d'affirmer et ce qu'un humain a validé chez nous. Signée : au-dessus de
+         zéro un correspondant établi, en dessous un émetteur douteux. */
+      if (!sortant) {
+        const t2 = P.with("fiab/" + m.id, () => P.next());
+        /* L'alignement ne suit PAS le fait d'être connu : un correspondant établi
+           peut écrire depuis un serveur mal configuré, une liste qui casse la
+           signature, une redirection. C'est même le cas le plus instructif —
+           celui où afficher « fiable » serait une faute (D137). */
+        m.dom = { aligne: t2 < .82 };              // DMARC aligné sur CE message
+        m.valide = m.connu && t2 < .35;            // validé par un humain de chez nous
+        m.fiab = m.spoof ? -2
+               : !m.dom.aligne ? 0
+               : m.valide ? 2
+               : m.connu ? 1 : 0;
+      }
       At.attacher(m);
       /* La SOURCE du tag est l'application qui l'a poussé (D19/D20) : Dolibarr
          tient les tiers, Redmine tient les tickets. Deux axes, deux ACL, et

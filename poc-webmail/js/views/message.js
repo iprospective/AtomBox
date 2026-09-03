@@ -43,6 +43,7 @@
           </div>
           ${ABX.Views.Message.menuHtml(m)}
         </div>
+        ${ABX.Views.Message.fiabiliteHtml(m)}
         ${ABX.Views.Message.repondHtml(m)}
         ${ABX.Views.Message.spoofHtml(m)}
         ${ABX.Views.Message.lienHtml(m)}
@@ -94,6 +95,38 @@
        est un retour de non-remise sur une reponse deja tentee (D119). Un bouton
        grise sans explication est percu comme une panne : le motif est dit, et
        date. Et on ne refuse pas sans proposer a QUI ecrire. */
+    /* D137 — le bandeau dit CE QU'ON SAIT et QUI l'a dit, jamais « fiable » tout
+       court : une confiance sans auteur ni date n'est pas vérifiable, et elle ne
+       sait pas s'éteindre. Le geste de validation a une PORTÉE (D106) — valider
+       depuis une boîte partagée engage les autres, donc c'est tracé (D54). */
+    fiabiliteHtml(m) {
+      if (m.sens === "out" || m.fiab === undefined || m.spoof) return "";
+      if (m.fiab >= 2)
+        return `<div class="lien fiab-bloc" style="margin:12px 16px">✓ <b>Expéditeur
+          validé</b> — quelqu'un de chez vous a marqué cette adresse comme fiable, et ce
+          message est authentifié par son domaine (DMARC aligné).
+          <div class="hint">La validation ne fait pas taire les règles fortes du catalogue
+            (D128) : elle atténue les indices faibles, elle n'ouvre pas de porte. Et elle
+            s'éteint d'elle-même si le domaine cesse d'être authentifiable ou si les
+            habitudes de l'expéditeur changent (D137, B3).</div></div>`;
+      if (!m.dom.aligne)
+        return `<div class="lien" style="margin:12px 16px">◌ <b>Ce message n'est pas
+          authentifié par son domaine.</b>
+          <div class="hint">Aucun indicateur de confiance ne peut donc s'afficher, même si
+            l'adresse est connue : rien ne prouve que ce message-ci vienne d'elle (D137).
+            ${m.connu ? "L'expéditeur est pourtant à votre carnet — c'est exactement le cas où un affichage rassurant serait une faute." : ""}</div>
+          <button class="hbtn" style="margin-top:6px" disabled
+            title="Impossible : on ne valide pas une adresse sur un message non authentifié">
+            Marquer cet expéditeur comme fiable</button></div>`;
+      return `<div class="lien" style="margin:12px 16px">· Expéditeur connu, message
+        authentifié — <b>aucune validation humaine</b>.
+        <div class="hint">Vous pouvez marquer cette adresse comme fiable. La portée par
+          défaut est <b>cette boîte</b> ; un gestionnaire de domaine peut valider pour tout
+          le monde (D106, D137).</div>
+        <button class="hbtn" style="margin-top:6px">Marquer cet expéditeur comme fiable</button>
+        </div>`;
+    },
+
     repondHtml(m) {
       if (!m.repond || m.repond === "oui") return "";
       const alt = m.alt
