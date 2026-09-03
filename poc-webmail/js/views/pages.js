@@ -195,7 +195,7 @@
       ["Table domaine + adresse éclatée (local@domaine)", 1, "décidé", "D136"],
       ["Indicateur d'expéditeur fiable, jamais sans alignement", 1, "maquetté", "D137"],
       ["Validation humaine d'un expéditeur, avec portée", 1, "maquetté", "D137, D106"],
-      ["Défi anti-robot : périmètre et jalon", 2, "à trancher", "Q54"],
+      ["Défi anti-robot (« je ne suis pas un robot »)", 0, "en pause", "Q54"],
       ["Catalogue de règles anti-usurpation", 1, "décidé", "D127, D128"],
       ["Cohérence IBAN / tiers de l'ERP", 1, "décidé", "D129"],
       ["Alerter, mettre en quarantaine, ou refuser ?", 1, "à trancher", "Q49"],
@@ -218,7 +218,8 @@
     ]],
   ];
 
-  const ETATS = { "maquetté":"ok", "décidé":"wait", "à trancher":"due", "à venir":"" };
+  const ETATS = { "maquetté":"ok", "décidé":"wait", "à trancher":"due", "à venir":"",
+                  "en pause":"pause" };
 
   function features() {
     const n = FEATURES.reduce((s, [, l]) => s + l.length, 0);
@@ -226,12 +227,14 @@
       <div class="hint"><span class="st ok">maquetté</span> visible dans ce POC ·
         <span class="st wait">décidé</span> tranché au CDC, pas encore maquetté ·
         <span class="st due">à trancher</span> question ouverte ·
-        <span class="st">à venir</span> jalon ultérieur</div></div>
+        <span class="st">à venir</span> jalon ultérieur ·
+        <span class="st pause">en pause</span> écarté volontairement, à reprendre sur un chiffre</div></div>
     ${FEATURES.map(([dom, liste]) => `<div class="box"><h4>${F.esc(dom)}</h4>
       <table class="erpl"><tr><th>Fonctionnalité</th><th>Jalon</th><th>État</th><th>Réf.</th></tr>
       ${liste.map(([lib, v, etat, ref]) => `<tr>
         <td>${F.esc(lib)}</td>
-        <td><span class="jalon${v > 1 ? " v" + v : ""}">V${v}</span></td>
+        <td>${v ? `<span class="jalon${v > 1 ? " v" + v : ""}">V${v}</span>`
+               : `<span class="jalon aucun" title="Aucun jalon : écarté volontairement">—</span>`}</td>
         <td><span class="st ${ETATS[etat]}">${etat}</span></td>
         <td><span class="hash">${F.esc(ref)}</span></td></tr>`).join("")}
       </table></div>`).join("")}`;

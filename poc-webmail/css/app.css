@@ -381,3 +381,7 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .fiab.f2{color:var(--ok)}
 .fiab.f1{color:var(--muted)}
 .fiab-bloc{border-left:3px solid var(--ok)}
+
+/* « en pause » : ni acquis, ni en attente d'arbitrage — ecarte volontairement. */
+.st.pause{background:var(--panel2);color:var(--muted);border:1px dashed var(--line)}
+.jalon.aucun{background:transparent;color:var(--muted);border:1px dashed var(--line)}
