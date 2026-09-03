@@ -3,7 +3,7 @@
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
    ce que dit le registre, et rien d'autre.
 
-   Généré le 2026-09-03 — 137 décisions, 53 questions, 19 chapitres. */
+   Généré le 2026-09-03 — 139 décisions, 54 questions, 19 chapitres. */
 (function (ABX) {
   "use strict";
   ABX.CDC = {
@@ -789,6 +789,16 @@
       "etat": "valide"
     },
     {
+      "id": "D136",
+      "objet": "domaine devient une table, et l'adresse est éclatée en local + domaine_id",
+      "etat": "valide"
+    },
+    {
+      "id": "D137",
+      "objet": "Trois natures de confiance — vérifiée, validée, calculée — sur l'adresse et sur le domaine",
+      "etat": "valide"
+    },
+    {
       "id": "D25",
       "objet": "Extraction réversible (exigence)",
       "etat": "autre"
@@ -1094,6 +1104,12 @@
       "objet": "Une newsletter part-elle dans un dossier engendré ?",
       "bloque": "—",
       "urgence": "tranchee"
+    },
+    {
+      "id": "Q54",
+      "objet": "Le défi anti-robot est-il au périmètre, et à quel jalon ?",
+      "bloque": "D137, D71, D119",
+      "urgence": "moyenne"
     },
     {
       "id": "Q52",

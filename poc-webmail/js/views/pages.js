@@ -79,6 +79,12 @@
         C'est l'arborescence engendrée de D77 prise au mot : ouvrez « Fournisseurs › une
         société » puis « Abonnements › la même société », vous verrez les mêmes messages
         d'un côté parmi les factures, de l'autre seuls.</p>
+      <p><b>Un mot sur l'indicateur de confiance</b> (✓ vert) : il n'apparaît que si le
+        message est <b>authentifié par son domaine</b>. Ouvrez un message d'un correspondant
+        que vous connaissez mais dont le domaine n'aligne pas : il n'y a <i>aucun</i>
+        indicateur, et le bouton de validation est désactivé. C'est délibéré — marquer
+        « fiable » un identifiant qu'on peut usurper reviendrait à désigner à l'attaquant la
+        cible exacte (D137).</p>
       <p>À l'ouverture d'un tel message, le bouton <b>Répondre</b> cesse d'être l'action
         principale, et une ligne dit pourquoi. Sur quelques messages, il est carrément
         <b>refusé</b> — et là, l'écran ne devine pas : il vous montre le rejet
@@ -186,6 +192,10 @@
       ["Verrouillage : jamais le poste de travail", 1, "décidé", "D117"],
       ["Expéditeur normalisé sur le carnet", 1, "maquetté", "D126"],
       ["Signal d'usurpation par nom (règle B1)", 1, "maquetté", "D128"],
+      ["Table domaine + adresse éclatée (local@domaine)", 1, "décidé", "D136"],
+      ["Indicateur d'expéditeur fiable, jamais sans alignement", 1, "maquetté", "D137"],
+      ["Validation humaine d'un expéditeur, avec portée", 1, "maquetté", "D137, D106"],
+      ["Défi anti-robot : périmètre et jalon", 2, "à trancher", "Q54"],
       ["Catalogue de règles anti-usurpation", 1, "décidé", "D127, D128"],
       ["Cohérence IBAN / tiers de l'ERP", 1, "décidé", "D129"],
       ["Alerter, mettre en quarantaine, ou refuser ?", 1, "à trancher", "Q49"],

@@ -41,6 +41,21 @@
                     + ` mais l'adresse n'est pas la sienne (D128, B1)">⚠ nom usurpe</span>` : "");
   });
 
+  /* D137 — l'indicateur de confiance. Il ne s'affiche QUE si le message est
+     aligné : une adresse validée en base ne prouve rien sur un message qui ne
+     vient peut-être pas d'elle. Marquer fiable un identifiant usurpable, ce
+     serait donner à l'attaquant la cible exacte. */
+  R.define("fiabilite", ({ m }) => {
+    if (m.sens === "out" || m.fiab === undefined) return "";
+    if (m.fiab >= 2)
+      return `<span class="fiab f2" title="Expéditeur validé par quelqu'un de chez vous,
+        et ce message est authentifié (DMARC aligné) — D137">✓</span>`;
+    if (m.fiab === 1)
+      return `<span class="fiab f1" title="Correspondant connu, message authentifié —
+        aucune validation humaine (D137)">·</span>`;
+    return "";
+  });
+
   /* La nature ne se lit pas comme une alerte : c'est un fait de classement.
      Elle dit ce que le message attend de nous — rien, ou une action (D130). */
   const NATURES = {
@@ -55,7 +70,7 @@
 
   /* ---- carte de message (liste) ----------------------------------------- */
   R.define("message.card.header", ({ m }) =>
-    `<div class="r1">${R.render("expediteur", { m })}
+    `<div class="r1">${R.render("fiabilite", { m })}${R.render("expediteur", { m })}
        <span class="dt">${F.dt(m.date)}</span></div>`);
 
   R.define("message.card.body", ({ m }) =>

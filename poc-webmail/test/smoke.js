@@ -65,6 +65,32 @@ vrai(hRefus.includes("550") && /il y a \d+ jours/.test(hRefus),
 vrai(A.Corpus.tous.every(m => m.repond !== "non" || m.nature !== "humain"),
      "on ne refuse jamais la réponse à un message écrit par une personne");
 
+console.log("— fiabilité de l'expéditeur (D136, D137) ——————————————");
+{
+  const t = A.Corpus.tous;
+  const valide  = t.find(m => m.fiab >= 2);
+  const nonAlig = t.find(m => m.sens !== "out" && m.dom && !m.dom.aligne && m.connu);
+  vrai(!!valide && !!nonAlig, "le corpus porte un expéditeur validé et un connu non aligné");
+  vrai(A.Registry.render("fiabilite", { m: valide }).includes("fiab f2"),
+       "l'expéditeur validé porte son indicateur");
+  vrai(!A.Registry.render("fiabilite", { m: nonAlig }),
+       "AUCUN indicateur sur un message non authentifié, même d'un correspondant connu");
+  vrai(t.every(m => !(m.fiab >= 1) || (m.dom && m.dom.aligne)),
+       "aucune fiabilité positive sans alignement du domaine (D137)");
+  vrai(t.every(m => !m.spoof || m.fiab < 0),
+       "une usurpation porte une fiabilité négative — même échelle, deux directions");
+  const h = A.Views.Message.fiabiliteHtml(nonAlig);
+  vrai(h.includes("disabled"),
+       "on ne peut pas valider une adresse depuis un message non authentifié");
+  vrai(A.Views.Message.fiabiliteHtml(valide).includes("D128"),
+       "le bandeau dit que la validation ne fait pas taire les règles fortes");
+  const connuAlig = t.find(m => m.fiab === 1);
+  vrai(A.Views.Message.fiabiliteHtml(connuAlig).includes("cette boîte"),
+       "la validation annonce sa portée par défaut (D106)");
+  vrai(!A.Views.Message.fiabiliteHtml(t.find(m => m.spoof)),
+       "aucun bandeau de confiance sur une usurpation — le bandeau d'alerte suffit");
+}
+
 console.log("— ordre des dossiers (D135) ——————————————————————");
 {
   const ui = A.Store.ui, nav0 = A.Views.Nav.render(ui);

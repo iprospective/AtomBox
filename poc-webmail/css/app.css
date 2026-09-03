@@ -374,3 +374,10 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .axop:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .axop[disabled]{opacity:.3;cursor:default}
 .axop.on{border-color:var(--accent);color:var(--accent)}
+
+/* ---- indicateur de confiance (D137) ----
+   Discret par construction : la confiance ne se crie pas, elle se constate. */
+.fiab{font-size:11px;font-weight:700;margin-right:5px;vertical-align:1px}
+.fiab.f2{color:var(--ok)}
+.fiab.f1{color:var(--muted)}
+.fiab-bloc{border-left:3px solid var(--ok)}
