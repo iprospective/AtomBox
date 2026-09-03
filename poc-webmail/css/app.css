@@ -363,3 +363,14 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
   white-space:nowrap;vertical-align:1px}
 .nat-n{border-color:var(--accent);color:var(--accent)}
 .hbtn.off{opacity:.45;cursor:not-allowed}
+
+/* ---- ordre des axes (D135) ----
+   Les commandes n'apparaissent qu'au survol : une arborescence n'est pas un
+   tableau de bord, et trois boutons par ligne la rendraient illisible. */
+.axops{display:none;gap:2px;margin-left:auto;padding-right:4px}
+.node.axe-tete:hover .axops{display:inline-flex}
+.axop{border:1px solid var(--line);background:var(--panel);color:var(--muted);
+  border-radius:4px;font-size:9.5px;line-height:1;padding:2px 4px;cursor:pointer}
+.axop:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.axop[disabled]{opacity:.3;cursor:default}
+.axop.on{border-color:var(--accent);color:var(--accent)}

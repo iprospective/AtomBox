@@ -26,15 +26,30 @@
           "", ui.folder.id === o.id));
       }
 
-      Fx.AXES.forEach(a => {
-        const vals = Fx.valeurs[a.id].filter(v => !f || v.label.toLowerCase().includes(f));
+      /* L'ordre des axes appartient à l'utilisateur (D135). Un axe ajouté depuis
+         son dernier réglage se range à la fin plutôt que de disparaître. */
+      const ordre = ui.ordreAxes || [];
+      const axes = Fx.AXES.slice().sort((x, y) => {
+        const i = ordre.indexOf(x.id), j = ordre.indexOf(y.id);
+        return (i < 0 ? 999 : i) - (j < 0 ? 999 : j);
+      });
+      axes.forEach((a, rang) => {
+        let vals = Fx.valeurs[a.id].filter(v => !f || v.label.toLowerCase().includes(f));
         if (f && !vals.length) return;
+        /* Deux tris seulement, et le manuel n'en fait pas partie : ordonner deux
+           cents fournisseurs à la main n'est pas une fonction, c'est une corvée. */
+        if (ui.triAxe[a.id] === "alpha")
+          vals = vals.slice().sort((x, y) => x.label.localeCompare(y.label));
         const ouvert = ui.ouverts[a.id] || !!f;
-        h += `<div class="grp">${F.esc(a.label)}${a.sub ? " · " + a.sub : ""}</div>`;
-        h += noeud({ id:"axe:" + a.id, label:"Tous — " + a.label, icon:a.icon,
+        /* Plus de titre de groupe : il répétait le nom de l'axe juste au-dessus
+           d'un nœud « Tous — <axe> ». Le nœud porte le nom, un point c'est tout. */
+        h += noeud({ id:"axe:" + a.id, label: a.label + (a.sub ? " · " + a.sub : ""),
+                     icon:a.icon,
                      unread: C.cnt("axe:" + a.id).u, total: C.cnt("axe:" + a.id).t,
-                     tw: ouvert ? "▾" : "▸", kind:"axe", axe:a.id },
-                   "", ui.folder.id === "axe:" + a.id);
+                     tw: ouvert ? "▾" : "▸", kind:"axe", axe:a.id,
+                     rang, dernier: rang === axes.length - 1,
+                     triAxe: ui.triAxe[a.id] || "recent" },
+                   "axe-tete", ui.folder.id === "axe:" + a.id);
         if (!ouvert) return;
         const lim = ui.plus[a.id] ? vals.length : PAGE;
         vals.slice(0, lim).forEach(v => h += noeud(
