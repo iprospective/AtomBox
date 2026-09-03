@@ -65,6 +65,20 @@ vrai(hRefus.includes("550") && /il y a \d+ jours/.test(hRefus),
 vrai(A.Corpus.tous.every(m => m.repond !== "non" || m.nature !== "humain"),
      "on ne refuse jamais la réponse à un message écrit par une personne");
 
+console.log("— le pivot comm dans les requêtes (D138) ——————————————");
+{
+  A.QueryLog.vider && A.QueryLog.vider();
+  const d = A.Fixtures.valeurs.client[0];
+  A.Controllers.List.ouvrir({ id: d.id, label: d.label, kind: "virtuel", axe: "client" });
+  const tout = JSON.stringify(A.QueryLog.entrees);
+  vrai(/JOIN comm /.test(tout), "les requêtes lisent le tronc `comm`");
+  const q = A.QueryLog.entrees.find(e => e.label.startsWith("Ouvrir"));
+  vrai(!JSON.stringify(q).includes("comm_email"),
+       "ouvrir un dossier ne joint PAS la fille — c'est tout l'intérêt de D138");
+  vrai(!/FROM message\b|JOIN message\b/.test(tout),
+       "plus aucune requête ne nomme une table `message`");
+}
+
 console.log("— fiabilité de l'expéditeur (D136, D137) ——————————————");
 {
   const t = A.Corpus.tous;
@@ -311,7 +325,7 @@ vrai(types.indexOf("http") < types.indexOf("sql"), "l'appel précède les requê
 vrai(types.lastIndexOf("json") < types.lastIndexOf("render"), "le JSON précède le rendu");
 const js = tr.etapes.find(e => e.t === "json");
 const contrat = JSON.parse(js.detail);
-eq(contrat.message_id, cible2.id, "le JSON porte l'identifiant");
+eq(contrat.comm_id, cible2.id, "le JSON porte l'identifiant");
 ["sujet","de","a","boite","sens","date_reception","lu_le","sorti_le","thread_id",
  "taille_octets","nb_pieces_jointes","tags","pieces_jointes","corps"].forEach(k =>
   vrai(k in contrat, "contrat d'API : champ « " + k + " »"));
@@ -433,7 +447,7 @@ eq(x0.p.nom, "facture-renommee.pdf", "renommé");
 eq(x0.b.sha, blobAvant, "le blob n'a pas bougé");
 eq(x0.b.refs, refsAvant, "ni ses liaisons");
 const qr = A.QueryLog.entrees[0];
-vrai(qr.etapes.some(e => (e.detail || "").includes("UPDATE message_piece_jointe")),
+vrai(qr.etapes.some(e => (e.detail || "").includes("UPDATE comm_piece_jointe")),
      "c'est la liaison qui est modifiée");
 vrai(qr.etapes.some(e => e.warn && (e.index || "").includes("pas de « partout »")),
      "et la trace dit ce qu'on ne peut PAS faire");

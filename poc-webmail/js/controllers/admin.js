@@ -41,15 +41,15 @@
           "valeur (D63) — un jeton perdu se régénère, il ne se relit pas"],
         axes: ["Administration — axes et volumétrie des tags",
 `SELECT ax.axe_id, ax.libelle, count(DISTINCT t.valeur) AS valeurs,
-       count(mt.message_id) AS usages
+       count(mt.comm_id) AS usages
   FROM axe ax LEFT JOIN tag t USING (axe_id)
-  LEFT JOIN message_tag mt USING (tag_id)
+  LEFT JOIN comm_tag mt USING (tag_id)
  GROUP BY ax.axe_id ORDER BY usages DESC;`,
-          "⚠ count(mt.message_id) balaye toute la table de liaison : acceptable sur un écran " +
+          "⚠ count(mt.comm_id) balaye toute la table de liaison : acceptable sur un écran " +
           "d'administration ouvert une fois par mois, à surveiller si on l'affiche ailleurs", true],
         canaux: ["Administration — canaux d'entrée",
 `-- en V1 il n'y a qu'un canal, et c'est justement le moment de le dire
-SELECT canal, count(*) FROM message GROUP BY canal;   -- ('email', 4412)`,
+SELECT canal, count(*) FROM comm GROUP BY canal;   -- ('email', 4412)`,
           "⚠ écrire cette colonne dès la V1 coûte un octet par message ; l'ajouter en V4 " +
           "coûte une migration sur des dizaines de millions de lignes et la relecture de " +
           "toutes les requêtes. Même raisonnement que D62 : on ne construit pas, on ne se " +
@@ -115,10 +115,10 @@ INSERT INTO acl_axe (axe_id, principal, droit) VALUES (:id, :moi, 'administrer')
         Admin.peindrePJ(); const i2 = D.byId("pjq"); i2.focus(); i2.setSelectionRange(p, p);
         if (St.ui.pjq.length === 3) ABX.log("Chercher une pièce jointe",
 `SELECT l.nom_fichier, p.octets, p.mime_detecte, m.sujet, m.date_reception
-  FROM message_piece_jointe l
+  FROM comm_piece_jointe l
   JOIN piece_jointe p USING (pj_id)
-  JOIN message m USING (message_id)
-  JOIN rattachement r ON r.message_id = m.message_id AND r.compte_id = :moi
+  JOIN comm m USING (comm_id)
+  JOIN rattachement r ON r.comm_id = m.comm_id AND r.compte_id = :moi
  WHERE l.nom_fichier ILIKE '%' || :q || '%'
  ORDER BY m.date_reception DESC LIMIT 60;`,
           "⚠ ILIKE '%…%' ne s'indexe pas : il faut un index trigramme (pg_trgm) sur " +
@@ -138,10 +138,10 @@ INSERT INTO acl_axe (axe_id, principal, droit) VALUES (:id, :moi, 'administrer')
           return ABX.Controllers.Tabs.ouvrir({ type:"msg", id:x.m.id }, false);
         if (b.dataset.pja === "deposer") return ABX.Capacites.deposerFichier(x.m, x.i);
         ABX.log("Taguer une pièce jointe",
-`INSERT INTO fichier_tag (pj_id, message_id, axe_id, valeur, pose_par)
+`INSERT INTO fichier_tag (pj_id, comm_id, axe_id, valeur, pose_par)
 VALUES (${x.b.pj_id}, '${x.m.id}', :axe, :valeur, :moi)
 ON CONFLICT DO NOTHING;`,
-          "le tag porte (pj_id, message_id) et non pj_id seul : deux messages partagent l'octet " +
+          "le tag porte (pj_id, comm_id) et non pj_id seul : deux messages partagent l'octet " +
           "mais pas forcément le classement — la même facture peut être « à payer » chez l'un " +
           "et « archivée » chez l'autre");
       });
@@ -161,8 +161,8 @@ ON CONFLICT DO NOTHING;`,
                  "\n{ \"nom_fichier\": \"" + x.p.nom + "\" }" },
         { t:"sql", label:"une seule liaison change",
           detail:
-`UPDATE message_piece_jointe SET nom_fichier = :nom
- WHERE message_id = '${x.m.id}' AND pj_id = ${x.b.pj_id};`,
+`UPDATE comm_piece_jointe SET nom_fichier = :nom
+ WHERE comm_id = '${x.m.id}' AND pj_id = ${x.b.pj_id};`,
           index:"le blob n'est pas touché : les " + (x.b.refs - 1) + " autre(s) liaison(s) " +
                 "gardent leur nom, et le message d'origine reste reconstructible à l'identique " +
                 "(D25/D32). C'est la seule forme de renommage qui ne casse pas DKIM" },

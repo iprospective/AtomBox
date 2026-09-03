@@ -69,11 +69,12 @@
       const A = {
         orig: ["Télécharger le message original (.eml)",
 `-- réassemblage : le corps, puis chaque partie ré-encodée À L'IDENTIQUE (D25)
-SELECT blob_ref, headers FROM message WHERE message_id = :id;
+-- blob_ref et headers vivent dans la FILLE, pas dans le tronc (D138)
+SELECT blob_ref, headers FROM comm_email WHERE comm_id = :id;
 SELECT l.ordre, l.nom_fichier, l.mime_declare, l.transfer_encoding, l.disposition,
        l.parametres, p.blob_ref
-  FROM message_piece_jointe l JOIN piece_jointe p USING (pj_id)
- WHERE l.message_id = :id ORDER BY l.ordre;`,
+  FROM comm_piece_jointe l JOIN piece_jointe p USING (pj_id)
+ WHERE l.comm_id = :id ORDER BY l.ordre;`,
           "la liaison doit conserver l'ordre, l'encodage et les paramètres de partie : sans eux le " +
           "message se reconstruit mais DKIM ne se revérifie plus (D25/D26)"],
       }[quoi];
@@ -85,21 +86,21 @@ SELECT l.ordre, l.nom_fichier, l.mime_declare, l.transfer_encoding, l.dispositio
       ABX.log("Ouvrir « " + p.nom + " »",
 `SELECT p.blob_ref, p.sha256, p.mime_detecte, p.octets,
        l.nom_fichier, l.mime_declare, l.transfer_encoding, l.ordre
-  FROM message_piece_jointe l JOIN piece_jointe p USING (pj_id)
- WHERE l.message_id = :id AND l.pj_id = ${b.pj_id};
+  FROM comm_piece_jointe l JOIN piece_jointe p USING (pj_id)
+ WHERE l.comm_id = :id AND l.pj_id = ${b.pj_id};
 -- les octets ne transitent jamais par PostgreSQL : zstd -d <blob_ref> (D05/D07)`,
-        "index (message_id, ordre) sur la liaison — le fichier lui-même reste hors base");
+        "index (comm_id, ordre) sur la liaison — le fichier lui-même reste hors base");
 
       ABX.log("« " + p.nom + " » — qui d'autre porte CES octets ?",
-`SELECT m.message_id, m.sujet, l.nom_fichier, m.date_reception
-  FROM message_piece_jointe l JOIN message m USING (message_id)
+`SELECT m.comm_id, m.sujet, l.nom_fichier, m.date_reception
+  FROM comm_piece_jointe l JOIN comm m USING (comm_id)
  WHERE l.pj_id = ${b.pj_id}      -- ${b.refs} liaison(s) pour un seul blob de ${F.poids(b.ko)}
  ORDER BY m.date_reception DESC LIMIT 50;`,
         b.refs > 1
-          ? "index (pj_id, message_id) — sans ce sens de parcours, la dédup n'est qu'un gain de " +
+          ? "index (pj_id, comm_id) — sans ce sens de parcours, la dédup n'est qu'un gain de " +
             "disque : ici elle économise " + F.poids(b.ko * (b.refs - 1)) +
             " et donne « où ai-je déjà vu ce fichier ? » (D24)"
-          : "index (pj_id, message_id) — un seul porteur ici : sur ce fichier la dédup ne gagne " +
+          : "index (pj_id, comm_id) — un seul porteur ici : sur ce fichier la dédup ne gagne " +
             "rien, et c'est le cas le plus fréquent. Le gain vient des quelques blobs très partagés");
 
       if (At.recompressable(b)) ABX.log("Recompression proposée (D70)",
@@ -144,7 +145,7 @@ UPDATE piece_jointe
           label: "Lier ce message à " + o.type.toLowerCase() + " " + o.ref,
           kind: "api",
           sql:
-`POST /api/v1/messages/{message_id}/tags        Authorization: Bearer <token ${c.app}>
+`POST /api/v1/messages/{comm_id}/tags        Authorization: Bearer <token ${c.app}>
 { "axe": "${tg.axe}", "valeur": "${tg.val}",
   "ref_externe": "${f.ref}", "piece": "${o.ref}" }`,
           index: "l'ACL de l'axe est vérifiée avant d'écrire (D18) : poser un tag sur un axe " +
@@ -161,7 +162,7 @@ RETURNING tag_id;`,
                      "quatre jeux de tags et aucun n'écrase l'autre (D17)" },
             { label: "la liaison message ↔ tag",
               sql:
-`INSERT INTO message_tag (message_id, tag_id, pose_par, pose_le)
+`INSERT INTO comm_tag (comm_id, tag_id, pose_par, pose_le)
 VALUES (:id, :tag, :application, now()) ON CONFLICT DO NOTHING;`,
               index: "pas d'unicité (message, axe) : un message peut relever de deux clients" },
           ] },
@@ -179,14 +180,14 @@ Authorization: Bearer <token opaque de l'application>          -- D63`,
           enfants: [
             { label: "la seule requête déclenchée — et elle porte déjà la portée",
               sql:
-`SELECT m.message_id, m.sujet, m.from_adresse, m.date_reception, m.nb_pieces_jointes
-  FROM message_tag mt JOIN message m USING (message_id)
+`SELECT m.comm_id, m.sujet, m.from_adresse, m.date_reception, m.nb_pieces_jointes
+  FROM comm_tag mt JOIN comm m USING (comm_id)
  WHERE mt.tag_id = :tag
    AND m.boite_id = ANY (:portee_du_token)                     -- D37
-   AND (m.date_reception, m.message_id) < (:cur_date, :cur_id) -- curseur, pas OFFSET
- ORDER BY m.date_reception DESC, m.message_id DESC
+   AND (m.date_reception, m.comm_id) < (:cur_date, :cur_id) -- curseur, pas OFFSET
+ ORDER BY m.date_reception DESC, m.comm_id DESC
  LIMIT 20;`,
-              index: "⚠ index (tag_id, date_reception DESC, message_id DESC). La portée du " +
+              index: "⚠ index (tag_id, date_reception DESC, comm_id DESC). La portée du " +
                      "token s'applique ICI, jamais dans l'appelant (D18/D37)", warn: true },
           ] },
 
@@ -195,7 +196,7 @@ Authorization: Bearer <token opaque de l'application>          -- D63`,
           kind: "api",
           sql:
 `POST https://${c.app}.lan/api/atombox/hook          (asynchrone, rejouable)
-{ "evenement": "message.tague", "message_id": "…", "axe": "${tg.axe}",
+{ "evenement": "message.tague", "comm_id": "…", "axe": "${tg.axe}",
   "valeur": "${tg.val}", "ref_externe": "${f.ref}", "pieces_jointes": ${m.pj} }`,
           index: "cet appel n'est PAS fait ici : il est empilé, et un worker le sortira. " +
                  "Une application injoignable ne doit jamais bloquer la réception du courrier",

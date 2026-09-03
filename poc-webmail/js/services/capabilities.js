@@ -19,7 +19,7 @@
         () => [
           { t:"sql", label:"une table, une clé étrangère",
             detail:
-`INSERT INTO tache (compte_id, titre, echeance, message_id, statut)
+`INSERT INTO tache (compte_id, titre, echeance, comm_id, statut)
 VALUES (:moi, :titre, :echeance, '` + m.id + `', 'a_faire')
 RETURNING tache_id;`,
             index:"le lien avec le message est une CLÉ ÉTRANGÈRE, pas une URL : il ne peut pas " +
@@ -27,7 +27,7 @@ RETURNING tache_id;`,
           { t:"sql", label:"et la file de travail devient une seule requête",
             detail:
 `SELECT t.*, m.sujet FROM tache t
-  LEFT JOIN message m USING (message_id)
+  LEFT JOIN comm m USING (comm_id)
  WHERE t.compte_id = :moi AND t.statut <> 'faite'
  ORDER BY t.echeance NULLS LAST;`,
             index:"index (compte_id, statut, echeance) — c'est le seul cas où « à faire » et " +
@@ -38,7 +38,7 @@ RETURNING tache_id;`,
             detail:"POST https://" + f.base + ".lan" + f.endpoint + "\n" +
               j({ label: m.subject, dateo: echeance(),
                   note: "Depuis AtomBox — message " + m.id,
-                  fk_project: null, atombox_message_id: m.id }),
+                  fk_project: null, atombox_comm_id: m.id }),
             index:"AtomBox ne stocke rien de la tâche : au retour, il ne garde qu'une " +
                   "référence externe (D84)" },
           { t:"json", label:"201 — l'identifiant qui servira de lien",
@@ -46,7 +46,7 @@ RETURNING tache_id;`,
                         url: "https://" + f.base + ".lan/projet/task/card.php?id=4821" }) },
           { t:"sql", label:"seul le lien entre dans AtomBox",
             detail:
-`INSERT INTO objet_lie (message_id, application_id, type, ref_externe, url)
+`INSERT INTO objet_lie (comm_id, application_id, type, ref_externe, url)
 VALUES ('` + m.id + `', :app, 'tache', :ref, :url);`,
             index:"⚠ ce lien peut mourir : la tâche est supprimable chez le fournisseur sans " +
                   "qu'AtomBox le sache. Même problème que Q30 sur le transfert par référence — " +
@@ -76,14 +76,14 @@ VALUES ('` + m.id + `', :app, 'tache', :ref, :url);`,
                   "de l'identité multi-adresses dont AtomBox a déjà besoin pour rattacher" },
           { t:"sql", label:"et tout son historique, sans quitter la base",
             detail:
-`SELECT m.message_id, m.sujet, m.date_reception, r.sens
+`SELECT m.comm_id, m.sujet, m.date_reception, r.sens
   FROM adresse a
-  JOIN message m ON m.from_adresse = a.adresse OR :moi = ANY (m.to_adresses)
-  JOIN rattachement r USING (message_id)
+  JOIN comm m ON m.from_adresse = a.adresse OR :moi = ANY (m.to_adresses)
+  JOIN rattachement r USING (comm_id)
  WHERE a.correspondant_id = :cid AND r.compte_id = :moi
  ORDER BY m.date_reception DESC LIMIT 50;`,
             index:"⚠ ce OR est le piège : il faut une table de participation " +
-                  "(message_id, adresse, role) pour que cette requête s'indexe", warn:true },
+                  "(comm_id, adresse, role) pour que cette requête s'indexe", warn:true },
         ],
         f => [
           { t:"http", label:"recherche par adresse chez le fournisseur",
@@ -139,7 +139,7 @@ ON CONFLICT (pj_id, compte_id) DO UPDATE SET nom = EXCLUDED.nom;`,
             warn:true },
           { t:"sql", label:"AtomBox ne garde que le lien",
             detail:
-`INSERT INTO objet_lie (message_id, application_id, type, ref_externe, url)
+`INSERT INTO objet_lie (comm_id, application_id, type, ref_externe, url)
 VALUES ('` + m.id + `', :app, 'fichier', :chemin, :url);` },
         ]);
     },

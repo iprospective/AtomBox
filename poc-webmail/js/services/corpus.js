@@ -9,7 +9,7 @@
   const P = ABX.PRNG, Fx = ABX.Fixtures, At = ABX.Attachments, St = ABX.Store;
 
   const dossiers = {};   // folderId -> [messages]
-  const parId    = {};   // message_id -> message
+  const parId    = {};   // comm_id -> message
   let   tous     = [];
   let   compte   = {};   // folderId -> { t, u }
 

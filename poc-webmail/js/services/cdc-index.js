@@ -3,7 +3,7 @@
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
    ce que dit le registre, et rien d'autre.
 
-   Généré le 2026-09-03 — 139 décisions, 54 questions, 19 chapitres. */
+   Généré le 2026-09-03 — 141 décisions, 55 questions, 19 chapitres. */
 (function (ABX) {
   "use strict";
   ABX.CDC = {
@@ -799,6 +799,16 @@
       "etat": "valide"
     },
     {
+      "id": "D138",
+      "objet": "Le pivot comm : un tronc polymorphe partitionné par canal, dès la V1",
+      "etat": "valide"
+    },
+    {
+      "id": "D139",
+      "objet": "Trois motifs, trois gestes : on refuse sur un fait, on met en quarantaine sur une présomption, on alerte sur un indice",
+      "etat": "valide"
+    },
+    {
       "id": "D25",
       "objet": "Extraction réversible (exigence)",
       "etat": "autre"
@@ -1029,9 +1039,9 @@
     },
     {
       "id": "Q38",
-      "objet": "Sépare-t-on message et message_email dès la V1 ?",
-      "bloque": "D98, chemin le plus chaud",
-      "urgence": "haute"
+      "objet": "Séparer message et message_email dès la V1 ?",
+      "bloque": "—",
+      "urgence": "tranchee"
     },
     {
       "id": "Q39",
@@ -1095,9 +1105,15 @@
     },
     {
       "id": "Q49",
-      "objet": "Que fait AtomBox d'un message suspect : alerter, mettre en quarantaine, refuser ?",
-      "bloque": "D128, D71",
-      "urgence": "haute"
+      "objet": "Alerter, mettre en quarantaine, ou refuser ?",
+      "bloque": "—",
+      "urgence": "tranchee"
+    },
+    {
+      "id": "Q55",
+      "objet": "Quels poids et seuils numériques pour le score de D128 ?",
+      "bloque": "D139, calibrage",
+      "urgence": "moyenne"
     },
     {
       "id": "Q50",

@@ -5,7 +5,7 @@
   const App = () => ABX.Controllers.App;
 
   const IDX_TRI = {
-    date_desc: ["index (tag_id, sorti_le DESC, message_id) — tri porté par l'index (D16)", false],
+    date_desc: ["index (tag_id, sorti_le DESC, comm_id) — tri porté par l'index (D16)", false],
     date_asc:  ["même index parcouru à l'envers", false],
     from:      ["tri NON indexé — tenable seulement parce que la fenêtre est paginée", true],
     subj:      ["tri NON indexé — idem", true],
@@ -35,16 +35,18 @@
         : folder.kind === "axe"  ? `t.axe_id = :axe            -- récursif : l'axe sans la valeur`
         : `t.axe_id = :axe AND t.valeur = :valeur`;
       const jointure = folder.kind === "virtuel" || folder.kind === "axe"
-        ? "\n  JOIN message_tag mt USING (message_id) JOIN tag t USING (tag_id)" : "";
+        ? "\n  JOIN comm_tag mt USING (comm_id) JOIN tag t USING (tag_id)" : "";
       ABX.log("Ouvrir « " + folder.label + " »",
-`SELECT m.message_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
-  FROM rattachement r JOIN message m USING (message_id)${jointure}
+`-- la liste ne touche QUE le tronc : aucune jointure vers comm_email (D138)
+SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
+  FROM rattachement r JOIN comm m USING (comm_id)${jointure}
  WHERE r.compte_id = :moi AND ${where}
  ORDER BY m.date_reception DESC
  LIMIT 50;`,
         folder.kind === "axe" || folder.kind === "virtuel"
-          ? "index (tag_id, sorti_le DESC, message_id) — D16, date dénormalisée dans la liaison"
-          : "index (compte_id, sorti_le DESC) — D36 : la portée EST le chemin d'accès");
+          ? "index (tag_id, sorti_le DESC, comm_id) — D16, date dénormalisée dans la liaison"
+          : "index (compte_id, sorti_le DESC) — D36 : la portée EST le chemin d'accès" +
+            " · partition (type='email', période) : ni le chat ni les canaux à venir ne sont balayés (D138/D13)");
     },
 
     peindre() {
@@ -95,8 +97,8 @@
       if (s === "tous") return ABX.log("Sens : tous",
         `SELECT … -- aucune clause de sens`, "l'index de liste suffit, rien de plus à payer");
       ABX.log("Filtre « " + (s === "in" ? "reçus" : "envoyés") + " »",
-`SELECT m.message_id, m.sujet, m.from_nom, m.date_reception
-  FROM rattachement r JOIN message m USING (message_id)
+`SELECT m.comm_id, m.sujet, m.from_nom, m.date_reception
+  FROM rattachement r JOIN comm m USING (comm_id)
  WHERE r.compte_id = :moi AND <portée du dossier>
    AND r.sens = '${s === "in" ? "recu" : "envoye"}'
  ORDER BY m.date_reception DESC LIMIT 50;
@@ -119,8 +121,8 @@
         `SELECT … WHERE m.nb_pieces_jointes > 0 …;`,
         "nb_pieces_jointes dénormalisé (D29) — sinon un COUNT par ligne de liste");
       else if (f === "lourds") ABX.log("Filtre « lourds » — la file de recompression (D70)",
-`SELECT m.message_id, m.sujet, m.taille_octets, m.nb_pieces_jointes
-  FROM rattachement r JOIN message m USING (message_id)
+`SELECT m.comm_id, m.sujet, m.taille_octets, m.nb_pieces_jointes
+  FROM rattachement r JOIN comm m USING (comm_id)
  WHERE r.compte_id = :moi AND <portée du dossier>
    AND m.taille_octets > 2 * 1024 * 1024
  ORDER BY m.taille_octets DESC LIMIT 50;`,

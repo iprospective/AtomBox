@@ -23,7 +23,7 @@
      est une colonne dont personne n'a encore eu besoin. */
   function messageJson(m, complet) {
     const o = {
-      message_id: m.id,
+      comm_id: m.id,
       sujet: m.subject,
       de: { nom: m.from, adresse: m.mail },
       a: m.to,
@@ -79,38 +79,38 @@
                 "rattachement, donc un message hors portée n'existe simplement pas — 404, pas 403" },
         { t:"sql", label:"le message et ce que ce compte en a fait",
           detail:
-`SELECT m.message_id, m.sujet, m.from_nom, m.from_adresse, m.date_reception,
+`SELECT m.comm_id, m.sujet, m.from_nom, m.from_adresse, m.date_reception,
        m.taille_octets, m.nb_pieces_jointes, m.thread_id, m.blob_ref,
        r.lu_le, r.sorti_le, r.motif_sortie, r.dossier_id, r.sens
   FROM rattachement r
-  JOIN message m USING (message_id)
- WHERE m.message_id = :id AND r.compte_id = :moi;`,
-          index:"index (message_id, compte_id) sur rattachement — jamais SELECT * : les headers " +
+  JOIN comm m USING (comm_id)
+ WHERE m.comm_id = :id AND r.compte_id = :moi;`,
+          index:"index (comm_id, compte_id) sur rattachement — jamais SELECT * : les headers " +
                 "sont TOASTés (D27) et ne servent pas à l'affichage" },
         { t:"sql", label:"les pièces jointes — liaison et blob",
           detail:
 `SELECT l.ordre, l.nom_fichier, l.mime_declare, l.transfer_encoding,
        p.pj_id, p.octets, p.mime_detecte, p.sha256,
-       (SELECT count(*) FROM message_piece_jointe x WHERE x.pj_id = p.pj_id) AS partage_par
-  FROM message_piece_jointe l JOIN piece_jointe p USING (pj_id)
- WHERE l.message_id = :id ORDER BY l.ordre;`,
-          index: m.pj ? "index (message_id, ordre) ; le sous-select de partage coûte un accès par " +
+       (SELECT count(*) FROM comm_piece_jointe x WHERE x.pj_id = p.pj_id) AS partage_par
+  FROM comm_piece_jointe l JOIN piece_jointe p USING (pj_id)
+ WHERE l.comm_id = :id ORDER BY l.ordre;`,
+          index: m.pj ? "index (comm_id, ordre) ; le sous-select de partage coûte un accès par " +
                         "PJ — à ne garder que si l'écran l'affiche vraiment"
                       : "aucune ligne ici : nb_pieces_jointes valait 0, la requête aurait pu être évitée",
           warn: m.pj > 0 },
         { t:"sql", label:"les tags, avec leur application d'origine",
           detail:
 `SELECT t.axe_id, t.valeur, t.ref_externe, a.code AS application
-  FROM message_tag mt JOIN tag t USING (tag_id)
+  FROM comm_tag mt JOIN tag t USING (tag_id)
   JOIN application a ON a.application_id = t.application_id
- WHERE mt.message_id = :id
+ WHERE mt.comm_id = :id
    AND t.axe_id = ANY (:axes_lisibles_par_moi);`,
           index:"l'ACL des axes est un ANY sur une liste calculée à l'authentification (D18) — " +
                 "pas une jointure de plus à chaque message" },
         { t:"sql", label:"le fil de discussion",
           detail:
-`SELECT message_id, from_nom, sujet, date_reception
-  FROM message WHERE thread_id = :thread
+`SELECT comm_id, from_nom, sujet, date_reception
+  FROM comm WHERE thread_id = :thread
  ORDER BY date_reception LIMIT 50;`,
           index:"index (thread_id, date_reception) — D55. ⚠ le fil ignore la portée : un message " +
                 "du fil que ce compte ne peut pas voir doit apparaître en creux, pas disparaître (Q26)",
@@ -152,7 +152,7 @@
         { t:"sql", label:"une écriture par ouverture",
           detail:
 `UPDATE rattachement SET lu_le = now()
- WHERE message_id = :id AND compte_id = :moi AND lu_le IS NULL;`,
+ WHERE comm_id = :id AND compte_id = :moi AND lu_le IS NULL;`,
           index:"le IS NULL évite de réécrire une ligne déjà lue — sans lui, chaque relecture " +
                 "salit une page (D41)" },
         { t:"render", label:"compteurs de l'arborescence rafraîchis",
@@ -181,17 +181,17 @@
           detail:"un seul endroit où se décide la clause WHERE, pour un seul plan d'exécution" },
         { t:"sql", label: virtuel ? "dossier virtuel : le prédicat est un tag" : "dossier réel",
           detail: virtuel
-            ? `SELECT m.message_id, m.sujet, m.from_nom, m.snippet, m.date_reception,
+            ? `SELECT m.comm_id, m.sujet, m.from_nom, m.snippet, m.date_reception,
        m.nb_pieces_jointes, r.lu_le, r.sens
-  FROM message_tag mt
+  FROM comm_tag mt
   JOIN tag t ON t.tag_id = mt.tag_id
-  JOIN rattachement r ON r.message_id = mt.message_id AND r.compte_id = :moi
-  JOIN message m ON m.message_id = mt.message_id
+  JOIN rattachement r ON r.comm_id = mt.comm_id AND r.compte_id = :moi
+  JOIN comm m ON m.comm_id = mt.comm_id
  WHERE t.axe_id = :axe AND t.valeur = :valeur AND r.sorti_le IS NULL
  ORDER BY m.date_reception DESC LIMIT 50;`
-            : `SELECT m.message_id, m.sujet, m.from_nom, m.snippet, m.date_reception,
+            : `SELECT m.comm_id, m.sujet, m.from_nom, m.snippet, m.date_reception,
        m.nb_pieces_jointes, r.lu_le, r.sens
-  FROM rattachement r JOIN message m USING (message_id)
+  FROM rattachement r JOIN comm m USING (comm_id)
  WHERE r.compte_id = :moi AND r.dossier_id = :dossier AND r.sorti_le IS NULL
  ORDER BY m.date_reception DESC LIMIT 50;`,
           index: virtuel
@@ -258,13 +258,13 @@
                 "aucun moyen de savoir ce qui a déjà été livré en base" },
         { t:"sql", label:"BEGIN — le message est écrit UNE fois (D10)",
           detail:
-`INSERT INTO message (message_id, sujet, corps, from_adresse, date_envoi, blob_ref)
+`INSERT INTO comm (comm_id, sujet, corps, from_adresse, date_envoi, blob_ref)
 VALUES (:id, :sujet, :corps, '` + d.de + `', now(), :ref);`,
           index:"le corps part au magasin d'octets, pas dans la colonne : la base indexe, elle " +
                 "ne stocke pas (D05/D07)" },
         { t:"sql", label:"l'expéditeur — sorti de la file dès l'écriture",
           detail:
-`INSERT INTO rattachement (message_id, compte_id, boite_id, sens,
+`INSERT INTO rattachement (comm_id, compte_id, boite_id, sens,
                           recu_le, sorti_le, motif_sortie)
 VALUES (:id, :moi, :boite, 'envoye', now(), now(), 'envoye');`,
           index:"le sens est posé ICI, à l'émission (D90) : c'est ce qui rend le filtre " +
@@ -273,7 +273,7 @@ VALUES (:id, :moi, :boite, 'envoye', now(), now(), 'envoye');`,
       if (internes.length) e.push(
         { t:"sql", label:internes.length + " destinataire(s) interne(s) — livrés en base, sans SMTP",
           detail:
-`INSERT INTO rattachement (message_id, compte_id, boite_id, sens, recu_le)
+`INSERT INTO rattachement (comm_id, compte_id, boite_id, sens, recu_le)
 SELECT :id, b.compte_id, b.boite_id, 'recu', now() FROM boite b
  WHERE b.adresse = ANY (:internes);   -- ` + internes.join(", "),
           index:"une ligne par destinataire, un seul message : c'est exactement ce que la " +
@@ -283,7 +283,7 @@ SELECT :id, b.compte_id, b.boite_id, 'recu', now() FROM boite b
           detail:
 `INSERT INTO message_lien (message_porteur, message_source, type)
 VALUES (:id, '` + d.src + `', 'reference');
-INSERT INTO acl_message (message_id, principal, droit, accorde_par)
+INSERT INTO acl_message (comm_id, principal, droit, accorde_par)
 SELECT '` + d.src + `', a, 'lire', :moi FROM unnest(:internes) a;`,
           index:"l'ACL est indépendante et durable (D60) : le destinataire garde l'accès même si " +
                 "l'expéditeur perd le sien (D58/D67)" });
@@ -324,7 +324,7 @@ SELECT '` + d.src + `', a, 'lire', :moi FROM unnest(:internes) a;`,
         { t:"route", label:"routes/api.php",
           detail:"PATCH /api/v1/messages/{id}/rattachement → RattachementController::update" },
         { t:"acl", label:"la portée est dans l'écriture elle-même",
-          detail:"… WHERE message_id = :id AND compte_id = :moi",
+          detail:"… WHERE comm_id = :id AND compte_id = :moi",
           index:"aucune vérification préalable : un compte hors portée met à jour zéro ligne, " +
                 "et le contrôleur répond 404 sur ce zéro" },
       ].concat(etapesSql).concat([

@@ -38,8 +38,8 @@
   D.byId("gsearch").oninput = e => {
     if (e.target.value.length !== 3) return;
     ABX.log("Recherche globale plein texte",
-`SELECT m.message_id, ts_rank(m.corps_tsv, plainto_tsquery('french', :q)) AS rang
-  FROM rattachement r JOIN message m USING (message_id)
+`SELECT m.comm_id, ts_rank(m.corps_tsv, plainto_tsquery('french', :q)) AS rang
+  FROM rattachement r JOIN comm m USING (comm_id)
  WHERE r.compte_id = :moi                      -- la portée d'abord (D36)
    AND m.corps_tsv @@ plainto_tsquery('french', :q)
    AND r.sorti_le > now() - interval '2 years'  -- fenêtre par défaut : sans elle, pas d'élagage
