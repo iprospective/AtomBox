@@ -1107,9 +1107,9 @@
     },
     {
       "id": "Q54",
-      "objet": "Le défi anti-robot est-il au périmètre, et à quel jalon ?",
-      "bloque": "D137, D71, D119",
-      "urgence": "moyenne"
+      "objet": "Le défi anti-robot est-il au périmètre ?",
+      "bloque": "D137",
+      "urgence": "autre"
     },
     {
       "id": "Q52",
