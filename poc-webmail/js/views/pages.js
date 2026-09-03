@@ -92,6 +92,22 @@
         ce que le cycle de vie de l'émission permet, et qu'un filtre sur le mot
         « noreply » ne saura jamais faire.</p></div>
 
+    <div class="box"><h4>L'ordre des dossiers vous appartient</h4>
+      <p>Survolez le nom d'un axe dans l'arborescence : des commandes apparaissent pour le
+        <b>monter</b>, le <b>descendre</b>, ou trier ses dossiers par <b>activité récente</b> ou
+        <b>A→Z</b>. L'ordre est le vôtre, il est retenu d'une session à l'autre (D135). Il n'y a
+        pas d'ordre manuel sur les dossiers d'un axe : ranger deux cents fournisseurs à la main
+        serait une corvée, et l'ordre serait périmé au premier tiers créé dans l'ERP.</p>
+      <p>Le nœud d'un axe porte simplement son nom — plus de « Tous — Fournisseurs » au-dessus
+        d'un titre « Fournisseurs ».</p></div>
+
+    <div class="box"><h4>Ce que la page CDC montre de plus</h4>
+      <p>Le <b>dictionnaire des données</b> (chapitre 16) y est lu depuis la même source que
+        ce POC : entités, champs, relations, énumérations, workflows, actions, templates,
+        composants, protocoles, normes, routes. Les pages <b>Fonctionnalités</b> et
+        <b>Roadmap</b> ne sont plus saisies ici, elles lisent ce dictionnaire — et le harnais de
+        tests vérifie que chaque décision qu'il cite existe au registre.</p></div>
+
     <div class="box"><h4>Ce que la maquette ne prouve pas</h4>
       <p>Rien sur la <b>performance</b> : tout est instantané sur des données inventées, et
         les requêtes affichées ne sont jamais exécutées. Une interface validée ici peut
@@ -100,126 +116,18 @@
   }
 
   /* ---- fonctionnalités -------------------------------------------------- */
-  const FEATURES = [
-    ["Réception et stockage", [
-      ["Ingestion IMAP des boîtes administrées", 1, "maquetté", "D46, D49"],
-      ["Stockage compressé zstd, hors base", 1, "décidé", "D05, D07"],
-      ["Déduplication des messages identiques", 1, "décidé", "D10, D64"],
-      ["Détachement et déduplication des pièces jointes", 1, "maquetté", "D11, D24"],
-      ["Verdicts DKIM / SPF figés à l'ingestion", 1, "décidé", "D26, D27"],
-      ["Quarantaine et apprentissage anti-spam", 1, "maquetté", "D71, D91"],
-      ["Livraison LMTP (sans Dovecot)", 2, "décidé", "D42, D45"],
-      ["Module de stockage Dovecot", 2, "à trancher", "Q24"],
-      ["Import d'historique (IMAP, mbox, PST)", 1, "décidé", "D107"],
-    ]],
-    ["Classement et recherche", [
-      ["Axes calés sur une arborescence IMAP réelle", 1, "maquetté", "D16, ch. 14"],
-      ["Tags par axes, paramétrables, avec ACL", 1, "maquetté", "D02, D16, D18"],
-      ["Dossiers virtuels = filtres enregistrés", 1, "maquetté", "D75, D77"],
-      ["Dossiers utilisateur classiques", 1, "maquetté", "D51"],
-      ["Recherche plein texte sur la zone active", 1, "décidé", "D34"],
-      ["Recherche dans les pièces jointes (nom)", 1, "maquetté", "D96"],
-      ["Moteur de filtres (remplace Sieve)", 1, "décidé", "D74"],
-      ["Nature du message : diffusion, notification, service", 1, "maquetté", "D130"],
-      ["Newsletters hors de la file, factures dedans", 1, "maquetté", "D130, D13"],
-      ["Un dossier par liste, déduit du corpus", 1, "maquetté", "D133, D77"],
-      ["Archivage par sortie de file", 1, "maquetté", "D14, D30"],
-    ]],
-    ["Travail au quotidien", [
-      ["Statut de traitement (workflow)", 1, "maquetté", "D93"],
-      ["Onglets multiples, restaurés", 1, "maquetté", "—"],
-      ["Composition : nouveau, réponse, transfert", 1, "maquetté", "Q26, D58"],
-      ["Transfert par référence, sans copie", 1, "maquetté", "D58, D67"],
-      ["Envoi interne hors SMTP", 2, "décidé", "D12"],
-      ["Groupes de discussion par service", 2, "décidé", "D122, Q46"],
-      ["Messages de groupe stockés en base, pas en fichiers", 2, "décidé", "D123"],
-      ["Position de lecture par membre", 2, "décidé", "D124"],
-      ["Temps réel (arrivée, prise en charge)", 2, "décidé", "D125"],
-      ["File de travail partagée sur boîte commune", 1, "à trancher", "Q35"],
-      ["Note interne d'équipe, jamais transmise", 1, "décidé", "D101"],
-      ["Identités d'expédition et signatures", 1, "décidé", "D102"],
-      ["Boîte partagée : « au nom de » optionnel", 1, "décidé", "D116"],
-      ["Réponses types partagées", 1, "décidé", "D102"],
-      ["Réveil et échéance sur un message", 1, "décidé", "D103"],
-      ["Complétion des destinataires", 1, "décidé", "D109"],
-      ["Impression et export PDF", 1, "décidé", "D110"],
-    ]],
-    ["Collaboration et accès", [
-      ["Boîtes communes, alias = vraies boîtes", 1, "maquetté", "D38, D39"],
-      ["ACL par email, partage révocable", 1, "décidé", "D57, D60"],
-      ["Journal d'activité (qui a lu, traité)", 1, "décidé", "D54, D56"],
-      ["Rôles d'administration", 1, "maquetté", "D72"],
-      ["Authentification par jeton, SSO possible", 1, "décidé", "D63"],
-      ["Paramétrage en cascade, verrouillable", 1, "décidé", "D106"],
-      ["Interface responsive (mobile)", 1, "décidé", "D112"],
-      ["Accès IMAP en repli assumé", 2, "à trancher", "Q24, D112"],
-    ]],
-    ["Intégration", [
-      ["API REST — hypothèse de travail", 1, "à trancher", "Q07, Q08"],
-      ["Contexte métier affiché sans être stocké", 1, "maquetté", "D19, D21"],
-      ["Applications connectées, jetons, portée", 1, "maquetté", "D20, D37"],
-      ["Événements sortants (webhooks) rejouables", 1, "maquetté", "D86"],
-      ["Mise en cache du contexte métier", 1, "à trancher", "Q31"],
-      ["SDK par langage (PHP, puis JS)", 1, "décidé", "D108"],
-      ["Composants d'interface embarquables", 1, "décidé", "D108"],
-    ]],
-    ["Émission et délivrabilité", [
-      ["Cycle de vie de l'envoi, par destinataire", 1, "décidé", "D99"],
-      ["Envoi programmé, annulable avant l'heure", 1, "décidé", "D99"],
-      ["Retours de non-remise corrélés (DSN)", 1, "décidé", "D99, D66"],
-      ["Rapports DMARC agrégés, délivrabilité", 1, "décidé", "D100"],
-      ["Absence et réponse auto, renvoi sur collègue", 1, "décidé", "D113, D74"],
-      ["Pièce jointe par lien de téléchargement", 1, "décidé", "D111"],
-      ["Émission via le relais du client", 1, "décidé", "D114"],
-      ["Retour d'enveloppe unique (VERP)", 1, "décidé", "D119"],
-      ["Réécriture d'enveloppe (SRS) sur les renvois", 1, "décidé", "D120"],
-      ["Journal du MTA : sort connu en secondes", 1, "décidé", "D119"],
-      ["Boîte de collecte DMARC + dépouillement", 1, "décidé", "D115"],
-      ["Adresse non répondable apprise d'un DSN 5xx", 2, "maquetté", "D131, D119"],
-      ["Désabonnement en un clic (List-Unsubscribe)", 2, "décidé", "D132, Q51"],
-    ]],
-    ["Sécurité et conformité", [
-      ["HTML assaini à l'affichage, pas à l'ingestion", 1, "décidé", "D105, D25"],
-      ["Images externes bloquées, proxy serveur", 1, "décidé", "D105"],
-      ["Bannière « expéditeur externe »", 1, "décidé", "D105"],
-      ["Avertir avant de répondre à un « noreply@ »", 1, "maquetté", "D131"],
-      ["Réorienter vers un contact connu du domaine", 1, "décidé", "D131"],
-      ["Aucun accusé de lecture émis ni demandé", 1, "décidé", "D105"],
-      ["Rétention par type de contenu et par boîte", 1, "décidé", "D104"],
-      ["Gel sur litige — prime sur toute purge", 1, "décidé", "D104"],
-      ["Suppression = détachement, déchetterie", 1, "décidé", "D118"],
-      ["Déchetterie : métadonnées, restauration à l'origine", 1, "décidé", "D121"],
-      ["Verrouillage : jamais le poste de travail", 1, "décidé", "D117"],
-      ["Expéditeur normalisé sur le carnet", 1, "maquetté", "D126"],
-      ["Signal d'usurpation par nom (règle B1)", 1, "maquetté", "D128"],
-      ["Table domaine + adresse éclatée (local@domaine)", 1, "décidé", "D136"],
-      ["Pivot comm partitionné par canal", 1, "maquetté", "D138"],
-      ["Refus, quarantaine ou alerte selon le motif", 2, "décidé", "D139"],
-      ["Poids et seuils du score", 2, "à trancher", "Q55"],
-      ["Indicateur d'expéditeur fiable, jamais sans alignement", 1, "maquetté", "D137"],
-      ["Validation humaine d'un expéditeur, avec portée", 1, "maquetté", "D137, D106"],
-      ["Défi anti-robot (« je ne suis pas un robot »)", 0, "en pause", "Q54"],
-      ["Catalogue de règles anti-usurpation", 1, "décidé", "D127, D128"],
-      ["Cohérence IBAN / tiers de l'ERP", 1, "décidé", "D129"],
-      ["Alerter, mettre en quarantaine, ou refuser ?", 1, "à trancher", "Q49"],
-      ["Analyse des traceurs d'images (option)", 5, "à venir", "D105"],
-    ]],
-    ["Suite collaborative", [
-      ["Contacts — lecture du correspondant", 1, "maquetté", "D35, D95b"],
-      ["Tâches, contacts, cloud, CRM par connecteur", 1, "maquetté", "D94"],
-      ["Contacts — carnet d'adresses", 3, "à venir", "D95b"],
-      ["Tâches internes", 3, "à venir", "D95b"],
-      ["Cloud interne", 3, "à venir", "D95b"],
-      ["CRM interne", 3, "à venir", "D95b, Q39"],
-    ]],
-    ["Canaux", [
-      ["E-mail", 1, "maquetté", "—"],
-      ["Messagerie interne", 2, "décidé", "D12"],
-      ["SMS", 4, "à venir", "D97"],
-      ["WhatsApp", 4, "à venir", "D97"],
-      ["Téléphonie", 4, "à venir", "D97"],
-    ]],
-  ];
+  /* FONCTIONNALITÉS — LUES dans l'index du CDC (docs/dict/fonctionnalites.yml).
+     La forme [[domaine, [[libellé, jalon, état, réf.]]]] est celle qu'attend le
+     rendu ; le regroupement par domaine suit l'ordre d'apparition dans la source. */
+  const FEATURES = (() => {
+    const doms = [], par = {};
+    (ABX.CDC.dict.fonctionnalites || []).forEach(f => {
+      if (!par[f.domaine]) { par[f.domaine] = []; doms.push(f.domaine); }
+      par[f.domaine].push([f.libelle, f.jalon, f.etat,
+        (f.decisions || []).concat(f.questions || []).join(", ") || "—"]);
+    });
+    return doms.map(d => [d, par[d]]);
+  })();
 
   const ETATS = { "maquetté":"ok", "décidé":"wait", "à trancher":"due", "à venir":"",
                   "en pause":"pause" };
@@ -269,6 +177,22 @@
         <td><b>${F.esc(c.titre)}</b></td>
         <td><span class="hash">${F.esc(c.fichier)}</span></td></tr>`).join("")}</table></div>
 
+    <div class="box"><h4>Dictionnaire des données — chapitre 16, lu depuis la même source</h4>
+      <div class="hint">${(() => { const D = C.dict; return [
+        ["entités", D.entites.length], ["champs", Object.values(D.champs).reduce((n, l) => n + l.length, 0)],
+        ["relations", D.relations.length], ["énumérations", Object.keys(D.enumerations).length],
+        ["workflows", D.workflows.length], ["actions", D.actions.length], ["templates", D.templates.length],
+        ["composants", Object.values(D.composants).reduce((n, l) => n + l.length, 0)],
+        ["protocoles", D.protocoles.length], ["normes", D.normes.length], ["routes", D.routes.length]]
+        .map(([k, n]) => `<b>${n}</b> ${k}`).join(" · "); })()}
+        — types logiques, jamais SQL : le SGBD n'est pas définitivement statué.</div>
+      <table class="erpl"><tr><th>Entité</th><th>Domaine</th><th>Rôle</th><th>État</th></tr>
+      ${C.dict.entites.map(e => `<tr><td><b>${F.esc(e.nom)}</b></td><td>${F.esc(e.domaine)}</td>
+        <td>${F.esc((e.role || "").trim())}</td><td>${e.etat || ""}</td></tr>`).join("")}</table>
+      <div class="hint" style="margin-top:8px"><b>Workflows</b> : ${C.dict.workflows.map(w =>
+        F.esc(w.nom)).join(" · ")}. <b>Actions</b> tracées au journal : ${
+        C.dict.actions.filter(a => a.trace === true || a.trace === "oui").length} sur ${C.dict.actions.length}.</div></div>
+
     <div class="box"><h4>Questions ouvertes — ce qui reste à trancher</h4>
       <table class="erpl"><tr><th>#</th><th>Question</th><th>Bloque</th><th>Urgence</th></tr>
       ${["haute","moyenne","basse"].map(u => parUrg(u).map(q => `<tr>
@@ -287,40 +211,12 @@
   }
 
   /* ---- feuille de route -------------------------------------------------- */
-  const ROADMAP = [
-    { v:1, titre:"Le moteur, l'API, le webmail", etat:"en conception",
-      contenu:["Ingestion IMAP en lecture seule sur le domaine pilote",
-        "Stockage zstd hors base, index PostgreSQL",
-        "Déduplication des messages et des pièces jointes",
-        "Tags par axes, dossiers virtuels, archivage",
-        "Webmail : lecture, composition, statut de traitement",
-        "API et applications connectées (Dolibarr, Redmine, Nextcloud)",
-        "Suite collaborative : par connecteur, ou absente",
-        "Émission suivie : état par destinataire, envoi programmé, DSN corrélés",
-        "Délivrabilité : rapports DMARC agrégés",
-        "Affichage sûr, rétention et gel, paramétrage en cascade",
-        "Import d'historique, SDK et composants embarquables"],
-      note:"Le produit est utilisable seul : une messagerie qui classe et qui se branche." },
-    { v:2, titre:"La livraison", etat:"cadré",
-      contenu:["Livraison LMTP sans passer par Dovecot",
-        "Messagerie interne hors SMTP",
-        "Module de stockage Dovecot (à trancher — Q24)"],
-      note:"AtomBox cesse de lire les boîtes des autres pour recevoir directement." },
-    { v:3, titre:"Les composants internes", etat:"cible",
-      contenu:["Carnet de contacts", "Tâches", "Cloud (fichiers)", "CRM"],
-      note:"AtomBox devient la suite collaborative. Le CRM est le morceau le plus ambitieux : " +
-           "à chiffrer comme un produit à part entière." },
-    { v:4, titre:"Les canaux", etat:"horizon",
-      contenu:["SMS", "WhatsApp Business", "Téléphonie (CTI, journal d'appels)"],
-      note:"AtomBox cesse d'être une messagerie pour devenir un hub de communication. " +
-           "Le pivot reste le correspondant — c'est lui qui unifie un mail, un SMS et un appel." },
-    { v:5, titre:"L'horizon — et il n'est pas un plan", etat:"réserve",
-      contenu:["Analyse des images externes : distinguer le contenu du pixel espion (option)"],
-      note:"Une seule entrée, et c'est volontaire : ce jalon existe pour empêcher de faire " +
-           "l'analyse de traceurs en V1 « puisqu'on y est ». Un jalon qui ne contient qu'une " +
-           "ligne est un jalon honnête ; le remplir d'idées serait l'erreur que le phasage " +
-           "sert justement à éviter." },
-  ];
+  /* ROADMAP — LUE dans l'index du CDC (docs/dict/jalons.yml), plus jamais
+     saisie ici : le POC et le chapitre 16 disent la même chose parce qu'ils
+     lisent le même fichier. */
+  const ROADMAP = (ABX.CDC.dict.jalons || []).map(j => ({
+    v: parseInt(j.id.replace(/\D/g, ""), 10), titre: j.titre, etat: j.etat,
+    note: j.note || "", contenu: j.contenu || [] }));
 
   function roadmap() {
     return `<div class="box"><h4>Feuille de route</h4>

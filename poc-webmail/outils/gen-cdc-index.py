@@ -49,6 +49,20 @@ for cel in lignes("cdc-rm2881-90-decisions.md", r"^D\d+"):
     decisions.append({ "id": propre(cel[0]), "objet": propre(cel[1]),
                        "etat": etat(cel[2]) if len(cel) > 2 else "autre" })
 
+# les CONSEILS (C) font partie du registre : le dictionnaire les cite (conseils: [C05])
+conseils = []
+for cel in lignes("cdc-rm2881-90-decisions.md", r"^C\d+"):
+    conseils.append({ "id": propre(cel[0]), "objet": propre(cel[1]),
+                      "etat": propre(cel[3]) if len(cel) > 3 else "" })
+
+# contrôle : une décision rédigée en section mais absente de la vue d'ensemble est
+# invisible du POC, du dictionnaire et de tout ce qui lit l'index — on le dit.
+_src = io.open(os.path.join(CDC, "cdc-rm2881-90-decisions.md"), encoding="utf-8").read()
+_sections = set(re.findall(r"^#{2,3} (D\d+b?) ", _src, re.M))
+_table = set(d["id"] for d in decisions)
+for _d in sorted(_sections - _table):
+    print("⚠ %s est rédigée en section mais ABSENTE de la vue d'ensemble — invisible de l'index" % _d, file=sys.stderr)
+
 questions = []
 for cel in lignes("cdc-rm2881-99-questions-ouvertes.md", r"^Q\d+"):
     questions.append({ "id": propre(cel[0]), "objet": propre(cel[1]),
@@ -63,6 +77,15 @@ for f in sorted(os.listdir(CDC)):
     chapitres.append({ "n": m.group(1), "fichier": f,
                        "titre": propre(titre.lstrip("# ")).split(" — ")[0] })
 
+# ---- le dictionnaire des données (docs/dict/*.yml) : la même source que le chapitre 16 ----
+import yaml
+DICT = os.path.join(CDC, "dict")
+def yml(nom):
+    return yaml.safe_load(io.open(os.path.join(DICT, nom + ".yml"), encoding="utf-8"))
+dico = { k: yml(k) for k in ("entites", "champs", "relations", "enumerations", "workflows",
+                              "actions", "templates", "composants", "protocoles", "normes",
+                              "routes", "fonctionnalites", "jalons") }
+
 js = """/* INDEX DU CDC — FICHIER GÉNÉRÉ, ne pas éditer à la main.
    Produit par outils/gen-cdc-index.py depuis le CDC réel (RM2881). Le retaper
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
@@ -76,9 +99,11 @@ js = """/* INDEX DU CDC — FICHIER GÉNÉRÉ, ne pas éditer à la main.
 """ % (datetime.date.today().isoformat(), len(decisions), len(questions), len(chapitres),
        json.dumps({ "genere": datetime.date.today().isoformat(), "ticket": "RM2881",
                     "depot": "iprospective/tools/atombox-webmail-core",
-                    "chapitres": chapitres, "decisions": decisions, "questions": questions },
+                    "chapitres": chapitres, "decisions": decisions, "questions": questions,
+                    "conseils": conseils, "dict": dico },
                   ensure_ascii=False, indent=2))
 
 io.open(os.path.abspath(SORTIE), "w", encoding="utf-8").write(js)
-print("%s : %d décisions, %d questions, %d chapitres"
-      % (os.path.relpath(SORTIE), len(decisions), len(questions), len(chapitres)))
+print("%s : %d décisions, %d questions, %d chapitres, %d fonctionnalités, %d entités"
+      % (os.path.relpath(SORTIE), len(decisions), len(questions), len(chapitres),
+         len(dico["fonctionnalites"]), len(dico["entites"])))
