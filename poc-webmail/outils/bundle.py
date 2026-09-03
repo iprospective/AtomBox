@@ -27,6 +27,10 @@ if not fichiers:
 morceaux = []
 for f in fichiers:
     src = io.open(os.path.join(RACINE, f), encoding="utf-8").read()
+    # Le CDC embarqué peut citer « </script> » : dans un script inline, le
+    # navigateur fermerait la balise là. « <\/script » est identique en JS et en
+    # JSON, et inoffensif pour le HTML.
+    src = src.replace("</script", "<\\/script")
     morceaux.append("/* ===== " + f + " ===== */\n" + src)
 bloc = "<script>\n" + "\n".join(morceaux) + "\n</script>"
 

@@ -22,7 +22,10 @@ vrai(html.includes("engendrée par outils/bundle.py"), "le fichier se déclare e
 vrai(html.length > 150000, "taille : " + Math.round(html.length / 1024) + " Ko");
 
 console.log("— il tourne ——————————————————————————————————");
-const js = html.split("<script>")[1].split("</script>")[0];
+/* Le bundle ne contient qu'UN bloc script, mais son contenu peut citer la
+   chaîne « <script> » (le CDC parle d'affichage sûr) : on prend du premier
+   <script> au DERNIER </script>, pas au premier venu. */
+const js = html.slice(html.indexOf("<script>") + 8, html.lastIndexOf("</script>"));
 const doc = creerDocument(), ls = creerStockage();
 const sandbox = { console: { log(){}, warn(){}, error(){} }, document: doc, localStorage: ls,
   matchMedia: () => ({ matches:false }), addEventListener: () => {},

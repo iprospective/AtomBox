@@ -385,3 +385,20 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 /* « en pause » : ni acquis, ni en attente d'arbitrage — ecarte volontairement. */
 .st.pause{background:var(--panel2);color:var(--muted);border:1px dashed var(--line)}
 .jalon.aucun{background:transparent;color:var(--muted);border:1px dashed var(--line)}
+
+/* ---- lecture du CDC et du dictionnaire dans la maquette ----
+   Le texte est long : on le rend lisible (mesure, interligne), pas compact. */
+.doc .lecture{max-width:92ch}
+.doc .lecture h2,.doc .lecture h3,.doc .lecture h4,.doc .lecture h5{margin:18px 0 6px}
+.doc .lecture h2{font-size:17px}.doc .lecture h3{font-size:15px}.doc .lecture h4{font-size:13.5px}
+.doc .lecture p,.doc .lecture li{line-height:1.55;font-size:13px}
+.doc .lecture blockquote,.doc blockquote{margin:10px 0;padding:8px 12px;border-left:3px solid var(--accent);
+  background:var(--panel2);border-radius:0 6px 6px 0}
+.doc .lecture hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+.md-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;background:var(--panel2);
+  border:1px solid var(--line);border-radius:6px;padding:8px 10px;overflow-x:auto;white-space:pre}
+.cdc-lien{color:var(--accent);text-decoration:none;cursor:pointer}
+.cdc-lien:hover{text-decoration:underline}
+.doc .tw{overflow-x:auto}
+.doc td.long{max-width:44ch;white-space:normal}
+.doc .erpl td,.doc .erpl th{vertical-align:top}

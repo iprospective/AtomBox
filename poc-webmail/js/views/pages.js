@@ -7,7 +7,7 @@
   const F = ABX.Fmt, P = ABX.Providers;
 
   const PAGES = [["aide","Aide"], ["features","Fonctionnalités"],
-                 ["cdc","CDC"], ["roadmap","Feuille de route"]];
+                 ["cdc","CDC"], ["dict","Dictionnaire"], ["roadmap","Feuille de route"]];
 
   /* ---- aide ------------------------------------------------------------ */
   function aide() {
@@ -101,12 +101,16 @@
       <p>Le nœud d'un axe porte simplement son nom — plus de « Tous — Fournisseurs » au-dessus
         d'un titre « Fournisseurs ».</p></div>
 
-    <div class="box"><h4>Ce que la page CDC montre de plus</h4>
-      <p>Le <b>dictionnaire des données</b> (chapitre 16) y est lu depuis la même source que
-        ce POC : entités, champs, relations, énumérations, workflows, actions, templates,
-        composants, protocoles, normes, routes. Les pages <b>Fonctionnalités</b> et
-        <b>Roadmap</b> ne sont plus saisies ici, elles lisent ce dictionnaire — et le harnais de
-        tests vérifie que chaque décision qu'il cite existe au registre.</p></div>
+    <div class="box"><h4>Tout le CDC est dans la maquette</h4>
+      <p>La page <b>CDC</b> contient le texte intégral : chaque chapitre, chaque décision,
+        chaque question, chaque conseil. Cliquez un chapitre ou un identifiant (D138, Q54,
+        C09) où qu'il apparaisse — y compris dans une autre page — et sa section s'ouvre.</p>
+      <p>La page <b>Dictionnaire</b> montre les treize tables du chapitre 16 en entier :
+        entités avec leurs champs, relations, énumérations, workflows, actions, templates,
+        composants, protocoles, normes, routes, fonctionnalités, jalons. C'est la même source
+        que le CDC et que ce POC — les pages <b>Fonctionnalités</b> et <b>Roadmap</b> la lisent
+        au lieu d'être saisies — et le harnais de tests vérifie que chaque décision citée
+        existe au registre.</p></div>
 
     <div class="box"><h4>Ce que la maquette ne prouve pas</h4>
       <p>Rien sur la <b>performance</b> : tout est instantané sur des données inventées, et
@@ -152,68 +156,107 @@
   }
 
   /* ---- CDC (index généré) ----------------------------------------------- */
+  /* ---- CDC : tout le texte, pas seulement les tableaux ------------------
+     Les chapitres, chaque décision, chaque question et chaque conseil sont
+     dans l'index (ABX.CDC.textes / sections), rendus en markdown minimal.
+     Ce que l'on lit ici EST le CDC — la maquette n'en résume plus rien. */
   function cdc() {
-    const C = ABX.CDC;
-    if (!C) return `<div class="empty">Index du CDC absent — lancer
-      <code>python3 outils/gen-cdc-index.py</code>.</div>`;
-    const parEtat = e => C.decisions.filter(d => d.etat === e);
-    const parUrg  = u => C.questions.filter(q => q.urgence === u);
-    const LIB = { valide:["validée","ok"], propose:["proposée","wait"], amendee:["amendée","due"],
-                  autre:["—",""] };
-    return `<div class="box"><h4>Cahier des charges — ${C.ticket}</h4>
-      <div class="hint">Index <b>généré</b> depuis le registre réel le ${F.esc(C.genere)} :
-        cette page ne peut pas dire autre chose que ce que dit le CDC. Le document complet
-        est dans <code>${F.esc(C.depot)}</code>, dossier <code>docs/</code>.</div>
-      <div class="chips" style="margin-top:8px">
-        <span class="chip on">${C.decisions.length} décisions</span>
-        <span class="chip on">${C.questions.length} questions</span>
-        <span class="chip on">${C.chapitres.length} chapitres</span>
-        <span class="chip">${parEtat("propose").length} en attente d'arbitrage</span>
-        <span class="chip">${parUrg("haute").length} questions urgentes</span>
-      </div></div>
-
-    <div class="box"><h4>Chapitres</h4>
-      <table class="erpl">${C.chapitres.map(c => `<tr><td class="num">${F.esc(c.n)}</td>
-        <td><b>${F.esc(c.titre)}</b></td>
-        <td><span class="hash">${F.esc(c.fichier)}</span></td></tr>`).join("")}</table></div>
-
-    <div class="box"><h4>Dictionnaire des données — chapitre 16, lu depuis la même source</h4>
-      <div class="hint">${(() => { const D = C.dict; return [
-        ["entités", D.entites.length], ["champs", Object.values(D.champs).reduce((n, l) => n + l.length, 0)],
-        ["relations", D.relations.length], ["énumérations", Object.keys(D.enumerations).length],
-        ["workflows", D.workflows.length], ["actions", D.actions.length], ["templates", D.templates.length],
-        ["composants", Object.values(D.composants).reduce((n, l) => n + l.length, 0)],
-        ["protocoles", D.protocoles.length], ["normes", D.normes.length], ["routes", D.routes.length]]
-        .map(([k, n]) => `<b>${n}</b> ${k}`).join(" · "); })()}
-        — types logiques, jamais SQL : le SGBD n'est pas définitivement statué.</div>
-      <table class="erpl"><tr><th>Entité</th><th>Domaine</th><th>Rôle</th><th>État</th></tr>
-      ${C.dict.entites.map(e => `<tr><td><b>${F.esc(e.nom)}</b></td><td>${F.esc(e.domaine)}</td>
-        <td>${F.esc((e.role || "").trim())}</td><td>${e.etat || ""}</td></tr>`).join("")}</table>
-      <div class="hint" style="margin-top:8px"><b>Workflows</b> : ${C.dict.workflows.map(w =>
-        F.esc(w.nom)).join(" · ")}. <b>Actions</b> tracées au journal : ${
-        C.dict.actions.filter(a => a.trace === true || a.trace === "oui").length} sur ${C.dict.actions.length}.</div></div>
-
+    const C = ABX.CDC, M = ABX.Markdown, ui = ABX.Store.ui.cdc || {};
+    const lien = id => `<a href="#" class="cdc-lien" data-sec="${F.esc(id)}"><b>${F.esc(id)}</b></a>`;
+    const parUrg = u => C.questions.filter(q => q.urgence === u);
+    let lecture = "";
+    if (ui.sec && C.sections[ui.sec])
+      lecture = `<div class="box lecture"><div class="hint"><a href="#" class="cdc-lien" data-sec="">‹ fermer</a>
+        · section <b>${F.esc(ui.sec)}</b> du registre</div>${M.rendre(C.sections[ui.sec])}</div>`;
+    else if (ui.chap && C.textes[ui.chap])
+      lecture = `<div class="box lecture"><div class="hint"><a href="#" class="cdc-lien" data-chap="">‹ fermer</a>
+        · chapitre <b>${F.esc(ui.chap)}</b></div>${M.rendre(C.textes[ui.chap])}</div>`;
+    return `
+    <div class="box"><h4>Le cahier des charges — ${C.chapitres.length} chapitres, ${C.decisions.length} décisions,
+        ${C.questions.length} questions, ${(C.conseils || []).length} conseils</h4>
+      <div class="hint">Généré le ${F.esc(C.genere)} depuis <span class="hash">${F.esc(C.depot)}</span> — ticket
+        ${F.esc(C.ticket)}. Tout le texte est ici : cliquez un chapitre, une décision, une question.</div>
+      <div class="chips" style="margin-top:8px">${C.chapitres.map(c =>
+        `<span class="chip cdc-lien${ui.chap === c.n && !ui.sec ? " on" : ""}" data-chap="${F.esc(c.n)}">${F.esc(c.n)} · ${F.esc(c.titre)}</span>`).join("")}</div></div>
+    ${lecture}
     <div class="box"><h4>Questions ouvertes — ce qui reste à trancher</h4>
       <table class="erpl"><tr><th>#</th><th>Question</th><th>Bloque</th><th>Urgence</th></tr>
       ${["haute","moyenne","basse"].map(u => parUrg(u).map(q => `<tr>
-        <td><b>${F.esc(q.id)}</b></td><td>${F.esc(q.objet)}</td>
+        <td>${lien(q.id)}</td><td>${F.esc(q.objet)}</td>
         <td><span class="hash">${F.esc(q.bloque)}</span></td>
         <td><span class="st ${u === "haute" ? "due" : u === "moyenne" ? "wait" : ""}">${u}</span></td>
         </tr>`).join("")).join("")}</table>
-      <div class="hint">${parUrg("tranchee").length} autres questions ont été tranchées et
-        ont migré vers le registre des décisions.</div></div>
-
+      <div class="hint">${parUrg("tranchee").length} autres questions ont été tranchées — elles restent lisibles
+        depuis le registre, et depuis leur identifiant partout où il apparaît.</div></div>
     <div class="box"><h4>Registre des décisions</h4>
       <table class="erpl"><tr><th>#</th><th>Objet</th><th>État</th></tr>
-      ${C.decisions.map(d => `<tr><td><b>${F.esc(d.id)}</b></td><td>${F.esc(d.objet)}</td>
-        <td><span class="st ${LIB[d.etat][1]}">${LIB[d.etat][0]}</span></td></tr>`).join("")}
-      </table></div>`;
+      ${C.decisions.map(d => `<tr><td>${lien(d.id)}</td><td>${F.esc(d.objet)}</td>
+        <td><span class="st ${d.etat === "valide" ? "ok" : d.etat === "propose" ? "wait" : d.etat === "amendee" ? "due" : ""}">${
+          { valide:"✅ validé", propose:"🟡 proposé", amendee:"❌ amendée" }[d.etat] || d.etat}</span></td></tr>`).join("")}</table></div>
+    <div class="box"><h4>Conseils rendus</h4>
+      <table class="erpl"><tr><th>#</th><th>Conseil</th><th>État</th></tr>
+      ${(C.conseils || []).map(c => `<tr><td>${lien(c.id)}</td><td>${F.esc(c.objet)}</td><td>${F.esc(c.etat)}</td></tr>`).join("")}</table></div>`;
   }
 
-  /* ---- feuille de route -------------------------------------------------- */
+  /* ---- DICTIONNAIRE DES DONNÉES : les treize tables, en entier ----------
+     Rendu GÉNÉRIQUE : les colonnes sont déduites des clés présentes, les
+     listes jointes, les identifiants D/Q/C cliquables. Ajouter une table au
+     dictionnaire n'oblige à rien ici. */
+  const DICT_TABLES = [["entites","Entités"], ["champs","Champs"], ["relations","Relations"],
+    ["enumerations","Énumérations"], ["workflows","Workflows"], ["actions","Actions"],
+    ["templates","Templates"], ["composants","Composants"], ["protocoles","Protocoles"],
+    ["normes","Normes"], ["routes","Routes"], ["fonctionnalites","Fonctionnalités"], ["jalons","Jalons"]];
+  const CACHE_COLS = { role:1, effet:1, engage:1, note:1, notes:1, contenu:1 };
+  function val(v) {
+    if (v === null || v === undefined || v === "") return "—";
+    if (v === true) return "oui"; if (v === false) return "non";
+    if (Array.isArray(v)) return v.map(x => typeof x === "object" ? val(x) : ABX.Markdown.inline(String(x))).join(", ");
+    if (typeof v === "object") return Object.entries(v).map(([k, x]) => `<b>${F.esc(k)}</b> ${val(x)}`).join(" · ");
+    return ABX.Markdown.inline(String(v));
+  }
+  function tableau(objs, ordre) {
+    if (!objs || !objs.length) return "<div class='hint'>—</div>";
+    const cols = ordre || Object.keys(objs.reduce((a, o) => { Object.keys(o).forEach(k => a[k] = 1); return a; }, {}));
+    return `<div class="tw"><table class="erpl"><tr>${cols.map(c => "<th>" + F.esc(c) + "</th>").join("")}</tr>${
+      objs.map(o => "<tr>" + cols.map(c => `<td${CACHE_COLS[c] ? ' class="long"' : ""}>${val(o[c])}</td>`).join("") + "</tr>").join("")}</table></div>`;
+  }
+  function dict() {
+    const D = ABX.CDC.dict, t = ABX.Store.ui.dictTable || "entites";
+    let corps = "";
+    if (t === "entites")
+      corps = D.entites.map(e => `<div class="box"><h4><code>${F.esc(e.nom)}</code> ${e.etat || ""} <span class="hint">· ${F.esc(e.domaine)}${e.jalon ? " · V" + e.jalon : ""}</span></h4>
+        <p>${val((e.role || "").trim())}</p>${e.partition ? `<div class="hint">Partition : ${val(e.partition)}</div>` : ""}
+        ${e.notes ? `<div class="hint"><i>${val(e.notes)}</i></div>` : ""}
+        <div class="hint">Décisions : ${val(e.decisions)}${e.conseils ? " · conseils : " + val(e.conseils) : ""}</div>
+        ${D.champs[e.id] ? tableau(D.champs[e.id], ["nom","type","obligatoire","nature","enum","role"]) : "<div class='hint'>champs : à détailler</div>"}</div>`).join("");
+    else if (t === "champs")
+      corps = Object.entries(D.champs).map(([e, l]) => `<div class="box"><h4><code>${F.esc(e)}</code> — ${l.length} champs</h4>${tableau(l, ["nom","type","obligatoire","nature","enum","role"])}</div>`).join("");
+    else if (t === "enumerations")
+      corps = Object.entries(D.enumerations).map(([n, e]) => `<div class="box"><h4><code>${F.esc(n)}</code></h4><p>${val(e.role)}</p>${tableau(e.valeurs)}${e.questions ? `<div class="hint">Questions : ${val(e.questions)}</div>` : ""}</div>`).join("");
+    else if (t === "workflows")
+      corps = D.workflows.map(w => `<div class="box"><h4>${F.esc(w.nom)} <span class="hint">· ${F.esc(w.entite)}${w.champ ? "." + F.esc(w.champ) : ""}</span></h4>
+        ${w.etats ? `<p>États : ${w.etats.map(s => "<code>" + F.esc(s) + "</code>").join(" → ")}</p>` : ""}
+        ${w.regles ? "<ul>" + w.regles.map(r => "<li>" + val(r) + "</li>").join("") + "</ul>" : ""}
+        ${w.transitions ? tableau(w.transitions, ["de","vers","geste","qui","effet"]) : ""}
+        ${w.garde_fous ? "<div class='hint'><b>Garde-fous</b></div><ul>" + w.garde_fous.map(r => "<li>" + val(r) + "</li>").join("") + "</ul>" : ""}
+        <div class="hint">Décisions : ${val(w.decisions)}${w.questions ? " · questions : " + val(w.questions) : ""}</div></div>`).join("");
+    else if (t === "composants")
+      corps = Object.entries(D.composants).map(([fam, l]) => `<div class="box"><h4>${F.esc(fam)}</h4>${tableau(l)}</div>`).join("");
+    else if (t === "jalons")
+      corps = D.jalons.map(j => `<div class="box"><h4>${F.esc(j.id)} — ${F.esc(j.titre)} <span class="st wait">${F.esc(j.etat)}</span></h4>
+        ${j.note ? `<blockquote>${val(j.note)}</blockquote>` : ""}<ul>${(j.contenu || []).map(c => "<li>" + val(c) + "</li>").join("")}</ul></div>`).join("");
+    else corps = `<div class="box">${tableau(D[t])}</div>`;
+    const n = Array.isArray(D[t]) ? D[t].length : Object.keys(D[t]).length;
+    return `<div class="box"><h4>Dictionnaire des données — la source du chapitre 16 et de ce POC</h4>
+      <div class="hint">Types logiques, jamais SQL : le SGBD n'est pas définitivement statué. Chaque identifiant
+        D/Q/C est cliquable et ouvre sa section dans la page CDC.</div>
+      <div class="chips" style="margin-top:8px">${DICT_TABLES.map(([k, l]) =>
+        `<span class="chip${k === t ? " on" : ""}" data-dict="${k}">${l}</span>`).join("")}</div>
+      <div class="hint" style="margin-top:6px"><b>${n}</b> ${t === "champs" ? "entités détaillées" : "entrées"}</div></div>${corps}`;
+  }
+
   /* ROADMAP — LUE dans l'index du CDC (docs/dict/jalons.yml), plus jamais
-     saisie ici : le POC et le chapitre 16 disent la même chose parce qu'ils
-     lisent le même fichier. */
+     saisie ici : le POC et le chapitre 16 lisent le même fichier. */
   const ROADMAP = (ABX.CDC.dict.jalons || []).map(j => ({
     v: parseInt(j.id.replace(/\D/g, ""), 10), titre: j.titre, etat: j.etat,
     note: j.note || "", contenu: j.contenu || [] }));
@@ -241,7 +284,7 @@
       </ul></div>`;
   }
 
-  const RENDU = { aide, features, cdc, roadmap };
+  const RENDU = { aide, features, cdc, dict, roadmap };
 
   ABX.Views = ABX.Views || {};
   ABX.Views.Pages = {
