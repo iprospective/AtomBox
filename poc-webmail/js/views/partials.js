@@ -183,7 +183,22 @@
        data-label="${F.esc(o.label)}" data-kind="${o.kind || ""}" data-axe="${o.axe || ""}">
        <span class="tw">${o.tw || ""}</span><span class="ic">${o.icon || ""}</span>
        <span class="lb">${F.esc(o.label)}</span>
+       ${o.axe && o.kind === "axe" ? R.render("nav.axe.outils", { o }) : ""}
        <span class="ct${o.unread ? " b" : ""}">${o.unread ? o.unread : (o.total || "")}</span></div>`);
+
+  /* Les commandes d'ordre n'apparaissent qu'au survol : une arborescence n'est
+     pas un tableau de bord, et six boutons par ligne la rendraient illisible. */
+  R.define("nav.axe.outils", ({ o }) =>
+    `<span class="axops">
+       <button class="axop" data-mv="up" data-axe="${F.esc(o.axe)}"
+         title="Monter"${o.rang === 0 ? " disabled" : ""}>▲</button>
+       <button class="axop" data-mv="down" data-axe="${F.esc(o.axe)}"
+         title="Descendre"${o.dernier ? " disabled" : ""}>▼</button>
+       <button class="axop${o.triAxe === "alpha" ? " on" : ""}" data-tri="${F.esc(o.axe)}"
+         title="${o.triAxe === "alpha" ? "Trié A→Z — repasser au plus récent"
+                                       : "Trié par activité — passer en A→Z"}">${
+           o.triAxe === "alpha" ? "A↓" : "⏱"}</button>
+     </span>`);
 
   /* ---- fil de discussion ------------------------------------------------- */
   R.define("thread.item", ({ x, courant }) =>

@@ -30,6 +30,25 @@
           "index (valeur text_pattern_ops) — sinon balayage de tous les tags", true);
       };
 
+      /* Réordonner (D135). Les boutons sont DANS le nœud : sans le stopPropagation,
+         monter un axe l'ouvrirait aussi. */
+      D.on(el, ".axop", "onclick", (n, e) => {
+        if (e && e.stopPropagation) e.stopPropagation();
+        const Fx = ABX.Fixtures;
+        if (n.dataset.tri) {
+          ui.triAxe[n.dataset.tri] = ui.triAxe[n.dataset.tri] === "alpha" ? "recent" : "alpha";
+        } else {
+          const ordre = ui.ordreAxes || Fx.AXES.map(a => a.id);
+          const i = ordre.indexOf(n.dataset.axe);
+          const j = n.dataset.mv === "up" ? i - 1 : i + 1;
+          if (i < 0 || j < 0 || j >= ordre.length) return;
+          ordre[i] = ordre[j]; ordre[j] = n.dataset.axe;
+          ui.ordreAxes = ordre;
+        }
+        ABX.Store.save();
+        Nav.peindre();
+      });
+
       D.on(el, ".node", "onclick", n => {
         const id = n.dataset.id;
         if (n.dataset.kind === "axe") {

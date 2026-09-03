@@ -21,6 +21,10 @@
       folder: { id:"inbox", label:"Boîte de réception", kind:"special" },
       filtre: "file", tri: "date_desc", sens: "tous", statut: "tous",
       navq: "", ouverts: {}, plus: {},
+      /* Ordre des axes et tri interne de chacun : réglés par l'utilisateur,
+         donc persistés. Une arborescence engendrée n'interdit pas de choisir
+         son ordre — elle interdit seulement de le coder dans les noms. */
+      ordreAxes: null, triAxe: {},
       tabs: [], tab: null,
     },
 
@@ -31,7 +35,8 @@
       Object.assign(this.ratt, d.ratt || {});
       (d.crees || []).forEach(m => this.crees.push(m));
       this.seq = d.seq || 0;
-      ["folder","filtre","tri","sens","statut"].forEach(k => { if (d.ui && d.ui[k]) this.ui[k] = d.ui[k]; });
+      ["folder","filtre","tri","sens","statut","ordreAxes","triAxe"]
+        .forEach(k => { if (d.ui && d.ui[k]) this.ui[k] = d.ui[k]; });
       if (d.ui) { this.ui.tabs = d.ui.tabs || []; this.ui.tab = d.ui.tab || null; }
       return d;
     },
@@ -41,6 +46,7 @@
         v: 2, seq: this.seq, ratt: this.ratt, crees: this.crees,
         ui: { folder: this.ui.folder, filtre: this.ui.filtre, tri: this.ui.tri,
               sens: this.ui.sens, statut: this.ui.statut,
+              ordreAxes: this.ui.ordreAxes, triAxe: this.ui.triAxe,
               tabs: this.ui.tabs, tab: this.ui.tab },
       })); } catch (e) { /* quota ou navigation privée : le POC reste utilisable */ }
     },

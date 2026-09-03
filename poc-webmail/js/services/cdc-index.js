@@ -3,7 +3,7 @@
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
    ce que dit le registre, et rien d'autre.
 
-   Généré le 2026-09-03 — 135 décisions, 53 questions, 18 chapitres. */
+   Généré le 2026-09-03 — 137 décisions, 53 questions, 19 chapitres. */
 (function (ABX) {
   "use strict";
   ABX.CDC = {
@@ -85,6 +85,11 @@
       "n": "14",
       "fichier": "cdc-rm2881-14-sieve-existant.md",
       "titre": "14"
+    },
+    {
+      "n": "15",
+      "fichier": "cdc-rm2881-15-audit-performance.md",
+      "titre": "15"
     },
     {
       "n": "90",
@@ -774,6 +779,16 @@
       "etat": "valide"
     },
     {
+      "id": "D134",
+      "objet": "Le courrier personnel est protégé : un dossier personnel par défaut, hors accès administrateur",
+      "etat": "valide"
+    },
+    {
+      "id": "D135",
+      "objet": "L'ordre des dossiers appartient à l'utilisateur — un réglage, jamais un préfixe dans le nom",
+      "etat": "valide"
+    },
+    {
       "id": "D25",
       "objet": "Extraction réversible (exigence)",
       "etat": "autre"
@@ -1088,9 +1103,9 @@
     },
     {
       "id": "Q53",
-      "objet": "Où va le courrier personnel dans un archiveur d'entreprise ?",
-      "bloque": "portée, RGPD, D104",
-      "urgence": "haute"
+      "objet": "Où va le courrier personnel ?",
+      "bloque": "—",
+      "urgence": "tranchee"
     },
     {
       "id": "Q51",

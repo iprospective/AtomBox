@@ -65,6 +65,34 @@ vrai(hRefus.includes("550") && /il y a \d+ jours/.test(hRefus),
 vrai(A.Corpus.tous.every(m => m.repond !== "non" || m.nature !== "humain"),
      "on ne refuse jamais la réponse à un message écrit par une personne");
 
+console.log("— ordre des dossiers (D135) ——————————————————————");
+{
+  const ui = A.Store.ui, nav0 = A.Views.Nav.render(ui);
+  vrai(!nav0.includes("Tous —"), "plus de préfixe « Tous — » sur le nœud d'axe");
+  vrai(!nav0.includes('class="grp">Fournisseurs'),
+       "ni de titre de groupe qui répétait le nom juste au-dessus");
+  vrai(nav0.includes("axops"), "les commandes d'ordre sont dans le nœud d'axe");
+  const premier = A.Fixtures.AXES[0].id, second = A.Fixtures.AXES[1].id;
+  ui.ordreAxes = A.Fixtures.AXES.map(a => a.id);
+  const ordre = ui.ordreAxes;
+  ordre[0] = second; ordre[1] = premier;
+  const nav1 = A.Views.Nav.render(ui);
+  vrai(nav1.indexOf("axe:" + second) < nav1.indexOf("axe:" + premier),
+       "l'axe remonté passe devant");
+  ui.ordreAxes = null;
+  const axe = A.Fixtures.AXES.find(a => a.id === "fournisseur");
+  ui.ouverts[axe.id] = true;
+  ui.triAxe[axe.id] = "alpha";
+  ui.plus[axe.id] = true;                       // tout afficher, pas les 12 premiers
+  const alpha = A.Views.Nav.render(ui);
+  const tries = A.Fixtures.valeurs[axe.id].map(v => v.label)
+                  .sort((x, y) => x.localeCompare(y));
+  const pos = lb => alpha.indexOf(">" + A.Fmt.esc(lb) + "<");
+  vrai(pos(tries[0]) > 0 && pos(tries[0]) < pos(tries[tries.length - 1]),
+       "le tri A→Z ordonne les dossiers de l'axe");
+  ui.triAxe = {}; ui.ouverts = {}; ui.plus = {};
+}
+
 console.log("— abonnements : un dossier par liste (D133) ——————————");
 const abos = A.Fixtures.valeurs.abonnement;
 vrai(abos.length >= 10, abos.length + " dossiers d'abonnement déduits du corpus");
