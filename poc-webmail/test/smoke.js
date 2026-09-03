@@ -65,6 +65,56 @@ vrai(hRefus.includes("550") && /il y a \d+ jours/.test(hRefus),
 vrai(A.Corpus.tous.every(m => m.repond !== "non" || m.nature !== "humain"),
      "on ne refuse jamais la réponse à un message écrit par une personne");
 
+console.log("— cohérence du CDC lui-même (dictionnaire, ch. 16) —————");
+{
+  const D = A.CDC.dict, ids = new Set(A.CDC.decisions.map(d => d.id)),
+        qs = new Set(A.CDC.questions.map(q => q.id));
+  const ents = new Set(D.entites.map(e => e.id));
+  vrai(D.entites.length >= 25 && D.fonctionnalites.length >= 90,
+       D.entites.length + " entités, " + D.fonctionnalites.length + " fonctionnalités, " +
+       D.actions.length + " actions, " + D.routes.length + " routes, " + D.normes.length + " normes");
+  const cs = new Set((A.CDC.conseils || []).map(c => c.id));
+  vrai(cs.size >= 5, cs.size + " conseils (C) dans l'index — ils font partie du registre");
+  const refsInconnues = [];
+  const verif = (liste, nom) => liste.forEach(x => {
+    const qui = nom + ":" + (x.id || x.nom || x.libelle || x.chemin);
+    (x.decisions || []).forEach(d => { if (!ids.has(d)) refsInconnues.push(qui + "→" + d); });
+    (x.questions || []).forEach(q => { if (!qs.has(q)) refsInconnues.push(qui + "→" + q); });
+    (x.conseils  || []).forEach(c => { if (!cs.has(c)) refsInconnues.push(qui + "→" + c); });
+  });
+  verif(D.fonctionnalites, "fonctionnalité"); verif(D.entites, "entité"); verif(D.actions, "action");
+  verif(D.routes, "route"); verif(D.protocoles, "protocole"); verif(D.workflows, "workflow");
+  eq(refsInconnues.length, 0, "chaque décision, question ou conseil cité par le dictionnaire existe au registre" +
+     (refsInconnues.length ? " — inconnues : " + refsInconnues.slice(0, 5).join(", ") : ""));
+  const relCassees = D.relations.filter(r => !ents.has(r.de) || !ents.has(r.vers)).map(r => r.de + "→" + r.vers);
+  eq(relCassees.length, 0, "chaque relation relie deux entités déclarées" +
+     (relCassees.length ? " — " + relCassees.join(", ") : ""));
+  const champsOrphelins = Object.keys(D.champs).filter(e => !ents.has(e));
+  eq(champsOrphelins.length, 0, "chaque bloc de champs appartient à une entité déclarée");
+  const enums = new Set(Object.keys(D.enumerations));
+  const enumInconnus = [];
+  Object.values(D.champs).forEach(l => l.forEach(c => { if (c.enum && !enums.has(c.enum)) enumInconnus.push(c.nom + "→" + c.enum); }));
+  eq(enumInconnus.length, 0, "chaque champ enum pointe une énumération déclarée" +
+     (enumInconnus.length ? " — " + enumInconnus.join(", ") : ""));
+  const routesEnt = D.routes.flatMap(r => r.entites || []).filter(e => !ents.has(e));
+  eq(routesEnt.length, 0, "chaque route nomme des entités déclarées" + (routesEnt.length ? " — " + routesEnt.join(", ") : ""));
+  vrai(D.jalons.every(j => (j.contenu || []).length > 0), "aucun jalon vide");
+  const trancheeCitee = D.fonctionnalites.filter(f => f.etat === "à trancher" &&
+    (f.questions || []).every(q => { const x = A.CDC.questions.find(y => y.id === q); return x && x.urgence === "tranchee"; }) &&
+    (f.questions || []).length);
+  eq(trancheeCitee.length, 0, "une fonctionnalité « à trancher » cite une question encore ouverte" +
+     (trancheeCitee.length ? " — " + trancheeCitee.map(f => f.id).join(", ") : ""));
+  const tplCites = new Set(D.templates.map(t => t.nom));
+  const tplManquants = A.Registry.liste().filter(n => !n.includes("@") && !tplCites.has(n));
+  eq(tplManquants.length, 0, "chaque partielle du registre est décrite au dictionnaire" +
+     (tplManquants.length ? " — " + tplManquants.join(", ") : ""));
+  vrai(A.Views.Pages.FEATURES.length >= 8 && A.Views.Pages.ROADMAP.length === D.jalons.length,
+       "la page Fonctionnalités et la Roadmap sont lues dans le dictionnaire, pas saisies");
+  const p = A.Views.Pages.render("features");
+  vrai(p.includes(D.fonctionnalites[D.fonctionnalites.length - 1].libelle),
+       "la dernière fonctionnalité du dictionnaire est affichée");
+}
+
 console.log("— le pivot comm dans les requêtes (D138) ——————————————");
 {
   A.QueryLog.vider && A.QueryLog.vider();
