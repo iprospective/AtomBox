@@ -101,6 +101,15 @@
       <p>Le nœud d'un axe porte simplement son nom — plus de « Tous — Fournisseurs » au-dessus
         d'un titre « Fournisseurs ».</p></div>
 
+    <div class="box"><h4>Voir la V0 — le client IMAP</h4>
+      <p>L'interrupteur <b>V0</b> de la barre du POC montre la maquette telle qu'elle sera en
+        V0 (D140) : <b>sans base ni moteur</b>, posée directement sur le serveur IMAP. Ce qui
+        disparaît est exactement ce qui demande une base — tags et axes, statut, arborescence
+        engendrée, nature, fiabilité, contexte ERP, bandeaux d'analyse. Ce qui reste est ce que
+        font Roundcube et Thunderbird : les dossiers IMAP, lire, classer, répondre.</p>
+      <p>Rien n'est réécrit entre les deux : les partielles sans donnée <b>rendent vide</b>, et
+        la V1 les remplit. C'est ce pour quoi le registre de vues existe.</p></div>
+
     <div class="box"><h4>Tout le CDC est dans la maquette</h4>
       <p>La page <b>CDC</b> contient le texte intégral : chaque chapitre, chaque décision,
         chaque question, chaque conseil. Cliquez un chapitre ou un identifiant (D138, Q54,
@@ -143,13 +152,15 @@
         <span class="st wait">décidé</span> tranché au CDC, pas encore maquetté ·
         <span class="st due">à trancher</span> question ouverte ·
         <span class="st">à venir</span> jalon ultérieur ·
-        <span class="st pause">en pause</span> écarté volontairement, à reprendre sur un chiffre</div></div>
+        <span class="st pause">en pause</span> écarté volontairement, à reprendre sur un chiffre ·
+        <span class="jalon v0">V0</span> le client IMAP, sans base ni moteur (D140)</div></div>
     ${FEATURES.map(([dom, liste]) => `<div class="box"><h4>${F.esc(dom)}</h4>
       <table class="erpl"><tr><th>Fonctionnalité</th><th>Jalon</th><th>État</th><th>Réf.</th></tr>
       ${liste.map(([lib, v, etat, ref]) => `<tr>
         <td>${F.esc(lib)}</td>
-        <td>${v ? `<span class="jalon${v > 1 ? " v" + v : ""}">V${v}</span>`
-               : `<span class="jalon aucun" title="Aucun jalon : écarté volontairement">—</span>`}</td>
+        <td>${v === null || v === undefined
+               ? `<span class="jalon aucun" title="Aucun jalon : écarté volontairement">—</span>`
+               : `<span class="jalon${v > 1 ? " v" + v : v === 0 ? " v0" : ""}">V${v}</span>`}</td>
         <td><span class="st ${ETATS[etat]}">${etat}</span></td>
         <td><span class="hash">${F.esc(ref)}</span></td></tr>`).join("")}
       </table></div>`).join("")}`;

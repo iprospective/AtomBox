@@ -26,6 +26,12 @@
           "", ui.folder.id === o.id));
       }
 
+      /* V0 (D140) : les dossiers sont ceux du serveur IMAP, tels quels — aucun
+         axe, aucune arborescence engendrée. Ce qui reste est ce que Roundcube et
+         Thunderbird montrent : les dossiers spéciaux et les dossiers utilisateur. */
+      if (ABX.V0())
+        return h + `<div class="hint" style="padding:8px 10px">V0 — dossiers IMAP tels quels,
+          avec leurs préfixes ; l'ordre est celui du serveur (D140, D135 plus tard)</div>`;
       /* L'ordre des axes appartient à l'utilisateur (D135). Un axe ajouté depuis
          son dernier réglage se range à la fin plutôt que de disparaître. */
       const ordre = ui.ordreAxes || [];

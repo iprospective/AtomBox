@@ -25,6 +25,8 @@
          donc persistés. Une arborescence engendrée n'interdit pas de choisir
          son ordre — elle interdit seulement de le coder dans les noms. */
       ordreAxes: null, triAxe: {},
+      /* jalon simulé : 0 = la V0 (client IMAP, D140), null = la maquette complète */
+      jalon: null,
       tabs: [], tab: null,
     },
 
@@ -35,7 +37,7 @@
       Object.assign(this.ratt, d.ratt || {});
       (d.crees || []).forEach(m => this.crees.push(m));
       this.seq = d.seq || 0;
-      ["folder","filtre","tri","sens","statut","ordreAxes","triAxe"]
+      ["folder","filtre","tri","sens","statut","ordreAxes","triAxe","jalon"]
         .forEach(k => { if (d.ui && d.ui[k]) this.ui[k] = d.ui[k]; });
       if (d.ui) { this.ui.tabs = d.ui.tabs || []; this.ui.tab = d.ui.tab || null; }
       return d;
@@ -46,7 +48,7 @@
         v: 2, seq: this.seq, ratt: this.ratt, crees: this.crees,
         ui: { folder: this.ui.folder, filtre: this.ui.filtre, tri: this.ui.tri,
               sens: this.ui.sens, statut: this.ui.statut,
-              ordreAxes: this.ui.ordreAxes, triAxe: this.ui.triAxe,
+              ordreAxes: this.ui.ordreAxes, triAxe: this.ui.triAxe, jalon: this.ui.jalon,
               tabs: this.ui.tabs, tab: this.ui.tab },
       })); } catch (e) { /* quota ou navigation privée : le POC reste utilisable */ }
     },
@@ -64,4 +66,6 @@
   };
 
   ABX.Store = Store;
+  /* La V0 (D140) : tout ce qui demande une base rend vide. Un seul test, partout. */
+  ABX.V0 = () => Store.ui.jalon === 0;
 })(window.ABX = window.ABX || {});

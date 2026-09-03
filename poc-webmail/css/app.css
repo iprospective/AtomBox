@@ -402,3 +402,10 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .doc .tw{overflow-x:auto}
 .doc td.long{max-width:44ch;white-space:normal}
 .doc .erpl td,.doc .erpl th{vertical-align:top}
+
+/* ---- la V0 simulee (D140) ----
+   Un jalon a part : celui ou il n'y a ni base ni moteur. */
+.jalon.v0{background:transparent;color:var(--fg);border:1px dashed var(--fg)}
+.pocv0{margin-left:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);
+  border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
+.pocv0.on{border-color:var(--fg);color:var(--fg);font-weight:700}

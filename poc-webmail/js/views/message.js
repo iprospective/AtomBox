@@ -60,6 +60,7 @@
        c'est où en est son traitement. Un sélecteur, donc, et pas trois boutons —
        l'ordre des états compte, et il doit se voir. */
     statutHtml(m) {
+      if (ABX.V0()) return "";          // V0 : pas de workflow, IMAP n'a que lu/drapeau (D140)
       if (m.motif === "archive") return `<span class="tag">archivé</span>
         <button class="hbtn" data-x="refile" title="Remettre dans la file">↺ Reprendre</button>`;
       return `<select class="statsel st-${F.esc(m.statut || "nouveau")}" id="stat"
@@ -100,6 +101,7 @@
        sait pas s'éteindre. Le geste de validation a une PORTÉE (D106) — valider
        depuis une boîte partagée engage les autres, donc c'est tracé (D54). */
     fiabiliteHtml(m) {
+      if (ABX.V0()) return "";
       if (m.sens === "out" || m.fiab === undefined || m.spoof) return "";
       if (m.fiab >= 2)
         return `<div class="lien fiab-bloc" style="margin:12px 16px">✓ <b>Expéditeur
@@ -128,6 +130,7 @@
     },
 
     repondHtml(m) {
+      if (ABX.V0()) return "";
       if (!m.repond || m.repond === "oui") return "";
       const alt = m.alt
         ? `<br>Plutôt que d'abandonner : <b>${F.esc(m.alt.nom)}</b>
@@ -161,6 +164,7 @@
        vient d'un inconnu, et une alerte qui se déclenche une fois sur deux n'est
        plus lue au bout d'une semaine. Le silence est une fonctionnalité. */
     spoofHtml(m) {
+      if (ABX.V0()) return "";
       if (!m.spoof) return "";
       const sosie = /iprospect/.test(m.mail.split("@")[1] || "");
       return `<div class="alerte-bloc">⚠ <b>Ce message se présente sous un nom connu,
@@ -179,6 +183,7 @@
     /* Un transfert par référence n'est pas une copie : c'est un pointeur, et un
        pointeur peut mourir (Q30). L'écran doit le dire, pas le cacher. */
     lienHtml(m) {
+      if (ABX.V0()) return "";          // V0 : le transfert est par copie, pas par référence
       if (!m.ref) return "";
       const src = C.par(m.ref);
       return `<div class="lien" style="margin:12px 16px">➦ <b>Message transféré par référence</b> —

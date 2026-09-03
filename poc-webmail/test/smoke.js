@@ -65,6 +65,38 @@ vrai(hRefus.includes("550") && /il y a \d+ jours/.test(hRefus),
 vrai(A.Corpus.tous.every(m => m.repond !== "non" || m.nature !== "humain"),
      "on ne refuse jamais la réponse à un message écrit par une personne");
 
+console.log("— la V0 : le client IMAP (D140) ——————————————————————");
+{
+  const ui = A.Store.ui, v0 = A.CDC.dict.jalons[0];
+  eq(v0.id, "V0", "le premier jalon du dictionnaire est la V0");
+  vrai(A.CDC.dict.fonctionnalites.filter(f => f.jalon === 0).length >= 10,
+       "la V0 a ses fonctionnalités, jalon 0");
+  vrai(A.CDC.dict.fonctionnalites.every(f => f.etat !== "en pause" || f.jalon === null),
+       "une fonctionnalité en pause n'a PAS de jalon (null), ce qui la distingue de la V0");
+  const fp = A.Views.Pages.render("features");
+  vrai(fp.includes('class="jalon v0">V0<') && fp.includes('class="jalon aucun"'),
+       "la page Fonctionnalités distingue V0 et « écarté »");
+  const m = A.Corpus.tous.find(x => x.sens !== "out" && x.tags.length && x.connu && x.fiab >= 1);
+  const avant = A.Registry.render("message.card", { m });
+  vrai(avant.includes("tag") && avant.includes("fiab"), "en maquette complète, la carte porte tags et confiance");
+  ui.jalon = 0;
+  vrai(A.V0(), "l'interrupteur V0 est posé");
+  const en0 = A.Registry.render("message.card", { m });
+  vrai(!en0.includes('class="tag') && !en0.includes("fiab ") && !en0.includes("nat "),
+       "en V0 la même carte n'a ni tag, ni confiance, ni nature — les partielles rendent vide");
+  vrai(en0.includes("&lt;" + A.Fmt.esc(m.mail)), "mais l'adresse reste visible à côté du nom (D126, gratuit)");
+  const nav0 = A.Views.Nav.render(ui);
+  vrai(!nav0.includes("axe:") && nav0.includes("Boîte de réception") && nav0.includes("Devis en attente"),
+       "l'arborescence V0 n'a que les dossiers IMAP — aucun axe");
+  vrai(!A.Views.Message.statutHtml(m) && !A.Views.Message.fiabiliteHtml(m) && !A.Views.Message.spoofHtml(A.Corpus.tous.find(x => x.spoof)),
+       "le message ouvert n'a ni statut, ni bandeau de confiance, ni bandeau d'usurpation");
+  vrai(!A.Registry.render("erp.panel", { m }) && !A.Registry.render("message.tags", { m }),
+       "ni contexte ERP, ni tags");
+  ui.jalon = null;
+  vrai(!A.V0() && A.Registry.render("message.card", { m }).includes("tag"),
+       "et tout revient quand on repasse en maquette complète — rien n'a été réécrit");
+}
+
 console.log("— tout le CDC dans la maquette (textes, sections, dictionnaire) —");
 {
   const C = A.CDC, M = A.Markdown;
@@ -571,7 +603,8 @@ vrai(hf.includes("Moteur de filtres"), "le moteur de filtres (D74) est listé");
 vrai(hf.includes("DMARC"), "la délivrabilité DMARC est listée");
 vrai(hf.includes("expéditeur externe"), "l'affichage sûr est listé");
 A.Controllers.Pages.ouvrir("roadmap");
-eq(A.Views.Pages.ROADMAP.length, 5, "cinq jalons dans la feuille de route");
+vrai(A.Views.Pages.ROADMAP.length === A.CDC.dict.jalons.length && A.Views.Pages.ROADMAP.length >= 5,
+     A.Views.Pages.ROADMAP.length + " jalons dans la feuille de route — autant que le dictionnaire");
 vrai(p.doc.getElementById("detail").innerHTML.includes("jalon v5"),
      "le jalon V5 a son propre style");
 

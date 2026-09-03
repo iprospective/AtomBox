@@ -26,6 +26,14 @@
   D.byId("bpj").onclick = () => ABX.Controllers.Admin.ouvrirPJ();
   document.querySelectorAll(".pocnav [data-page]").forEach(b =>
     b.onclick = () => ABX.Controllers.Pages.ouvrir(b.dataset.page));
+  /* La V0 (D140) : un interrupteur. Tout ce qui demande une base rend vide, rien
+     n'est réécrit — on repeint, c'est tout. */
+  const bv0 = D.byId("pocv0");
+  if (bv0) {
+    const etat = () => bv0.classList.toggle("on", ABX.V0());
+    etat();
+    bv0.onclick = () => { St.ui.jalon = ABX.V0() ? null : 0; St.save(); etat(); App.peindre(); };
+  }
   D.byId("breset").onclick = () => {
     if (!confirm("Oublier l'état local (lectures, archivages, corbeille, brouillons, onglets) "
                + "et repartir des fixtures ?")) return;

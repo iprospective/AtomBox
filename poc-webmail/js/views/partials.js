@@ -10,10 +10,10 @@
   const R = ABX.Registry, F = ABX.Fmt;
 
   /* ---- morceaux réutilisables ------------------------------------------- */
-  R.define("tag.chip", ({ tag }) =>
+  R.define("tag.chip", ({ tag }) => ABX.V0() ? "" :
     `<span class="tag ax">${F.esc(tag.axe)}=${F.esc(tag.val)}</span>`);
 
-  R.define("statut.chip", ({ m }) => m.motif
+  R.define("statut.chip", ({ m }) => ABX.V0() ? "" : m.motif
     ? `<span class="tag">${m.motif === "archive" ? "archivé" : "traité"}</span>` : "");
 
   /* ---- l'expediteur, normalise (D126) ------------------------------------
@@ -24,6 +24,10 @@
      son propre signal. */
   R.define("expediteur", ({ m, long }) => {
     if (m.sens === "out") return `<span class="from">${F.esc(m.from)}</span>`;
+    /* V0 (D140) : pas de carnet, pas d'analyse — mais l'adresse reste visible à côté du
+       nom (D126), parce que ça ne coûte rien et que c'est de la sécurité. */
+    if (ABX.V0())
+      return `<span class="from">${F.esc(m.from)}</span> <span class="adr">&lt;${F.esc(m.mail)}&gt;</span>`;
     if (m.connu)
       return `<span class="from" title="${F.esc(m.mail)}">${F.esc(m.from)}</span>` +
              (long ? ` <span class="adr">&lt;${F.esc(m.mail)}&gt;</span>` : "");
@@ -46,7 +50,7 @@
      vient peut-être pas d'elle. Marquer fiable un identifiant usurpable, ce
      serait donner à l'attaquant la cible exacte. */
   R.define("fiabilite", ({ m }) => {
-    if (m.sens === "out" || m.fiab === undefined) return "";
+    if (ABX.V0() || m.sens === "out" || m.fiab === undefined) return "";
     if (m.fiab >= 2)
       return `<span class="fiab f2" title="Expéditeur validé par quelqu'un de chez vous,
         et ce message est authentifié (DMARC aligné) — D137">✓</span>`;
@@ -64,6 +68,7 @@
     service:      ["service",      "nat-s", "Message de service (DSN, absence) — se rattache à un envoi"],
   };
   R.define("nature.chip", ({ m }) => {
+    if (ABX.V0()) return "";
     const n = NATURES[m.nature];
     return n ? `<span class="nat ${n[1]}" title="${F.esc(n[2])} — D130">${n[0]}</span>` : "";
   });
@@ -140,6 +145,7 @@
 
   /* ---- contexte métier --------------------------------------------------- */
   R.define("erp.panel", ({ m }) => {
+    if (ABX.V0()) return "";
     const Erp = ABX.Erp, t = Erp.tagDe(m);
     if (!t) return "";
     const f = Erp.fiche(t.axe, t.val), c = f.cfg;
@@ -171,6 +177,7 @@
 
   /* ---- tags : la seule partie du message que l'utilisateur écrit ---------- */
   R.define("message.tags", ({ m }) => {
+    if (ABX.V0()) return "";
     const AXES = ABX.Fixtures.AXES.map(a => a.id).concat(["projet", "type"]);
     return `<div class="box"><h4>Tags — plusieurs applications, sans écrasement (D17/D20)</h4>
       ${m.tags.length ? m.tags.map((t, i) => `<div class="kv">
