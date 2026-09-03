@@ -65,6 +65,35 @@ vrai(hRefus.includes("550") && /il y a \d+ jours/.test(hRefus),
 vrai(A.Corpus.tous.every(m => m.repond !== "non" || m.nature !== "humain"),
      "on ne refuse jamais la réponse à un message écrit par une personne");
 
+console.log("— tout le CDC dans la maquette (textes, sections, dictionnaire) —");
+{
+  const C = A.CDC, M = A.Markdown;
+  vrai(Object.keys(C.textes).length === C.chapitres.length, "chaque chapitre a son texte complet embarqué");
+  vrai(Object.keys(C.sections).length >= 150, Object.keys(C.sections).length + " sections (décisions, questions, conseils) découpées");
+  vrai(!!C.sections.D138 && C.sections.D138.includes("partitionn"), "la section D138 est là, et complète");
+  vrai(!!C.sections.Q54 && !!C.sections.C09, "les questions et les conseils ont aussi leur section");
+  const h = M.rendre("## Titre\n\n| a | b |\n|---|---|\n| **x** | `y` |\n\n> citation\n\n- un\n- deux\n\nVoir [le 03](cdc-rm2881-03-modele-donnees.md) et D138.");
+  vrai(h.includes("<h3>") && h.includes("<table") && h.includes("<blockquote>") && h.includes("<li>deux</li>"),
+       "le rendu markdown couvre titres, tableaux, citations, listes");
+  vrai(h.includes('data-chap="03"') && h.includes('data-sec="D138"'),
+       "les liens internes du CDC deviennent des liens de navigation");
+  vrai(M.rendre("<script>x</script>").includes("&lt;script&gt;"), "le HTML source est échappé");
+  A.Store.ui.cdc = { chap: "03" };
+  vrai(A.Views.Pages.render("cdc").includes("Le tronc s'appelle"), "la page CDC affiche le texte d'un chapitre");
+  A.Store.ui.cdc = { sec: "D134" };
+  vrai(A.Views.Pages.render("cdc").includes("dossier personnel"), "et celui d'une décision");
+  A.Store.ui.cdc = {};
+  const tables = ["entites","champs","relations","enumerations","workflows","actions","templates",
+                  "composants","protocoles","normes","routes","fonctionnalites","jalons"];
+  tables.forEach(t => { A.Store.ui.dictTable = t;
+    const p = A.Views.Pages.render("dict");
+    vrai(p.length > 2000 && (p.includes("<table") || p.includes("<ul>")),
+         "la page Dictionnaire rend « " + t + " » en entier"); });
+  A.Store.ui.dictTable = "entites";
+  vrai(A.Views.Pages.render("dict").includes("comm_email") && A.Views.Pages.render("dict").includes("reponse_possible"),
+       "les entités affichent leurs champs");
+}
+
 console.log("— cohérence du CDC lui-même (dictionnaire, ch. 16) —————");
 {
   const D = A.CDC.dict, ids = new Set(A.CDC.decisions.map(d => d.id)),

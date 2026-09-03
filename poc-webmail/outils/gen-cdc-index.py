@@ -86,6 +86,29 @@ dico = { k: yml(k) for k in ("entites", "champs", "relations", "enumerations", "
                               "actions", "templates", "composants", "protocoles", "normes",
                               "routes", "fonctionnalites", "jalons") }
 
+# ---- le TEXTE complet : chaque chapitre, et chaque décision/question/conseil découpé ----
+# La maquette montre tout le CDC, pas seulement les tableaux de synthèse. C'est lourd
+# (~650 Ko de markdown) mais c'est du texte, et c'est ce qui rend la page « CDC » vraie.
+textes = {}
+for ch in chapitres:
+    textes[ch["n"]] = io.open(os.path.join(CDC, ch["fichier"]), encoding="utf-8").read()
+sections = {}
+_titre = re.compile(r"^#{2,3} ~{0,2}([DQC]\d+b?)~{0,2}\b")
+for fichier in ("cdc-rm2881-90-decisions.md", "cdc-rm2881-99-questions-ouvertes.md"):
+    src = io.open(os.path.join(CDC, fichier), encoding="utf-8").read().split("\n")
+    cur, buf = None, []
+    def flush():
+        if cur and buf: sections.setdefault(cur, "\n".join(buf).strip())
+    for ligne in src:
+        m = _titre.match(ligne)
+        if m:
+            flush(); cur, buf = m.group(1), [ligne]
+        elif cur:
+            if re.match(r"^## ", ligne) and not _titre.match(ligne):   # fin de la zone des sections
+                flush(); cur, buf = None, []
+            else: buf.append(ligne)
+    flush()
+
 js = """/* INDEX DU CDC — FICHIER GÉNÉRÉ, ne pas éditer à la main.
    Produit par outils/gen-cdc-index.py depuis le CDC réel (RM2881). Le retaper
    garantirait qu'il diverge ; le générer garantit que la page « CDC » du POC dit
@@ -100,10 +123,11 @@ js = """/* INDEX DU CDC — FICHIER GÉNÉRÉ, ne pas éditer à la main.
        json.dumps({ "genere": datetime.date.today().isoformat(), "ticket": "RM2881",
                     "depot": "iprospective/tools/atombox-webmail-core",
                     "chapitres": chapitres, "decisions": decisions, "questions": questions,
-                    "conseils": conseils, "dict": dico },
+                    "conseils": conseils, "dict": dico,
+                    "textes": textes, "sections": sections },
                   ensure_ascii=False, indent=2))
 
 io.open(os.path.abspath(SORTIE), "w", encoding="utf-8").write(js)
-print("%s : %d décisions, %d questions, %d chapitres, %d fonctionnalités, %d entités"
+print("%s : %d décisions, %d questions, %d chapitres, %d fonctionnalités, %d entités, %d sections de texte, %d Ko"
       % (os.path.relpath(SORTIE), len(decisions), len(questions), len(chapitres),
-         len(dico["fonctionnalites"]), len(dico["entites"])))
+         len(dico["fonctionnalites"]), len(dico["entites"]), len(sections), len(js) // 1024))
