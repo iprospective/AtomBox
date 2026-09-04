@@ -3,7 +3,7 @@
    Tout est produit au démarrage dans un ordre fixe : c'est ce qui le rend
    identique d'une session à l'autre, et donc persistable par simple delta
    (voir core/store.js). Les compteurs de l'arborescence ne sont pas des
-   fixtures : ils se CALCULENT en une passe, jamais une requête par dossier (D78). */
+   fixtures : ils se CALCULENT en une passe, jamais une requête par dossier (D078). */
 (function (ABX) {
   "use strict";
   const P = ABX.PRNG, Fx = ABX.Fixtures, At = ABX.Attachments, St = ABX.Store;
@@ -45,7 +45,7 @@
         from: sortant ? Fx.MOI.nom : qui,
         mail: sortant ? boite : adr,
         to:   sortant ? [adr]  : [boite],
-        boite,                                    // la boîte qui a reçu ou émis — Q26
+        boite,                                    // la boîte qui a reçu ou émis — Q026
         subject: sujet(axe, label),
         body: P.pick(Fx.CORPS),
         date: Date.now() - P.int(0, 300) * 864e5 - P.int(0, 86399) * 1000,
@@ -146,9 +146,9 @@
                : m.connu ? 1 : 0;
       }
       At.attacher(m);
-      /* La SOURCE du tag est l'application qui l'a poussé (D19/D20) : Dolibarr
+      /* La SOURCE du tag est l'application qui l'a poussé (D019/D020) : Dolibarr
          tient les tiers, Redmine tient les tickets. Deux axes, deux ACL, et
-         c'est ce qui rend Q34 concrète — retirer à la main un tag posé par un
+         c'est ce qui rend Q034 concrète — retirer à la main un tag posé par un
          connecteur n'a pas le même sens selon qui l'a posé. */
       if (Fx.estAxe(axe))
         m.tags.push({ axe, val: label,
@@ -177,7 +177,7 @@
   }
 
   /* D133 — l'arborescence des abonnements n'est pas saisie, elle est DÉDUITE du
-     corpus : un dossier par liste rencontrée. C'est D77 pris au mot, et le seul
+     corpus : un dossier par liste rencontrée. C'est D077 pris au mot, et le seul
      axe du POC dont les dossiers ne viennent ni d'une saisie ni d'un connecteur.
      Le message n'est pas déplacé : il reste chez son correspondant et apparaît
      ici en plus — deux vues, un seul message. */
@@ -192,7 +192,7 @@
     Fx.valeurs.abonnement = Object.values(par).sort((x, y) => y.last - x.last);
   }
 
-  /* Les vues qui ne sont pas des dossiers : elles lisent motif_sortie (D30/D51). */
+  /* Les vues qui ne sont pas des dossiers : elles lisent motif_sortie (D030/D051). */
   const VUES = {
     trash:    m => m.dossier === "trash",
     archives: m => m.motif === "archive" && m.dossier !== "trash",
@@ -237,7 +237,7 @@
 
     retire(m) { tous = tous.filter(x => x !== m); },
 
-    /* UNE passe sur le corpus pour les ~300 branches de l'arborescence (D78). */
+    /* UNE passe sur le corpus pour les ~300 branches de l'arborescence (D078). */
     recompte() {
       compte = {};
       const bump = (k, m) => { const c = compte[k] = compte[k] || { t:0, u:0, f:0 };
@@ -252,8 +252,8 @@
         if (Fx.estAxe(ax)) bump("axe:" + ax, m);
         /* Le même message compte DEUX fois : dans l'axe de son correspondant et
            dans son abonnement. Ce n'est pas un doublon, c'est le multi-classement
-           (D17/D77) — et c'est la raison pour laquelle les compteurs se calculent
-           en une passe plutôt qu'en une requête par branche (D78). */
+           (D017/D077) — et c'est la raison pour laquelle les compteurs se calculent
+           en une passe plutôt qu'en une requête par branche (D078). */
         if (m.nature === "liste" && m.listeId) {
           bump(m.listeId, m); bump("axe:abonnement", m);
         }

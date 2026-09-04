@@ -76,7 +76,7 @@
       <p>Les diffusions se rangent d'elles-mêmes sous <b>Abonnements</b> : un dossier par
         liste, <b>déduit du corpus</b> et non saisi (D133). Le message n'a pas bougé pour
         autant — il est toujours chez son correspondant, et il apparaît ici <i>en plus</i>.
-        C'est l'arborescence engendrée de D77 prise au mot : ouvrez « Fournisseurs › une
+        C'est l'arborescence engendrée de D077 prise au mot : ouvrez « Fournisseurs › une
         société » puis « Abonnements › la même société », vous verrez les mêmes messages
         d'un côté parmi les factures, de l'autre seuls.</p>
       <p><b>Un mot sur l'indicateur de confiance</b> (✓ vert) : il n'apparaît que si le
@@ -115,8 +115,8 @@
 
     <div class="box"><h4>Tout le CDC est dans la maquette</h4>
       <p>La page <b>CDC</b> contient le texte intégral : chaque chapitre, chaque décision,
-        chaque question, chaque conseil. Cliquez un chapitre ou un identifiant (D138, Q54,
-        C09) où qu'il apparaisse — y compris dans une autre page — et sa section s'ouvre.</p>
+        chaque question, chaque conseil. Cliquez un chapitre ou un identifiant (D138, Q054,
+        C009) où qu'il apparaisse — y compris dans une autre page — et sa section s'ouvre.</p>
       <p>La page <b>Dictionnaire</b> montre les treize tables du chapitre 16 en entier :
         entités avec leurs champs, relations, énumérations, workflows, actions, templates,
         composants, protocoles, normes, routes, fonctionnalités, jalons. C'est la même source
@@ -369,7 +369,7 @@
 
     <div class="box"><h4>Ce qui prépare la suite dès maintenant</h4>
       <div class="hint">Trois précautions gratuites aujourd'hui, très coûteuses plus tard —
-        elles sont dans le CDC (D98) et visibles dans <b>⚙ Administration → Canaux</b>.</div>
+        elles sont dans le CDC (D098) et visibles dans <b>⚙ Administration → Canaux</b>.</div>
       <ul>
         <li>L'identifiant d'un correspondant porte un <b>type</b> — sinon un numéro de
           téléphone ne pourra jamais rejoindre l'identité qui porte déjà l'email.</li>

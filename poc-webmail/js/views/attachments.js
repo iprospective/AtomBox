@@ -1,9 +1,9 @@
 /* GESTION DES PIÈCES JOINTES — chercher, renommer, taguer, enregistrer.
 
    L'écran repose sur une distinction que rien d'autre ne rend visible : le NOM
-   appartient à la liaison, les OCTETS au blob (D32). Renommer une pièce jointe,
+   appartient à la liaison, les OCTETS au blob (D032). Renommer une pièce jointe,
    c'est donc renommer *sa liaison* — les autres messages qui portent le même
-   octet gardent leur nom, et le message d'origine n'est pas altéré (D25). */
+   octet gardent leur nom, et le message d'origine n'est pas altéré (D025). */
 (function (ABX) {
   "use strict";
   const F = ABX.Fmt, C = ABX.Corpus, At = ABX.Attachments;
@@ -71,7 +71,7 @@
           : `<div class="empty">Aucune pièce jointe ne correspond.</div>`}
           <div class="hint" style="margin:12px">Renommer ici modifie la <b>liaison</b>, pas le
             blob : les autres messages qui portent les mêmes octets gardent leur nom, et le
-            message d'origine reste reconstructible à l'identique (D25/D32). C'est la seule
+            message d'origine reste reconstructible à l'identique (D025/D032). C'est la seule
             forme de renommage qui ne casse pas la signature.</div>
         </div>`;
     },

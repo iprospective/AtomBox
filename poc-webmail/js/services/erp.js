@@ -1,4 +1,4 @@
-/* APPLICATIONS CONNECTÉES (D03 / D19 / D20 / D21).
+/* APPLICATIONS CONNECTÉES (D003 / D019 / D020 / D021).
 
    AtomBox porte le TAG et la RÉFÉRENCE EXTERNE, rien d'autre. Les montants
    ci-dessous sont ceux que l'application renverrait à l'affichage : dans le
@@ -6,7 +6,7 @@
    cadre ne change pas de valeurs à chaque rechargement.
 
    Ce service est aussi celui qui rappelle, à chaque appel, que ce contexte
-   n'est PAS stocké — c'est le premier besoin de cache du produit (Q31). */
+   n'est PAS stocké — c'est le premier besoin de cache du produit (Q031). */
 (function (ABX) {
   "use strict";
   const P = ABX.PRNG;

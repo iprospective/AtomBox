@@ -22,7 +22,7 @@
    d'interface : le contrat est posé maintenant, les implémentations natives
    viendront s'y brancher comme les autres.
 
-   C'est le prolongement direct de D21 (« conf déclarative + module natif côté
+   C'est le prolongement direct de D021 (« conf déclarative + module natif côté
    application ») : ce qui est déclaratif ici, c'est le CHOIX du fournisseur, pas
    la façon de l'appeler.
 
@@ -67,12 +67,12 @@
                      note:"aucune fiche : le correspondant reste un nom et une adresse dans le " +
                           "message, ce qui suffit à beaucoup d'usages" },
         natif:     { label:"AtomBox — lecture (V1) / carnet (V3)", ic:"⚛", table:"correspondant", v:1,
-                     note:"la table correspondant existe DÉJÀ (D35) : le contact natif n'est " +
+                     note:"la table correspondant existe DÉJÀ (D035) : le contact natif n'est " +
                           "pas une fonctionnalité de plus, c'est l'affichage de ce qu'on a" },
         carddav:   { label:"CardDAV (Nextcloud)", ic:"☁", base:"nextcloud-mmi",
                      endpoint:"/remote.php/dav/addressbooks/users/{user}/contacts/",
                      note:"le carnet suit l'utilisateur sur son téléphone ; en contrepartie, " +
-                          "l'identité multi-adresses de D35 doit être reconstruite à chaque appel" },
+                          "l'identité multi-adresses de D035 doit être reconstruite à chaque appel" },
         dolibarr:  { label:"Dolibarr — contacts/tiers", ic:"🏢", base:"dolibarr-mmi",
                      endpoint:"/api/index.php/contacts",
                      note:"le contact EST le tiers : c'est le seul fournisseur qui donne " +
@@ -91,7 +91,7 @@
                           "stockées, cherchables et dédupliquées. « Aucun » ne veut pas dire " +
                           "« rien » : cela veut dire pas de second classement" },
         natif:     { label:"AtomBox — cloud (V3)", ic:"⚛", table:"fichier", v:3,
-                     note:"le fichier est DÉJÀ stocké et dédupliqué (D24) : « enregistrer » ne " +
+                     note:"le fichier est DÉJÀ stocké et dédupliqué (D024) : « enregistrer » ne " +
                           "copie rien, cela pose un nom et un classement sur un octet existant" },
         nextcloud: { label:"Nextcloud (WebDAV)", ic:"☁", base:"nextcloud-mmi",
                      endpoint:"/remote.php/dav/files/{user}/",
@@ -126,7 +126,7 @@
         dolibarr:  { label:"Dolibarr — projets/opportunités", ic:"🏢", base:"dolibarr-mmi",
                      endpoint:"/api/index.php/projects", v:1,
                      note:"le CRM est déjà là, avec le tiers, le devis et la facture : AtomBox " +
-                          "n'a qu'à poser le tag et afficher le contexte (D03)" },
+                          "n'a qu'à poser le tag et afficher le contexte (D003)" },
       } },
   };
 
@@ -136,7 +136,7 @@
      s'interdire dès la V1 (voir l'écran d'administration, volet « Canaux »). */
   const CANAUX = [
     { id:"email",    label:"E-mail",     ic:"✉",  v:1, etat:"le produit" },
-    { id:"interne",  label:"Messagerie interne", ic:"💬", v:2, etat:"hors SMTP (D12)" },
+    { id:"interne",  label:"Messagerie interne", ic:"💬", v:2, etat:"hors SMTP (D012)" },
     { id:"sms",      label:"SMS",        ic:"📱", v:4, etat:"passerelle opérateur" },
     { id:"whatsapp", label:"WhatsApp",   ic:"🟢", v:4, etat:"API Business" },
     { id:"tel",      label:"Téléphonie", ic:"📞", v:4, etat:"CTI / journal d'appels + enregistrements" },
@@ -144,7 +144,7 @@
 
   /* Défaut : ce qui est DISPONIBLE EN V1, c'est-à-dire des connecteurs — sauf les
      contacts, dont la lecture est gratuite puisque `correspondant` existe déjà
-     pour le rattachement (D35). Une capacité sans connecteur configuré n'est pas
+     pour le rattachement (D035). Une capacité sans connecteur configuré n'est pas
      dégradée : elle est ABSENTE, et son entrée de menu disparaît. */
   const DEFAUT = { taches:"dolibarr", contacts:"natif", fichiers:"aucun",
                    calendrier:"caldav", crm:"dolibarr" };
@@ -186,7 +186,7 @@
           detail:
 `UPDATE configuration SET valeur = :fournisseur
  WHERE organisation_id = :org AND cle = 'capacite.` + cap + `';`,
-          index:"changer de fournisseur ne doit pas demander un redéploiement (D21) — et doit " +
+          index:"changer de fournisseur ne doit pas demander un redéploiement (D021) — et doit " +
                 "être tracé : une bascule change ce que les utilisateurs voient" },
         { t:"note", label:"ce que la bascule ne fait PAS",
           detail:"aucune migration des données déjà créées chez l'ancien fournisseur",

@@ -1,9 +1,9 @@
 /* SERVICE DE COMPOSITION — nouveau message, réponse, transfert.
 
    Trois décisions se rejoignent ici, et l'écran doit les rendre visibles :
-   — l'identité d'envoi par défaut est celle de la BOÎTE qui a reçu (Q26) ;
-   — un transfert interne pose un LIEN, il ne recopie pas (D58/D67) ;
-   — les destinataires internes sont livrés en base, sans passer par le SMTP (D12). */
+   — l'identité d'envoi par défaut est celle de la BOÎTE qui a reçu (Q026) ;
+   — un transfert interne pose un LIEN, il ne recopie pas (D058/D067) ;
+   — les destinataires internes sont livrés en base, sans passer par le SMTP (D012). */
 (function (ABX) {
   "use strict";
   const St = ABX.Store, C = ABX.Corpus, Fx = ABX.Fixtures, At = ABX.Attachments;
@@ -22,7 +22,7 @@
           sujet: /^tr:/i.test(m.subject) ? m.subject : "Tr: " + m.subject, corps: cite(m) });
       } else {
         const autres = (m.to || []).filter(a => a !== m.boite);
-        Object.assign(d, { de: m.boite,        // Q26 : l'identité de la BOÎTE, pas du compte
+        Object.assign(d, { de: m.boite,        // Q026 : l'identité de la BOÎTE, pas du compte
           a: m.mail, cc: mode === "reptous" ? autres.join(", ") : "",
           sujet: /^re:/i.test(m.subject) ? m.subject : "Re: " + m.subject, corps: cite(m) });
       }
@@ -31,8 +31,8 @@
 SELECT b.adresse, b.boite_id FROM rattachement r JOIN boite b USING (boite_id)
  WHERE r.comm_id = :id AND r.compte_id = :moi;`,
         mode === "tr"
-          ? "un transfert interne ne recopie rien : il pose un lien + une ACL (D58/D67)"
-          : "répondre depuis le compte et non depuis la boîte ampute le fil pour les collègues (Q26)");
+          ? "un transfert interne ne recopie rien : il pose un lien + une ACL (D058/D067)"
+          : "répondre depuis le compte et non depuis la boîte ampute le fil pour les collègues (Q026)");
       return d;
     },
 
@@ -42,7 +42,7 @@ SELECT b.adresse, b.boite_id FROM rattachement r JOIN boite b USING (boite_id)
 SELECT pj_id FROM piece_jointe WHERE sha256 = :sha;
 INSERT INTO piece_jointe (sha256, octets, mime_detecte, blob_ref)
 VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj_id;`,
-        "la déduplication vaut aussi à l'ÉMISSION (D24) — envoyer trois fois la même plaquette " +
+        "la déduplication vaut aussi à l'ÉMISSION (D024) — envoyer trois fois la même plaquette " +
         "n'écrit qu'un blob ; l'unicité sur sha256 est ce qui rend l'INSERT idempotent");
       return d;
     },
@@ -56,7 +56,7 @@ VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj
         date: Date.now(), lu: true, thread: 1000 + St.seq, tags: [],
         sorti: null, motif: null, dossier: null,
         pjs: d.pjs.slice(), ref: d.ref && d.src ? d.src : null, compo: null };
-      /* Transfert par VALEUR : l'original est encapsulé, donc matérialisé (D66). */
+      /* Transfert par VALEUR : l'original est encapsulé, donc matérialisé (D066). */
       if (d.mode === "tr" && d.src && !d.ref) {
         const s = C.par(d.src);
         if (s) m.pjs.push(At.encapsuler(s));

@@ -1,7 +1,7 @@
 /* VUE COMPOSITION — nouveau message, réponse, transfert.
    Chaque écran affiche la décision qui le rend particulier plutôt que de la
-   subir en silence : l'identité d'envoi (Q26), le mode de transfert (D58/D66),
-   la livraison interne hors SMTP (D12). */
+   subir en silence : l'identité d'envoi (Q026), le mode de transfert (D058/D066),
+   la livraison interne hors SMTP (D012). */
 (function (ABX) {
   "use strict";
   const F = ABX.Fmt, Fx = ABX.Fixtures, C = ABX.Corpus;
@@ -25,7 +25,7 @@
           ${d.mode !== "new" && d.de !== Fx.MOI.boites[0].adresse
             ? `<div class="hint">↳ présélectionné sur la boîte qui a <b>reçu</b> le message —
                  répondre depuis une autre identité ampute le fil pour les collègues qui partagent
-                 la boîte (Q26).</div>` : ""}
+                 la boîte (Q026).</div>` : ""}
           <div class="frow"><label>À</label><input id="f_a" value="${F.esc(d.a)}"
             placeholder="destinataires, séparés par des virgules"></div>
           <div class="frow"><label>Cc</label><input id="f_cc" value="${F.esc(d.cc)}"></div>
@@ -35,11 +35,11 @@
             <label class="chk"><input type="checkbox" id="f_ref"${d.ref ? " checked" : ""}>
               <span>Transférer <b>par référence</b> — destinataires internes</span></label>
             <div class="hint" style="margin-top:5px">Coché : aucune copie. Le message reçu porte un
-              <b>lien</b> vers l'original et une ACL de lecture (D58/D67) — le fil reste unique, et
-              une purge de l'original laissera un lien mort assumé (Q30).<br>
+              <b>lien</b> vers l'original et une ACL de lecture (D058/D067) — le fil reste unique, et
+              une purge de l'original laissera un lien mort assumé (Q030).<br>
               Décoché : l'original est <b>encapsulé</b> en <code>message/rfc822</code>, donc
               matérialisé — seule forme envoyable à l'extérieur, et dédupliquée comme un
-              message (D66).</div></div>` : ""}
+              message (D066).</div></div>` : ""}
           ${d.pjs.length ? `<div class="hint">📎 ${d.pjs.length} pièce(s) jointe(s) :
             ${d.pjs.map(p => F.esc(p.nom) + " (" + F.poids(p.b.ko) + ")").join(", ")}</div>` : ""}
           <div class="cbar">
@@ -49,7 +49,7 @@
             <button class="hbtn dgr" id="c_del">✕ Abandonner</button>
           </div>
           <div class="hint">Les destinataires <b>internes</b> (@iprospective.eu / .fr) ne passent pas
-            par le SMTP : le message est livré en base, en un seul exemplaire (D10/D12). Le piège est
+            par le SMTP : le message est livré en base, en un seul exemplaire (D010/D012). Le piège est
             le mélange interne + externe — le relais ne doit pas re-livrer ce qui l'a déjà été.</div>
         </div>`;
     },

@@ -5,7 +5,7 @@
   const App = () => ABX.Controllers.App;
 
   const IDX_TRI = {
-    date_desc: ["index (tag_id, sorti_le DESC, comm_id) — tri porté par l'index (D16)", false],
+    date_desc: ["index (tag_id, sorti_le DESC, comm_id) — tri porté par l'index (D016)", false],
     date_asc:  ["même index parcouru à l'envers", false],
     from:      ["tri NON indexé — tenable seulement parce que la fenêtre est paginée", true],
     subj:      ["tri NON indexé — idem", true],
@@ -44,9 +44,9 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
  ORDER BY m.date_reception DESC
  LIMIT 50;`,
         folder.kind === "axe" || folder.kind === "virtuel"
-          ? "index (tag_id, sorti_le DESC, comm_id) — D16, date dénormalisée dans la liaison"
-          : "index (compte_id, sorti_le DESC) — D36 : la portée EST le chemin d'accès" +
-            " · partition (type='email', période) : ni le chat ni les canaux à venir ne sont balayés (D138/D13)");
+          ? "index (tag_id, sorti_le DESC, comm_id) — D016, date dénormalisée dans la liaison"
+          : "index (compte_id, sorti_le DESC) — D036 : la portée EST le chemin d'accès" +
+            " · partition (type='email', période) : ni le chat ni les canaux à venir ne sont balayés (D138/D013)");
     },
 
     peindre() {
@@ -119,8 +119,8 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
         "non-lu, pas celle du corpus");
       else if (f === "pj") ABX.log("Filtre « avec pièce jointe »",
         `SELECT … WHERE m.nb_pieces_jointes > 0 …;`,
-        "nb_pieces_jointes dénormalisé (D29) — sinon un COUNT par ligne de liste");
-      else if (f === "lourds") ABX.log("Filtre « lourds » — la file de recompression (D70)",
+        "nb_pieces_jointes dénormalisé (D029) — sinon un COUNT par ligne de liste");
+      else if (f === "lourds") ABX.log("Filtre « lourds » — la file de recompression (D070)",
 `SELECT m.comm_id, m.sujet, m.taille_octets, m.nb_pieces_jointes
   FROM rattachement r JOIN comm m USING (comm_id)
  WHERE r.compte_id = :moi AND <portée du dossier>
@@ -132,7 +132,7 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
 `SELECT … FROM rattachement r WHERE r.compte_id = :moi
    AND r.sorti_le IS NOT NULL AND <portée du dossier>
  ORDER BY r.sorti_le DESC LIMIT 50;`,
-        "⚠ ces lignes sont dans une AUTRE partition que la file (D14/D30) : deux plans, deux " +
+        "⚠ ces lignes sont dans une AUTRE partition que la file (D014/D030) : deux plans, deux " +
         "index. C'est voulu — mais un écran qui mélange les deux paie les deux", true);
     },
   };

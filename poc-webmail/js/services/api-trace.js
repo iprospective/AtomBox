@@ -6,11 +6,11 @@
    ce qui est décrit ici.
 
    HYPOTHÈSE DE TRAVAIL : une API REST, une ressource par concept du modèle.
-   Q07 n'est pas tranchée — un point d'entrée unique (GraphQL, RPC) donnerait
+   Q007 n'est pas tranchée — un point d'entrée unique (GraphQL, RPC) donnerait
    une autre cascade, avec moins d'allers-retours et plus de complexité côté
    serveur. La trace est faite pour rendre cette comparaison possible, pas pour
    la préempter : lire une cascade et compter ses passages de réseau est le
-   moyen le plus direct de trancher Q07. */
+   moyen le plus direct de trancher Q007. */
 (function (ABX) {
   "use strict";
   const F = ABX.Fmt, Fx = ABX.Fixtures, Erp = ABX.Erp;
@@ -73,7 +73,7 @@
           detail:"GET /api/v1/messages/{id} → MessageController::show" },
         { t:"ctrl", label:"MessageController::show(id, inclure[])",
           detail:"valide `inclure`, délègue, sérialise — aucune requête écrite ici" },
-        { t:"acl", label:"la portée EST le chemin d'accès (D36)",
+        { t:"acl", label:"la portée EST le chemin d'accès (D036)",
           detail:"MessageService::pourCompte(id, compte)",
           index:"pas de « SELECT le message puis vérifier » : la portée est une jointure sur " +
                 "rattachement, donc un message hors portée n'existe simplement pas — 404, pas 403" },
@@ -86,7 +86,7 @@
   JOIN comm m USING (comm_id)
  WHERE m.comm_id = :id AND r.compte_id = :moi;`,
           index:"index (comm_id, compte_id) sur rattachement — jamais SELECT * : les headers " +
-                "sont TOASTés (D27) et ne servent pas à l'affichage" },
+                "sont TOASTés (D027) et ne servent pas à l'affichage" },
         { t:"sql", label:"les pièces jointes — liaison et blob",
           detail:
 `SELECT l.ordre, l.nom_fichier, l.mime_declare, l.transfer_encoding,
@@ -105,19 +105,19 @@
   JOIN application a ON a.application_id = t.application_id
  WHERE mt.comm_id = :id
    AND t.axe_id = ANY (:axes_lisibles_par_moi);`,
-          index:"l'ACL des axes est un ANY sur une liste calculée à l'authentification (D18) — " +
+          index:"l'ACL des axes est un ANY sur une liste calculée à l'authentification (D018) — " +
                 "pas une jointure de plus à chaque message" },
         { t:"sql", label:"le fil de discussion",
           detail:
 `SELECT comm_id, from_nom, sujet, date_reception
   FROM comm WHERE thread_id = :thread
  ORDER BY date_reception LIMIT 50;`,
-          index:"index (thread_id, date_reception) — D55. ⚠ le fil ignore la portée : un message " +
-                "du fil que ce compte ne peut pas voir doit apparaître en creux, pas disparaître (Q26)",
+          index:"index (thread_id, date_reception) — D055. ⚠ le fil ignore la portée : un message " +
+                "du fil que ce compte ne peut pas voir doit apparaître en creux, pas disparaître (Q026)",
           warn:true },
         { t:"blob", label:"le corps, hors base",
           detail:"zstd -d " + (m.pjs[0] ? "blob/" + m.pjs[0].b.sha.slice(0, 2) + "/" + m.pjs[0].b.sha : "blob/…"),
-          index:"les octets ne transitent jamais par PostgreSQL (D05/D07) : la base dit où, " +
+          index:"les octets ne transitent jamais par PostgreSQL (D005/D007) : la base dit où, " +
                 "le magasin donne quoi" },
         { t:"json", label:"200 OK — le contrat d'API",
           detail: j(messageJson(m, true)) },
@@ -132,8 +132,8 @@
           { t:"http", label:"un SECOND aller-retour — et il ne va pas chez nous",
             detail:"GET https://" + f.cfg.app + ".lan/api/index.php/thirdparties/" + f.ref + "\n"
                  + "DOLAPIKEY: <clé de l'intégration>",
-            index:"le contexte métier n'est pas stocké (D19) : l'afficher coûte un appel à une " +
-                  "application qui peut être lente, absente ou tarifée. C'est Q31 — et la raison " +
+            index:"le contexte métier n'est pas stocké (D019) : l'afficher coûte un appel à une " +
+                  "application qui peut être lente, absente ou tarifée. C'est Q031 — et la raison " +
                   "pour laquelle ce cadre doit se remplir APRÈS le message, jamais avant",
             warn:true },
           { t:"json", label:"200 OK — ce que l'ERP répond",
@@ -143,7 +143,7 @@
                           ({ type: o.type.toLowerCase(), ref: o.ref,
                              total_ttc: o.montant, statut: o.statut })) }),
             index:"aucun de ces champs n'entre en base AtomBox : le cadre est peint puis oublié. " +
-                  "Le jour où on le met en cache, c'est Q31 qui bascule" }); }
+                  "Le jour où on le met en cache, c'est Q031 qui bascule" }); }
       if (!dejaLu) e.push(
         { t:"http", label:"effet de bord : le message devient lu",
           detail:"PATCH /api/v1/messages/" + m.id + "/rattachement\n{ \"lu\": true }",
@@ -154,11 +154,11 @@
 `UPDATE rattachement SET lu_le = now()
  WHERE comm_id = :id AND compte_id = :moi AND lu_le IS NULL;`,
           index:"le IS NULL évite de réécrire une ligne déjà lue — sans lui, chaque relecture " +
-                "salit une page (D41)" },
+                "salit une page (D041)" },
         { t:"render", label:"compteurs de l'arborescence rafraîchis",
           detail:"Corpus.recompte() → Views.Nav",
           index:"côté serveur, ce serait un recalcul incrémental et non une nouvelle requête " +
-                "groupée : décrémenter le compteur du dossier, pas le recompter (D78)" });
+                "groupée : décrémenter le compteur du dossier, pas le recompter (D078)" });
       ABX.log({ label:"Ouvrir « " + m.subject + " »", etapes:e });
     },
 
@@ -196,7 +196,7 @@
  ORDER BY m.date_reception DESC LIMIT 50;`,
           index: virtuel
             ? "index (tag_id, date_reception DESC) avec la date DÉNORMALISÉE dans la liaison — " +
-              "sinon PostgreSQL trie après avoir tout lu (D16)"
+              "sinon PostgreSQL trie après avoir tout lu (D016)"
             : "index partiel (compte_id, dossier_id, date_reception DESC) WHERE sorti_le IS NULL — " +
               "sa taille est celle de la file, pas celle du corpus" },
         { t:"json", label:"200 OK — " + n + " message(s), forme abrégée",
@@ -254,20 +254,20 @@
         { t:"svc", label:"EnvoiService::envoyer(compte, brouillon)",
           detail:"partage les destinataires : " + internes.length + " interne(s), " +
                  externes.length + " externe(s)",
-          index:"ce partage est le cœur de D12, et il se fait ICI — pas dans Postfix, qui n'a " +
+          index:"ce partage est le cœur de D012, et il se fait ICI — pas dans Postfix, qui n'a " +
                 "aucun moyen de savoir ce qui a déjà été livré en base" },
-        { t:"sql", label:"BEGIN — le message est écrit UNE fois (D10)",
+        { t:"sql", label:"BEGIN — le message est écrit UNE fois (D010)",
           detail:
 `INSERT INTO comm (comm_id, sujet, corps, from_adresse, date_envoi, blob_ref)
 VALUES (:id, :sujet, :corps, '` + d.de + `', now(), :ref);`,
           index:"le corps part au magasin d'octets, pas dans la colonne : la base indexe, elle " +
-                "ne stocke pas (D05/D07)" },
+                "ne stocke pas (D005/D007)" },
         { t:"sql", label:"l'expéditeur — sorti de la file dès l'écriture",
           detail:
 `INSERT INTO rattachement (comm_id, compte_id, boite_id, sens,
                           recu_le, sorti_le, motif_sortie)
 VALUES (:id, :moi, :boite, 'envoye', now(), now(), 'envoye');`,
-          index:"le sens est posé ICI, à l'émission (D90) : c'est ce qui rend le filtre " +
+          index:"le sens est posé ICI, à l'émission (D090) : c'est ce qui rend le filtre " +
                 "« reçus / envoyés » indexable au lieu d'être déduit de from_adresse" },
       ];
       if (internes.length) e.push(
@@ -277,7 +277,7 @@ VALUES (:id, :moi, :boite, 'envoye', now(), now(), 'envoye');`,
 SELECT :id, b.compte_id, b.boite_id, 'recu', now() FROM boite b
  WHERE b.adresse = ANY (:internes);   -- ` + internes.join(", "),
           index:"une ligne par destinataire, un seul message : c'est exactement ce que la " +
-                "déduplication devait donner (D10/D12)" });
+                "déduplication devait donner (D010/D012)" });
       if (d.ref && d.src) e.push(
         { t:"sql", label:"transfert par référence : un lien et une ACL, aucune copie",
           detail:
@@ -285,8 +285,8 @@ SELECT :id, b.compte_id, b.boite_id, 'recu', now() FROM boite b
 VALUES (:id, '` + d.src + `', 'reference');
 INSERT INTO acl_message (comm_id, principal, droit, accorde_par)
 SELECT '` + d.src + `', a, 'lire', :moi FROM unnest(:internes) a;`,
-          index:"l'ACL est indépendante et durable (D60) : le destinataire garde l'accès même si " +
-                "l'expéditeur perd le sien (D58/D67)" });
+          index:"l'ACL est indépendante et durable (D060) : le destinataire garde l'accès même si " +
+                "l'expéditeur perd le sien (D058/D067)" });
       e.push({ t:"sql", label:"COMMIT", detail:"COMMIT;",
         index:"tout ce qui précède est atomique ; tout ce qui suit ne l'est pas, et ne doit " +
               "surtout pas l'être" });
@@ -295,7 +295,7 @@ SELECT '` + d.src + `', a, 'lire', :moi FROM unnest(:internes) a;`,
           detail:"SELECT pg_notify('smtp_out', :id);   -- " + externes.join(", "),
           index: internes.length
             ? "⚠ destinataires MIXTES : le relais ne doit remettre QUE les externes, sinon les " +
-              "internes reçoivent deux fois. C'est le point soulevé pour D12, et il se règle " +
+              "internes reçoivent deux fois. C'est le point soulevé pour D012, et il se règle " +
               "dans cette liste, pas dans la configuration de Postfix"
             : "remise au relais après COMMIT : un SMTP lent ne doit jamais tenir une transaction " +
               "ouverte",
@@ -320,7 +320,7 @@ SELECT '` + d.src + `', a, 'lire', :moi FROM unnest(:internes) a;`,
         { t:"http", label:"une mutation, une ressource",
           detail:"PATCH /api/v1/messages/" + m.id + "/rattachement\n" + j(action.corps),
           index:"c'est le RATTACHEMENT qu'on modifie, pas le message : l'URL le dit, et c'est " +
-                "ce qui empêche un client d'écrire sur un fait partagé (D36)" },
+                "ce qui empêche un client d'écrire sur un fait partagé (D036)" },
         { t:"route", label:"routes/api.php",
           detail:"PATCH /api/v1/messages/{id}/rattachement → RattachementController::update" },
         { t:"acl", label:"la portée est dans l'écriture elle-même",

@@ -21,7 +21,7 @@
     t = t.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
     t = t.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<i>$2</i>");
     t = t.replace(/~~([^~]+)~~/g, "<s>$1</s>");
-    /* D138, Q54, C09 : cliquables vers leur section quand elle existe */
+    /* D138, Q054, C009 : cliquables vers leur section quand elle existe */
     t = t.replace(/\b([DQC]\d{2,3}b?)\b/g, (m0, id) =>
       ABX.CDC && ABX.CDC.sections && ABX.CDC.sections[id]
         ? `<a href="#" class="cdc-lien" data-sec="${id}">${id}</a>` : m0);

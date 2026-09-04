@@ -45,11 +45,11 @@
       const nMut = Object.keys(St.ratt).length;
       return `<div class="qh"><b>Trace des gestes</b>
           <button class="hbtn" id="qclr">vider</button></div>
-        <div class="note">Le livrable du POC, au-delà des écrans (D79) : chaque clic déroule
+        <div class="note">Le livrable du POC, au-delà des écrans (D079) : chaque clic déroule
           la <b>cascade complète</b> — appel d'API, route, contrôleur, service, requêtes,
           magasin d'octets, JSON renvoyé, rendu. C'est cette succession qui décrit ce qu'il
           faudra écrire, et le JSON qui fixe le contrat d'API.<br>
-          <b>Hypothèse de travail</b> : une API REST par ressource. <b>Q07 n'est pas
+          <b>Hypothèse de travail</b> : une API REST par ressource. <b>Q007 n'est pas
           tranchée</b> — un point d'entrée unique donnerait une autre cascade, et c'est
           justement ce que cette trace permet de comparer.<br>
           <b>État local</b> : ${nMut} rattachement(s) modifié(s), ${St.crees.length} message(s)

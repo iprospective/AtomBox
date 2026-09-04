@@ -1,4 +1,4 @@
-/* VUE ARBORESCENCE — engendrée depuis les axes (D77), jamais écrite à la main.
+/* VUE ARBORESCENCE — engendrée depuis les axes (D077), jamais écrite à la main.
    Deux cents fournisseurs ne tiennent dans un panneau latéral qu'avec un filtre,
    un repli par axe et une pagination : c'est la cardinalité qui impose l'écran. */
 (function (ABX) {
@@ -31,7 +31,7 @@
          encore. Ce qui reste est ce que Roundcube et Thunderbird montrent. */
       if (ABX.V0())
         return h + `<div class="hint" style="padding:8px 10px">V0 — les dossiers IMAP, ingérés
-          comme tags d'origine et affichés tels quels ; synchronisés avec IMAP (D140b, D46)</div>`;
+          comme tags d'origine et affichés tels quels ; synchronisés avec IMAP (D140b, D046)</div>`;
       /* L'ordre des axes appartient à l'utilisateur (D135). Un axe ajouté depuis
          son dernier réglage se range à la fin plutôt que de disparaître. */
       const ordre = ui.ordreAxes || [];

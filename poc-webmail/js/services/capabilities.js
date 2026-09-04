@@ -40,7 +40,7 @@ RETURNING tache_id;`,
                   note: "Depuis AtomBox — message " + m.id,
                   fk_project: null, atombox_comm_id: m.id }),
             index:"AtomBox ne stocke rien de la tâche : au retour, il ne garde qu'une " +
-                  "référence externe (D84)" },
+                  "référence externe (D084)" },
           { t:"json", label:"201 — l'identifiant qui servira de lien",
             detail: j({ id: 4821, ref: "TASK4821",
                         url: "https://" + f.base + ".lan/projet/task/card.php?id=4821" }) },
@@ -49,13 +49,13 @@ RETURNING tache_id;`,
 `INSERT INTO objet_lie (comm_id, application_id, type, ref_externe, url)
 VALUES ('` + m.id + `', :app, 'tache', :ref, :url);`,
             index:"⚠ ce lien peut mourir : la tâche est supprimable chez le fournisseur sans " +
-                  "qu'AtomBox le sache. Même problème que Q30 sur le transfert par référence — " +
+                  "qu'AtomBox le sache. Même problème que Q030 sur le transfert par référence — " +
                   "il faut afficher un lien mort, pas un vide silencieux",
             warn:true },
           { t:"note", label:"et la file de travail ?",
             detail:"elle demande un appel de plus, à chaque affichage",
             index:"⚠ « mes emails à traiter » et « mes tâches » ne se lisent plus dans la même " +
-                  "requête : c'est le prix du fournisseur externe, et c'est Q31 qui revient",
+                  "requête : c'est le prix du fournisseur externe, et c'est Q031 qui revient",
             warn:true },
         ]);
     },
@@ -64,7 +64,7 @@ VALUES ('` + m.id + `', :app, 'tache', :ref, :url);`,
     ficheContact(m) {
       T().capacite("contacts", "Fiche du correspondant", m,
         () => [
-          { t:"sql", label:"la table existe déjà — c'est D35",
+          { t:"sql", label:"la table existe déjà — c'est D035",
             detail:
 `SELECT c.correspondant_id, c.libelle,
        array_agg(a.adresse ORDER BY a.principale DESC) AS adresses
@@ -101,7 +101,7 @@ VALUES ('` + m.id + `', :app, 'tache', :ref, :url);`,
               ? "BEGIN:VCARD\nFN:" + m.from + "\nEMAIL;TYPE=work:" + m.mail + "\nUID:…\nEND:VCARD"
               : j({ id: 1042, name: m.from, email: m.mail, client: 1 }) },
           { t:"note", label:"ce qu'AtomBox perd en déléguant",
-            detail:"l'identité multi-adresses de D35 doit être reconstruite à chaque appel",
+            detail:"l'identité multi-adresses de D035 doit être reconstruite à chaque appel",
             index: f.id === "carddav"
               ? "⚠ une vCard porte plusieurs EMAIL, mais rien ne garantit que deux vCards ne " +
                 "partagent pas une adresse — le rattachement automatique devient ambigu"
@@ -121,7 +121,7 @@ VALUES ('` + m.id + `', :app, 'tache', :ref, :url);`,
 `INSERT INTO fichier (pj_id, compte_id, nom, dossier, tags)
 VALUES (` + p.b.pj_id + `, :moi, :nom, :dossier, :tags)
 ON CONFLICT (pj_id, compte_id) DO UPDATE SET nom = EXCLUDED.nom;`,
-            index:"« enregistrer » ne copie RIEN (D24) : le blob de " + F.poids(p.b.ko) +
+            index:"« enregistrer » ne copie RIEN (D024) : le blob de " + F.poids(p.b.ko) +
                   " est déjà stocké et partagé par " + p.b.refs + " liaison(s). C'est la " +
                   "démonstration la plus nette de l'intérêt du magasin dédupliqué" },
         ],
