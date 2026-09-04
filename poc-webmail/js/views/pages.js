@@ -147,7 +147,7 @@
   const FEAT_ID = {}; (ABX.CDC.dict.fonctionnalites || []).forEach(f => FEAT_ID[f.libelle] = f.id);
 
   const ETATS = { "maquetté":"ok", "décidé":"wait", "à trancher":"due", "à venir":"",
-                  "en pause":"pause" };
+                  "en pause":"pause", "écarté":"" };
 
   /* Une seule table, TRIABLE par colonne — le regroupement par domaine n'est
      qu'un tri parmi d'autres. L'ordre de codage (rang topologique) en est un
