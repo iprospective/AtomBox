@@ -14,31 +14,31 @@
       return `
         <div class="backbar"><button data-vue="liste">‹ ${F.esc(ui.folder.label)}</button></div>
         <div class="dhead">
-          <div class="dsubj">${F.esc(m.subject)}</div>
+          <div class="dsubj">${F.esc(m.sujet)}</div>
           <div class="dmeta">${R.render("expediteur", { m, long: true })} ·
-            ${new Date(m.date).toLocaleString("fr-FR")} · reçu sur <b>${F.esc(m.boite)}</b>
-            ${m.pj ? " · 📎 " + m.pj : ""}
-            ${m.motif ? " · " + R.render("statut.chip", { m }) : ""}
+            ${new Date(m.date_recue).toLocaleString("fr-FR")} · reçu sur <b>${F.esc(m.boite)}</b>
+            ${m.nb_pieces_jointes ? " · 📎 " + m.nb_pieces_jointes : ""}
+            ${m.motif_sortie ? " · " + R.render("statut.chip", { m }) : ""}
             ${m.dossier === "trash" ? ` · <span class="tag">corbeille</span>` : ""}</div>
           <div class="dacts">
-            <button class="hbtn${m.repond === "non" ? " off" : ""}" data-c="rep"
-              ${m.repond === "non" ? `disabled title="Cette adresse a rejeté une réponse` +
+            <button class="hbtn${m.reponse_possible === "non" ? " off" : ""}" data-c="rep"
+              ${m.reponse_possible === "non" ? `disabled title="Cette adresse a rejeté une réponse` +
                 ` — voir le bandeau ci-dessous (D131)"` : ""}>↩ Répondre</button>
-            <button class="hbtn${m.repond === "non" ? " off" : ""}" data-c="reptous"
-              ${m.repond === "non" ? "disabled" : ""}>↩↩ Tous</button>
+            <button class="hbtn${m.reponse_possible === "non" ? " off" : ""}" data-c="reptous"
+              ${m.reponse_possible === "non" ? "disabled" : ""}>↩↩ Tous</button>
             <button class="hbtn" data-c="tr">➦ Transférer</button>
             ${ABX.Views.Message.statutHtml(m)}
             <button class="hbtn ic" data-x="${m.lu ? "nonLu" : "lire"}"
               title="${m.lu ? "Marquer non lu" : "Marquer lu"}">${m.lu ? "◻" : "◼"}</button>
             <span class="pousse"></span>
             <button class="hbtn ic" id="plus" title="Autres actions">⋯</button>
-            ${(m.dossier || m.fid) === "trash"
+            ${(m.dossier || m.dossier_origine) === "trash"
               ? `<button class="hbtn ic" data-x="restaurer" title="Restaurer">↩</button>
                  <button class="hbtn ic dgr" data-x="supprimer" title="Supprimer définitivement">✕</button>`
-              : `<button class="hbtn ic" data-x="${(m.dossier || m.fid) === "junk" ? "nonJunk" : "junk"}"
-                   title="${(m.dossier || m.fid) === "junk"
+              : `<button class="hbtn ic" data-x="${(m.dossier || m.dossier_origine) === "junk" ? "nonJunk" : "junk"}"
+                   title="${(m.dossier || m.dossier_origine) === "junk"
                      ? "Ce n'est pas un indésirable" : "Marquer indésirable"}">${
-                     (m.dossier || m.fid) === "junk" ? "✓" : "🚫"}</button>
+                     (m.dossier || m.dossier_origine) === "junk" ? "✓" : "🚫"}</button>
                  <button class="hbtn ic dgr" data-x="corbeille"
                    title="Mettre à la corbeille">🗑</button>`}
           </div>
@@ -62,7 +62,7 @@
        l'ordre des états compte, et il doit se voir. */
     statutHtml(m) {
       if (ABX.V0()) return "";          // V0 : pas de workflow, IMAP n'a que lu/drapeau (D140)
-      if (m.motif === "archive") return `<span class="tag">archivé</span>
+      if (m.motif_sortie === "archive") return `<span class="tag">archivé</span>
         <button class="hbtn" data-x="refile" title="Remettre dans la file">↺ Reprendre</button>`;
       return `<select class="statsel st-${F.esc(m.statut || "nouveau")}" id="stat"
           title="Statut de traitement">
@@ -87,7 +87,7 @@
           <span class="mprov">${F.esc(cap("taches").label)}</span></button>
         <button data-m="contact">${cap("contacts").ic} Fiche du correspondant
           <span class="mprov">${F.esc(cap("contacts").label)}</span></button>
-        ${m.pj ? `<button data-m="fichiers">${cap("fichiers").ic} Enregistrer les pièces jointes
+        ${m.nb_pieces_jointes ? `<button data-m="fichiers">${cap("fichiers").ic} Enregistrer les pièces jointes
           <span class="mprov">${F.esc(cap("fichiers").label)}</span></button>` : ""}
       </div>`;
     },
@@ -108,8 +108,8 @@
        en prod la seconde n'est pas chargée. */
     fiabiliteHtml(m) {
       if (ABX.V0()) return "";
-      if (m.sens === "out" || m.fiab === undefined || m.spoof) return "";
-      if (m.fiab >= 2)
+      if (m.sens === "out" || m.fiabilite === undefined || m.usurpation) return "";
+      if (m.fiabilite >= 2)
         return `<div class="lien fiab-bloc" style="margin:12px 16px">✓ <b>Expéditeur validé</b> —
           quelqu'un de chez vous a marqué cette adresse comme fiable, et ce message est
           authentifié par son domaine.${R.contexte("fiabilite.valide", { m })}</div>`;
@@ -126,15 +126,15 @@
 
     repondHtml(m) {
       if (ABX.V0()) return "";
-      if (!m.repond || m.repond === "oui") return "";
-      const alt = m.alt
-        ? `<div class="hint">Plutôt que d'abandonner : <b>${F.esc(m.alt.nom)}</b>
-           &lt;${F.esc(m.alt.mail)}&gt; est à votre carnet, sur le même domaine —
+      if (!m.reponse_possible || m.reponse_possible === "oui") return "";
+      const alt = m.contact_alternatif
+        ? `<div class="hint">Plutôt que d'abandonner : <b>${F.esc(m.contact_alternatif.nom)}</b>
+           &lt;${F.esc(m.contact_alternatif.from_adresse)}&gt; est à votre carnet, sur le même domaine —
            montré, jamais présélectionné.</div>` : "";
-      if (m.repond === "non")
+      if (m.reponse_possible === "non")
         return `<div class="alerte-bloc">⛔ <b>Cette adresse n'accepte pas les réponses.</b>
           <div class="hint">Une réponse envoyée il y a ${m.dsn.jours} jours à
-            <b>${F.esc(m.mail)}</b> a été rejetée : <code>${F.esc(m.dsn.code)}</code>.</div>
+            <b>${F.esc(m.from_adresse)}</b> a été rejetée : <code>${F.esc(m.dsn.code)}</code>.</div>
           ${R.contexte("reponse.refus", { m })}${alt}</div>`;
       return `<div class="lien" style="margin:12px 16px">✉ <b>${
         m.nature === "liste" ? "Message de diffusion" : "Notification automatique"}</b> —
@@ -145,20 +145,20 @@
 
     spoofHtml(m) {
       if (ABX.V0()) return "";
-      if (!m.spoof) return "";
+      if (!m.usurpation) return "";
       return `<div class="alerte-bloc">⚠ <b>Ce message se présente sous un nom connu, depuis
         une adresse qui ne l'est pas.</b>
-        <div class="hint">« ${F.esc(m.from)} » est enregistré au carnet, mais pas à l'adresse
-          <b>${F.esc(m.mail)}</b>.</div>${R.contexte("usurpation", { m })}</div>`;
+        <div class="hint">« ${F.esc(m.from_nom)} » est enregistré au carnet, mais pas à l'adresse
+          <b>${F.esc(m.from_adresse)}</b>.</div>${R.contexte("usurpation", { m })}</div>`;
     },
 
     lienHtml(m) {
       if (ABX.V0()) return "";
-      if (!m.ref) return "";
-      const src = ABX.Api.cache.message(m.ref);
+      if (!m.reference) return "";
+      const src = ABX.Api.cache.message(m.reference);
       return `<div class="lien" style="margin:12px 16px">➦ <b>Message transféré par référence</b> —
         aucune copie n'a été faite : ce message pointe
-        « ${F.esc(src ? src.subject : "message supprimé")} ».
+        « ${F.esc(src ? src.sujet : "message supprimé")} ».
         ${src ? `<button class="hbtn" id="suivre" style="margin-top:6px">Ouvrir l'original</button>`
               : `<span class="tag">l'original n'existe plus</span>`}
         ${R.contexte("transfert.reference", { m, src })}</div>`;

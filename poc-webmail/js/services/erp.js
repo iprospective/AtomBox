@@ -30,10 +30,10 @@
     for (let i = 0, n = P.int(2, 5); i < n; i++) {
       const p = P.pick(PIECES);
       objets.push({ type:p[0], statut:P.pick(p[2]), montant:P.int(120, 24000),
-        ref: p[1] + "26" + String(P.int(1, 12)).padStart(2, "0") + "-" + String(P.int(1, 999)).padStart(4, "0") });
+        reference: p[1] + "26" + String(P.int(1, 12)).padStart(2, "0") + "-" + String(P.int(1, 999)).padStart(4, "0") });
     }
     const du = objets.filter(o => o.type === "Facture" && o.statut !== "payée");
-    return { cfg, ref: cfg.pref + P.int(1000, 9999), objets,
+    return { cfg, reference: cfg.pref + P.int(1000, 9999), objets,
       encours: du.reduce((s, o) => s + o.montant, 0),
       echu: du.filter(o => o.statut === "en retard").reduce((s, o) => s + o.montant, 0),
       depuis: 2010 + P.int(0, 14) };

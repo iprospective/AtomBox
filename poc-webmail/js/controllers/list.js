@@ -7,12 +7,12 @@
   const IDX_TRI = {
     date_desc: ["index (tag_id, sorti_le DESC, comm_id) — tri porté par l'index (D016)", false],
     date_asc:  ["même index parcouru à l'envers", false],
-    from:      ["tri NON indexé — tenable seulement parce que la fenêtre est paginée", true],
+    from_nom:      ["tri NON indexé — tenable seulement parce que la fenêtre est paginée", true],
     subj:      ["tri NON indexé — idem", true],
-    size:      ["tri NON indexé sur taille_octets — idem", true],
+    taille:      ["tri NON indexé sur taille_octets — idem", true],
   };
   const SQL_TRI = { date_desc:"m.date_reception DESC", date_asc:"m.date_reception ASC",
-                    from:"m.from_nom", subj:"m.sujet_normalise", size:"m.taille_octets DESC" };
+                    from_nom:"m.from_nom", subj:"m.sujet_normalise", taille:"m.taille_octets DESC" };
 
   const List = {
     ouvrir(folder) {
@@ -58,11 +58,7 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
       List._cle = cle;
       return ABX.Api.liste(ui.folder, ui.filtre, ui.tri, ui.sens, ui.statut).then(l => {
         if (List._cle !== cle) return;            // réponse périmée : on ne peint pas
-        /* DETTE (D141) : les vues sont encore écrites contre l'objet interne du
-           corpus ; le serveur simulé le glisse dans la réponse sous _m. Chaque
-           déballage est compté par le harnais — l'objectif est zéro, et alors
-           les vues lisent le contrat JSON, comme en prod. */
-        List._cache = l.map(r => r._m || r); List.peindre();
+        List._cache = l; List.peindre();
       });
     },
     peindre() {
@@ -75,7 +71,7 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
       el.querySelector("#tri").value = ui.tri;
 
       const vider = el.querySelector("#vider");
-      if (vider) vider.onclick = () => ABX.Api.contenu(ui.folder).then(l => M.viderCorbeille(l.map(r => r._m || r)));
+      if (vider) vider.onclick = () => ABX.Api.contenu(ui.folder).then(M.viderCorbeille);
 
       D.on(el, ".chip[data-f]", "onclick", c => { ui.filtre = c.dataset.f; St.save();
         List.peindre(); List.logFiltre(ui.filtre); });
@@ -95,7 +91,7 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
         const b = D.closest(e, "data-act");
         if (b) { e.stopPropagation(); return M[b.dataset.act](m); }
         /* Un brouillon ne s'ouvre pas en lecture : il se rouvre en composition. */
-        if ((m.dossier || m.fid) === "drafts" && m.compo)
+        if ((m.dossier || m.dossier_origine) === "drafts" && m.composition)
           return ABX.Controllers.Compose.rouvrir(m);
         ABX.Controllers.Tabs.ouvrir({ type:"msg", id:m.id }, true);
         if (App().MOBILE()) App().setVue("detail");

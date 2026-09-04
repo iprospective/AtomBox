@@ -73,22 +73,22 @@
 
     /* Attache des pièces jointes à un message et en déduit son poids réel. */
     attacher(m) {
-      m.pjs = [];
+      m.pieces_jointes = [];
       /* Une pièce jointe le plus souvent, deux ou trois parfois. */
       if (next() < .22) { const n = next() < .78 ? 1 : int(2, 3);
         for (let k = 0; k < n; k++) { const t = tirerType();
-          m.pjs.push(lien(blob({ ext:t.ext, mime:t.mime, ic:t.ic, photo:t.photo, eml:t.eml,
+          m.pieces_jointes.push(lien(blob({ ext:t.ext, mime:t.mime, ic:t.ic, photo:t.photo, eml:t.eml,
             ko: int(t.ko[0], t.ko[1]), refs: next() < .15 ? int(2, 6) : 1 }), t.noms)); } }
-      if (next() < .14) m.pjs.push(lien(tirerPondere(RECURRENTS)));  // signature, CGV, tarifs…
+      if (next() < .14) m.pieces_jointes.push(lien(tirerPondere(RECURRENTS)));  // signature, CGV, tarifs…
       Attachments.recompter(m);
     },
 
     /* +37 % sur le fil : c'est le coût du base64 (D069), et l'écart qui explique
        l'audit de dimensionnement du chapitre 08. */
     recompter(m) {
-      m.pj = m.pjs.length;
-      m.pj_ko = m.pjs.reduce((s, p) => s + p.b.ko, 0);
-      m.size = int(3, 26) + Math.round(m.pj_ko * 1.37);   // le corps seul pèse peu
+      m.nb_pieces_jointes = m.pieces_jointes.length;
+      m.pj_ko = m.pieces_jointes.reduce((s, p) => s + p.b.ko, 0);
+      m.taille = int(3, 26) + Math.round(m.pj_ko * 1.37);   // le corps seul pèse peu
     },
 
     /* Pièce jointe ajoutée à la composition. */

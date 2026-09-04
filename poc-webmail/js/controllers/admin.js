@@ -157,7 +157,7 @@ ON CONFLICT DO NOTHING;`,
       if (!nom.trim() || nom === x.p.nom) return;
       const ancien = x.p.nom;
       x.p.nom = nom.trim();
-      St.patch(x.m, { pjs: x.m.pjs });
+      St.patch(x.m, { pieces_jointes: x.m.pieces_jointes });
       St.save();
       ABX.log({ label:"Renommer « " + ancien + " » en « " + x.p.nom + " »", etapes:[
         { t:"ui", label:"saisie dans la liste des pièces jointes",

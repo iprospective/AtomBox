@@ -36,13 +36,13 @@ RETURNING tache_id;`,
         f => [
           { t:"http", label:"la tâche est créée CHEZ LUI",
             detail:"POST https://" + f.base + ".lan" + f.endpoint + "\n" +
-              j({ label: m.subject, dateo: echeance(),
+              j({ label: m.sujet, dateo: echeance(),
                   note: "Depuis AtomBox — message " + m.id,
                   fk_project: null, atombox_comm_id: m.id }),
             index:"AtomBox ne stocke rien de la tâche : au retour, il ne garde qu'une " +
                   "référence externe (D084)" },
           { t:"json", label:"201 — l'identifiant qui servira de lien",
-            detail: j({ id: 4821, ref: "TASK4821",
+            detail: j({ id: 4821, reference: "TASK4821",
                         url: "https://" + f.base + ".lan/projet/task/card.php?id=4821" }) },
           { t:"sql", label:"seul le lien entre dans AtomBox",
             detail:
@@ -70,7 +70,7 @@ VALUES ('` + m.id + `', :app, 'tache', :ref, :url);`,
        array_agg(a.adresse ORDER BY a.principale DESC) AS adresses
   FROM adresse a JOIN correspondant c USING (correspondant_id)
  WHERE c.correspondant_id = (SELECT correspondant_id FROM adresse
-                              WHERE adresse = lower('` + m.mail + `'))
+                              WHERE adresse = lower('` + m.from_adresse + `'))
  GROUP BY c.correspondant_id;`,
             index:"le contact natif n'est pas une fonctionnalité de plus : c'est l'affichage " +
                   "de l'identité multi-adresses dont AtomBox a déjà besoin pour rattacher" },
@@ -89,17 +89,17 @@ VALUES ('` + m.id + `', :app, 'tache', :ref, :url);`,
           { t:"http", label:"recherche par adresse chez le fournisseur",
             detail: f.id === "carddav"
               ? "REPORT " + f.endpoint + "\n<C:addressbook-query><C:filter>\n" +
-                "  <C:prop-filter name=\"EMAIL\"><C:text-match>" + m.mail + "</C:text-match>\n" +
+                "  <C:prop-filter name=\"EMAIL\"><C:text-match>" + m.from_adresse + "</C:text-match>\n" +
                 "</C:filter></C:addressbook-query>"
-              : "GET https://" + f.base + ".lan" + f.endpoint + "?sqlfilters=(email:=:'" + m.mail + "')",
+              : "GET https://" + f.base + ".lan" + f.endpoint + "?sqlfilters=(email:=:'" + m.from_adresse + "')",
             index: f.id === "carddav"
               ? "une requête CardDAV par message affiché : à mettre en cache, ou à précharger " +
                 "l'annuaire entier au démarrage"
               : "l'ERP répond le tiers ET son encours : un seul appel pour la fiche et le contexte" },
           { t:"json", label:"la fiche, telle que le fournisseur la voit",
             detail: f.id === "carddav"
-              ? "BEGIN:VCARD\nFN:" + m.from + "\nEMAIL;TYPE=work:" + m.mail + "\nUID:…\nEND:VCARD"
-              : j({ id: 1042, name: m.from, email: m.mail, client: 1 }) },
+              ? "BEGIN:VCARD\nFN:" + m.from_nom + "\nEMAIL;TYPE=work:" + m.from_adresse + "\nUID:…\nEND:VCARD"
+              : j({ id: 1042, name: m.from_nom, email: m.from_adresse, client: 1 }) },
           { t:"note", label:"ce qu'AtomBox perd en déléguant",
             detail:"l'identité multi-adresses de D035 doit être reconstruite à chaque appel",
             index: f.id === "carddav"
@@ -113,7 +113,7 @@ VALUES ('` + m.id + `', :app, 'tache', :ref, :url);`,
 
     /* ---- déposer une pièce jointe dans le gestionnaire de fichiers ------- */
     deposerFichier(m, i) {
-      const p = m.pjs[i]; if (!p) return;
+      const p = m.pieces_jointes[i]; if (!p) return;
       T().capacite("fichiers", "Enregistrer « " + p.nom + " »", m,
         () => [
           { t:"sql", label:"l'octet est déjà là — on pose un classement, pas une copie",

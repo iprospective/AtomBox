@@ -21,37 +21,28 @@
   /* La représentation d'un message en JSON — le contrat d'API, rendu tangible.
      Tout ce qui est ici devra exister dans le schéma ; tout ce qui manque ici
      est une colonne dont personne n'a encore eu besoin. */
+  /* La représentation d'un message dans le contrat d'API — c'est l'objet lui-même,
+     dont les clés sont CELLES DU DICTIONNAIRE (champs.yml) : sujet, from_nom,
+     from_adresse, date_recue, nb_pieces_jointes, sorti_le, motif_sortie, thread_id…
+     Les clés « _ » (état de session) et la composition n'en font pas partie ; les
+     dates sont montrées en ISO, comme le vrai serveur les sert. Une clé qui manque
+     ici est une colonne dont personne n'a encore eu besoin. */
   function messageJson(m, complet) {
-    const o = {
-      comm_id: m.id,
-      sujet: m.subject,
-      de: { nom: m.from, adresse: m.mail },
-      a: m.to,
-      boite: m.boite,
-      sens: m.sens === "out" ? "envoye" : "recu",
-      date_reception: iso(m.date),
-      lu_le: m.lu ? iso(Date.now()) : null,
-      sorti_le: m.sorti ? iso(m.sorti) : null,
-      motif_sortie: m.motif,
-      thread_id: m.thread,
-      taille_octets: m.size * 1024,
-      nb_pieces_jointes: m.pj,
-    };
-    if (!complet) { o.snippet = m.snippet; return o; }
-    o.tags = m.tags.map(t => {
-      const f = Erp.APPS[t.axe] ? Erp.fiche(t.axe, t.val) : null;
-      return { axe: t.axe, valeur: t.val, application: t.src,
-               ref_externe: f ? f.ref : null };
+    const o = {};
+    Object.keys(m).forEach(k => { if (!k.startsWith("_") && k !== "composition") o[k] = m[k]; });
+    o.date_recue = iso(m.date_recue);
+    o.sorti_le = m.sorti_le ? iso(m.sorti_le) : null;
+    o.tags = (m.tags || []).map(t => {
+      const fi = Erp.APPS[t.axe] ? Erp.fiche(t.axe, t.val) : null;
+      return { axe: t.axe, valeur: t.val, application: t.src, ref_externe: fi ? fi.ref : null };
     });
-    o.pieces_jointes = m.pjs.map((p, i) => ({
+    if (!complet) { delete o.corps; delete o.pieces_jointes; return o; }
+    o.pieces_jointes = (m.pieces_jointes || []).map((p, i) => ({
       pj_id: p.b.pj_id, ordre: i, nom: p.nom, octets: p.b.ko * 1024,
-      mime_declare: p.declare, mime_detecte: p.b.mime,
-      sha256: p.b.sha + "…", partage_par: p.b.refs,
-    }));
-    o.corps = { texte: (m.body || "").slice(0, 60) + "…", html: null };
+      mime_declare: p.declare, mime_detecte: p.b.mime, sha256: p.b.sha + "…", partage_par: p.b.refs }));
+    o.corps = { texte: (m.corps || "").slice(0, 60) + "…", html: null };
     return o;
   }
-
   const Traces = {
     messageJson,
 
@@ -94,10 +85,10 @@
        (SELECT count(*) FROM comm_piece_jointe x WHERE x.pj_id = p.pj_id) AS partage_par
   FROM comm_piece_jointe l JOIN piece_jointe p USING (pj_id)
  WHERE l.comm_id = :id ORDER BY l.ordre;`,
-          index: m.pj ? "index (comm_id, ordre) ; le sous-select de partage coûte un accès par " +
+          index: m.nb_pieces_jointes ? "index (comm_id, ordre) ; le sous-select de partage coûte un accès par " +
                         "PJ — à ne garder que si l'écran l'affiche vraiment"
                       : "aucune ligne ici : nb_pieces_jointes valait 0, la requête aurait pu être évitée",
-          warn: m.pj > 0 },
+          warn: m.nb_pieces_jointes > 0 },
         { t:"sql", label:"les tags, avec leur application d'origine",
           detail:
 `SELECT t.axe_id, t.valeur, t.ref_externe, a.code AS application
@@ -116,7 +107,7 @@
                 "du fil que ce compte ne peut pas voir doit apparaître en creux, pas disparaître (Q026)",
           warn:true },
         { t:"blob", label:"le corps, hors base",
-          detail:"zstd -d " + (m.pjs[0] ? "blob/" + m.pjs[0].b.sha.slice(0, 2) + "/" + m.pjs[0].b.sha : "blob/…"),
+          detail:"zstd -d " + (m.pieces_jointes[0] ? "blob/" + m.pieces_jointes[0].b.sha.slice(0, 2) + "/" + m.pieces_jointes[0].b.sha : "blob/…"),
           index:"les octets ne transitent jamais par PostgreSQL (D005/D007) : la base dit où, " +
                 "le magasin donne quoi" },
         { t:"json", label:"200 OK — le contrat d'API",
@@ -130,17 +121,17 @@
       if (tg) { const f = Erp.fiche(tg.axe, tg.val);
         e.push(
           { t:"http", label:"un SECOND aller-retour — et il ne va pas chez nous",
-            detail:"GET https://" + f.cfg.app + ".lan/api/index.php/thirdparties/" + f.ref + "\n"
+            detail:"GET https://" + f.cfg.app + ".lan/api/index.php/thirdparties/" + f.reference + "\n"
                  + "DOLAPIKEY: <clé de l'intégration>",
             index:"le contexte métier n'est pas stocké (D019) : l'afficher coûte un appel à une " +
                   "application qui peut être lente, absente ou tarifée. C'est Q031 — et la raison " +
                   "pour laquelle ce cadre doit se remplir APRÈS le message, jamais avant",
             warn:true },
           { t:"json", label:"200 OK — ce que l'ERP répond",
-            detail: j({ id: f.ref, name: tg.val, client: 1,
+            detail: j({ id: f.reference, name: tg.val, client: 1,
                         outstanding_total: f.encours, outstanding_late: f.echu,
                         last_documents: f.objets.slice(0, 2).map(o =>
-                          ({ type: o.type.toLowerCase(), ref: o.ref,
+                          ({ type: o.type.toLowerCase(), reference: o.reference,
                              total_ttc: o.montant, statut: o.statut })) }),
             index:"aucun de ces champs n'entre en base AtomBox : le cadre est peint puis oublié. " +
                   "Le jour où on le met en cache, c'est Q031 qui bascule" }); }
@@ -159,7 +150,7 @@
           detail:"Corpus.recompte() → Views.Nav",
           index:"côté serveur, ce serait un recalcul incrémental et non une nouvelle requête " +
                 "groupée : décrémenter le compteur du dossier, pas le recompter (D078)" });
-      ABX.log({ label:"Ouvrir « " + m.subject + " »", etapes:e });
+      ABX.log({ label:"Ouvrir « " + m.sujet + " »", etapes:e });
     },
 
     /* ------------------------------------------------------------------ */
@@ -202,7 +193,7 @@
         { t:"json", label:"200 OK — " + n + " message(s), forme abrégée",
           detail: j({ curseur_suivant: "eyJkIjoiMjAyNi0wNy0yOSIsImkiOjkxfQ",
                       total_estime: n,
-                      messages: ["… " + n + " objets abrégés : id, sujet, de, date, lu_le, sens, " +
+                      messages: ["… " + n + " objets abrégés : id, sujet, de, date_recue, lu_le, sens, " +
                                  "nb_pieces_jointes, snippet …"] }),
           index:"« total_estime » et non « total » : compter exactement les messages d'un dossier " +
                 "de 200 000 lignes coûte plus cher que d'en afficher 50" },
@@ -242,11 +233,11 @@
           detail:"views/compose.js → Controllers.Compose.finir(onglet, true)" },
         { t:"http", label:"le message est une ressource, pas une action",
           detail:"POST /api/v1/messages\n" + j({
-            de: d.de, a: m.to,
+            de: d.de, a: m.destinataires,
             cc: d.cc.split(",").map(x => x.trim()).filter(Boolean),
-            sujet: m.subject, corps: { texte: "…" },
-            pieces_jointes: m.pjs.map(p => ({ pj_id: p.b.pj_id, nom: p.nom })),
-            reference: d.ref && d.src ? d.src : null }),
+            sujet: m.sujet, corps: { texte: "…" },
+            pieces_jointes: m.pieces_jointes.map(p => ({ pj_id: p.b.pj_id, nom: p.nom })),
+            reference: d.reference && d.src ? d.src : null }),
           index:"les pièces jointes sont référencées par leur pj_id, pas transmises : elles ont " +
                 "été téléversées AVANT, ce qui rend l'envoi idempotent et réessayable" },
         { t:"route", label:"routes/api.php",
@@ -278,7 +269,7 @@ SELECT :id, b.compte_id, b.boite_id, 'recu', now() FROM boite b
  WHERE b.adresse = ANY (:internes);   -- ` + internes.join(", "),
           index:"une ligne par destinataire, un seul message : c'est exactement ce que la " +
                 "déduplication devait donner (D010/D012)" });
-      if (d.ref && d.src) e.push(
+      if (d.reference && d.src) e.push(
         { t:"sql", label:"transfert par référence : un lien et une ACL, aucune copie",
           detail:
 `INSERT INTO message_lien (message_porteur, message_source, type)
@@ -307,7 +298,7 @@ SELECT '` + d.src + `', a, 'lire', :moi FROM unnest(:internes) a;`,
                 "que le serveur l'a enregistré, identifiant compris" },
         { t:"render", label:"l'onglet de composition se ferme, celui du message s'ouvre",
           detail:"Controllers.Tabs.fermer(compo) → Controllers.Tabs.ouvrir(message)" });
-      ABX.log({ label:"Envoyer « " + m.subject + " »", etapes:e });
+      ABX.log({ label:"Envoyer « " + m.sujet + " »", etapes:e });
     },
 
     /* ------------------------------------------------------------------ */

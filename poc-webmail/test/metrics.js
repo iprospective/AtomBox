@@ -8,7 +8,7 @@ console.log("chargement complet  :", Date.now() - t0, "ms");
 console.log("messages engendrés  :", A.Corpus.tous.length);
 console.log("dossiers            :", Object.keys(A.Corpus.dossiers).length);
 console.log("blobs               :", A.Attachments.blobs.length);
-const pj = A.Corpus.tous.reduce((s, m) => s + m.pj, 0);
+const pj = A.Corpus.tous.reduce((s, m) => s + m.nb_pieces_jointes, 0);
 const ko = A.Corpus.tous.reduce((s, m) => s + m.pj_ko, 0);
 console.log("liaisons PJ         :", pj, "(" + Math.round(100 * pj / A.Corpus.tous.length) +
   " pour 100 messages) | octets décodés :", F.poids(ko));

@@ -18,9 +18,9 @@
   function filtrer(q, type) {
     const f = (q || "").trim().toLowerCase();
     return toutes().filter(x =>
-      (!f || x.p.nom.toLowerCase().includes(f) || x.m.subject.toLowerCase().includes(f)) &&
+      (!f || x.p.nom.toLowerCase().includes(f) || x.m.sujet.toLowerCase().includes(f)) &&
       (!type || type === "tous" || x.b.ext === type))
-      .sort((a, b) => b.m.date - a.m.date).slice(0, 60);
+      .sort((a, b) => b.m.date_recue - a.m.date_recue).slice(0, 60);
   }
 
   ABX.Views = ABX.Views || {};
@@ -59,7 +59,7 @@
                 ${At.recompressable(x.b)
                   ? `<span class="badge w">recompressible · ${F.poids(At.gain(x.b))}</span>` : ""}
               </div>
-              <div class="ps">↳ ${F.esc(x.m.subject)} — ${F.esc(x.m.from)} · ${F.dt(x.m.date)}</div>
+              <div class="ps">↳ ${F.esc(x.m.sujet)} — ${F.esc(x.m.from_nom)} · ${F.dt(x.m.date_recue)}</div>
             </div>
             <div class="pjacts">
               <button class="hbtn ic" data-pja="ouvrir" data-k="${k}" title="Ouvrir le message">✉</button>

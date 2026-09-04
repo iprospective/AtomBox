@@ -12,12 +12,14 @@
   "use strict";
   const C = ABX.Corpus, St = ABX.Store, T = ABX.Traces;
 
-  /* ---- représentations : ce que le serveur SERT, jamais l'objet interne ----
-     Le POC garde, dans le JSON, une référence _m vers l'objet du corpus :
-     c'est ce qui permet aux vues du POC (encore écrites contre le message
-     interne) de fonctionner pendant la migration. Le harnais compte ces
-     usages ; l'objectif est zéro, et alors _m disparaît. */
-  const rep = (m, complet) => { const o = T.messageJson(m, complet); o._m = m; return o; };
+  /* ---- représentations : ce que le serveur SERT --------------------------
+     L'objet du corpus porte EXACTEMENT les clés du contrat — celles du
+     dictionnaire (sujet, from_nom, from_adresse, date_recue, nb_pieces_jointes,
+     sorti_le, motif_sortie…). Le serveur le sert tel quel ; les clés « _ »
+     (état de session) ne font pas partie du contrat et ne sortent jamais du
+     vrai serveur. En POC on rend l'objet lui-même : le cache et le corpus ne
+     font qu'un, ce qui est le comportement d'avant — sans plus aucun _m. */
+  const rep = m => m;
   const ok = (extra) => Object.assign({ ok: true }, extra || {});
 
   const dossierDe = p => ({ id: p.dossier, kind: p.kind || (p.dossier && p.dossier.includes(":") ? "virtuel" : "special"), axe: p.axe });
@@ -36,13 +38,13 @@
       return { messages: l.map(m => rep(m, false)), total: l.length }; }],
 
     ["GET", /^\/messages\/([^/]+)\/fil$/, (m) => { const x = C.par(dec(m[1])); if (!x) return null;
-      return { messages: C.tous.filter(y => y.thread === x.thread && y.fid === x.fid)
-        .sort((a, b) => a.date - b.date).map(y => rep(y, false)) }; }],
+      return { messages: C.tous.filter(y => y.thread_id === x.thread_id && y.dossier_origine === x.dossier_origine)
+        .sort((a, b) => a.date_recue - b.date_recue).map(y => rep(y, false)) }; }],
 
     ["GET", /^\/messages\/([^/]+)$/, (m) => { const x = C.par(dec(m[1])); return x ? rep(x, true) : null; }],
 
     ["GET", /^\/pieces-jointes$/, () => { const out = [];
-      C.tous.forEach(m => (m.pjs || []).forEach((p, i) => out.push({ m, p, i })));
+      C.tous.forEach(m => (m.pieces_jointes || []).forEach((p, i) => out.push({ m, p, i })));
       return { pieces_jointes: out }; }],
 
     ["PATCH", /^\/messages\/([^/]+)\/rattachement$/, (m, _, corps) => {

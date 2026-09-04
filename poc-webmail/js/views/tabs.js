@@ -8,14 +8,14 @@
 
   ABX.Views = ABX.Views || {};
   ABX.Views.Tabs = {
-    ICONES: { compo:"✎", msg:"✉", admin:"⚙", pj:"📎", page:"📖" },
+    ICONES: { composition:"✎", msg:"✉", admin:"⚙", nb_pieces_jointes:"📎", page:"📖" },
     titre(t) {
       if (t.type === "compo") return t.data.sujet || "(sans sujet)";
       if (t.type === "admin") return "Administration";
       if (t.type === "pj")    return "Pièces jointes";
       if (t.type === "page")  return ABX.Views.Pages.titre(t.page);
       const m = ABX.Api.cache.message(t.id);
-      return m ? m.subject : "(message effacé)";
+      return m ? m.sujet : "(message effacé)";
     },
     render(ui) {
       return ui.tabs.map(t => {

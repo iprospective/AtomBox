@@ -50,7 +50,7 @@
           if (m2 && !t.vu) { t.vu = true; ABX.Traces.ouvrirMessage(m2, m2.lu); } });
         const dejaOuvert = !!t.vu;
         if (m && !dejaOuvert) { t.vu = true; ABX.Traces.ouvrirMessage(m, m.lu); }
-        else if (m) ABX.log({ label:"Revenir sur l'onglet « " + m.subject + " »", etapes:[
+        else if (m) ABX.log({ label:"Revenir sur l'onglet « " + m.sujet + " »", etapes:[
           { t:"ui", label:"clic sur l'onglet", detail:"views/tabs.js → Controllers.Tabs.ouvrir" },
           { t:"cache", label:"aucune requête",
             detail:"le message est déjà en mémoire du client",

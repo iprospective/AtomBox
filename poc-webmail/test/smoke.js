@@ -24,15 +24,15 @@ vrai(p.doc.getElementById("list").innerHTML.includes("msg"), "liste peinte");
 console.log("— expéditeur normalisé (D126) et usurpation (D128) —————");
 const ent = A.Corpus.tous.filter(m => m.sens !== "out");
 const connu = ent.find(m => m.connu);
-const inconnu = ent.find(m => !m.connu && !m.spoof);
-const usurpe = ent.find(m => m.spoof);
+const inconnu = ent.find(m => !m.connu && !m.usurpation);
+const usurpe = ent.find(m => m.usurpation);
 vrai(!!connu && !!inconnu && !!usurpe, "le corpus porte les trois cas");
 const hCon = A.Registry.render("expediteur", { m: connu });
 const hInc = A.Registry.render("expediteur", { m: inconnu });
 const hUsu = A.Registry.render("expediteur", { m: usurpe });
-vrai(hCon.includes(connu.from) && !hCon.includes("adr-av"),
+vrai(hCon.includes(connu.from_nom) && !hCon.includes("adr-av"),
      "un correspondant connu s'affiche par son nom de carnet");
-vrai(hInc.includes(inconnu.mail) && hInc.includes("adr-av"),
+vrai(hInc.includes(inconnu.from_adresse) && hInc.includes("adr-av"),
      "un inconnu s'affiche par son ADRESSE, mise en avant");
 vrai(hInc.includes("«"), "et son nom déclaré est relégué entre guillemets");
 vrai(hUsu.includes("usurpe"), "l'usurpation par nom porte son signal");
@@ -40,15 +40,15 @@ vrai(!A.Views.Message.spoofHtml(inconnu),
      "aucun bandeau sur un simple inconnu — le silence est une fonctionnalité");
 vrai(A.Views.Message.spoofHtml(usurpe).includes("B1"),
      "le bandeau nomme la règle qui l'a déclenché");
-vrai(usurpe.mail.split("@")[1] !== connu.mail.split("@")[1],
+vrai(usurpe.from_adresse.split("@")[1] !== connu.from_adresse.split("@")[1],
      "l'adresse usurpatrice est sur un autre domaine que le carnet");
 
 console.log("— nature du message (D130) et refus de réponse (D131) ——");
 const diff = ent.find(m => m.nature === "liste");
 const noti = ent.find(m => m.nature === "notification");
-const refus = ent.find(m => m.repond === "non");
+const refus = ent.find(m => m.reponse_possible === "non");
 vrai(!!diff && !!noti && !!refus, "le corpus porte les trois cas de nature");
-vrai(diff.mail.startsWith("news@") && noti.mail.startsWith("noreply@"),
+vrai(diff.from_adresse.startsWith("news@") && noti.from_adresse.startsWith("noreply@"),
      "une machine écrit depuis une boîte fonctionnelle, pas depuis une personne");
 vrai(!diff.connu && !noti.connu,
      "une boîte fonctionnelle n'est jamais un correspondant du carnet");
@@ -67,7 +67,7 @@ vrai(A.Views.Message.repondHtml(diff).includes("désabonner"),
 const hRefus = A.Views.Message.repondHtml(refus);
 vrai(hRefus.includes("550") && /il y a \d+ jours/.test(hRefus),
      "un refus s'appuie sur un rejet DATÉ, pas sur le mot « noreply » (D131)");
-vrai(A.Corpus.tous.every(m => m.repond !== "non" || m.nature !== "humain"),
+vrai(A.Corpus.tous.every(m => m.reponse_possible !== "non" || m.nature !== "humain"),
      "on ne refuse jamais la réponse à un message écrit par une personne");
 
 console.log("— la page CDC organisée comme docs/ (plan, vrac, modèle) ————");
@@ -122,7 +122,7 @@ console.log("— la V0 : le client IMAP (D140) ———————————
   const fp = A.Views.Pages.render("features");
   vrai(fp.includes('class="jalon v0">V0<') && fp.includes('class="jalon aucun"'),
        "la page Fonctionnalités distingue V0 et « écarté »");
-  const m = A.Corpus.tous.find(x => x.sens !== "out" && x.tags.length && x.connu && x.fiab >= 1);
+  const m = A.Corpus.tous.find(x => x.sens !== "out" && x.tags.length && x.connu && x.fiabilite >= 1);
   const avant = A.Registry.render("message.card", { m });
   vrai(avant.includes("tag") && avant.includes("fiab"), "en maquette complète, la carte porte tags et confiance");
   ui.jalon = 0;
@@ -130,11 +130,11 @@ console.log("— la V0 : le client IMAP (D140) ———————————
   const en0 = A.Registry.render("message.card", { m });
   vrai(!en0.includes('class="tag') && !en0.includes("fiab ") && !en0.includes("nat "),
        "en V0 la même carte n'a ni tag, ni confiance, ni nature — les partielles rendent vide");
-  vrai(en0.includes("&lt;" + A.Fmt.esc(m.mail)), "mais l'adresse reste visible à côté du nom (D126, gratuit)");
+  vrai(en0.includes("&lt;" + A.Fmt.esc(m.from_adresse)), "mais l'adresse reste visible à côté du nom (D126, gratuit)");
   const nav0 = A.Views.Nav.render(ui);
   vrai(!nav0.includes("axe:") && nav0.includes("Boîte de réception") && nav0.includes("Devis en attente"),
        "l'arborescence V0 n'a que les dossiers IMAP — aucun axe");
-  vrai(!A.Views.Message.statutHtml(m) && !A.Views.Message.fiabiliteHtml(m) && !A.Views.Message.spoofHtml(A.Corpus.tous.find(x => x.spoof)),
+  vrai(!A.Views.Message.statutHtml(m) && !A.Views.Message.fiabiliteHtml(m) && !A.Views.Message.spoofHtml(A.Corpus.tous.find(x => x.usurpation)),
        "le message ouvert n'a ni statut, ni bandeau de confiance, ni bandeau d'usurpation");
   vrai(!A.Registry.render("erp.panel", { m }) && !A.Registry.render("message.tags", { m }),
        "ni contexte ERP, ni tags");
@@ -285,26 +285,26 @@ console.log("— le pivot comm dans les requêtes (D138) ———————�
 console.log("— fiabilité de l'expéditeur (D136, D137) ——————————————");
 {
   const t = A.Corpus.tous;
-  const valide  = t.find(m => m.fiab >= 2);
+  const valide  = t.find(m => m.fiabilite >= 2);
   const nonAlig = t.find(m => m.sens !== "out" && m.dom && !m.dom.aligne && m.connu);
   vrai(!!valide && !!nonAlig, "le corpus porte un expéditeur validé et un connu non aligné");
   vrai(A.Registry.render("fiabilite", { m: valide }).includes("fiab f2"),
        "l'expéditeur validé porte son indicateur");
   vrai(!A.Registry.render("fiabilite", { m: nonAlig }),
        "AUCUN indicateur sur un message non authentifié, même d'un correspondant connu");
-  vrai(t.every(m => !(m.fiab >= 1) || (m.dom && m.dom.aligne)),
+  vrai(t.every(m => !(m.fiabilite >= 1) || (m.dom && m.dom.aligne)),
        "aucune fiabilité positive sans alignement du domaine (D137)");
-  vrai(t.every(m => !m.spoof || m.fiab < 0),
+  vrai(t.every(m => !m.usurpation || m.fiabilite < 0),
        "une usurpation porte une fiabilité négative — même échelle, deux directions");
   const h = A.Views.Message.fiabiliteHtml(nonAlig);
   vrai(h.includes("disabled"),
        "on ne peut pas valider une adresse depuis un message non authentifié");
   vrai(A.Views.Message.fiabiliteHtml(valide).includes("D128"),
        "le bandeau dit que la validation ne fait pas taire les règles fortes");
-  const connuAlig = t.find(m => m.fiab === 1);
+  const connuAlig = t.find(m => m.fiabilite === 1);
   vrai(A.Views.Message.fiabiliteHtml(connuAlig).includes("cette boîte"),
        "la validation annonce sa portée par défaut (D106)");
-  vrai(!A.Views.Message.fiabiliteHtml(t.find(m => m.spoof)),
+  vrai(!A.Views.Message.fiabiliteHtml(t.find(m => m.usurpation)),
        "aucun bandeau de confiance sur une usurpation — le bandeau d'alerte suffit");
 }
 
@@ -356,7 +356,7 @@ const dansAbo = A.Corpus.vue({ id: abo.id, kind: "abo" });
 vrai(dansAbo.length > 0, "le dossier « " + abo.label + " » contient " + dansAbo.length + " messages");
 vrai(dansAbo.every(m => m.nature === "liste"), "et rien d'autre que des diffusions");
 const unAbo = dansAbo[0];
-vrai(A.Corpus.vue({ id: unAbo.fid, kind: "virtuel" }).includes(unAbo),
+vrai(A.Corpus.vue({ id: unAbo.dossier_origine, kind: "virtuel" }).includes(unAbo),
      "le message est AUSSI dans le dossier de son correspondant — il n'a pas bougé (D077)");
 vrai(A.Corpus.cnt(abo.id).t === dansAbo.length,
      "les compteurs de la branche dérivée sont calculés dans la même passe (D078)");
@@ -369,17 +369,17 @@ vrai(A.Views.Nav.render(A.Store.ui).includes("Abonnements"),
 console.log("— surcharge de vues partielles ——————————————————");
 const nSurcharges = A.Registry.liste().filter(n => n.includes("@")).length;
 vrai(nSurcharges >= 5, nSurcharges + " partielles spécialisées");
-const notif = A.Corpus.tous.find(m => m.fid.startsWith("notification:"));
+const notif = A.Corpus.tous.find(m => m.dossier_origine.startsWith("notification:"));
 /* Un message SORTANT prend toujours la variante « sent » : pour tester l'absence
    de surcharge d'axe, il faut un entrant — sinon le test dépend de l'ordre du corpus. */
-const client = A.Corpus.tous.find(m => m.fid.startsWith("client:") && m.sens !== "out");
+const client = A.Corpus.tous.find(m => m.dossier_origine.startsWith("client:") && m.sens !== "out");
 eq(A.Views.List.variante(notif), "notification", "variante déduite de l'axe");
 eq(A.Views.List.variante(client), null, "pas de variante pour un axe sans surcharge");
 const cardNotif = A.Registry.render("message.card", { m: notif, variant: "notification" });
 const cardBase  = A.Registry.render("message.card", { m: notif });
 vrai(!cardNotif.includes("snip"), "la carte notification n'affiche pas le snippet");
 vrai(cardBase.includes("snip"), "la carte de base, si");
-const envoye = A.Corpus.tous.find(m => m.fid === "sent");
+const envoye = A.Corpus.tous.find(m => m.dossier_origine === "sent");
 vrai(A.Registry.render("message.card", { m: envoye, variant: "sent" }).includes("À :"),
      "la carte du dossier Envoyés montre le destinataire");
 
@@ -398,7 +398,7 @@ console.log("— actions réelles ———————————————�
 const cible = A.Corpus.par(lignes[3].dataset.id);
 eq(cible.lu, cible.lu, "état initial lu = " + cible.lu);
 A.MessageService.archiver(cible); await tick(p);
-eq(cible.motif, "archive", "archivé");
+eq(cible.motif_sortie, "archive", "archivé");
 vrai(A.Corpus.cnt("archives").t >= 1, "la vue Archives compte le message");
 vrai(A.Corpus.vue({ id: dossier.id, kind: "virtuel" }).includes(cible),
      "un message archivé reste dans son dossier");
@@ -420,12 +420,12 @@ vrai(t.data.sujet.startsWith("Re: "), "sujet préfixé");
 vrai(t.data.corps.includes("> "), "corps cité");
 t.data.a = "collegue@iprospective.eu, client@exemple.fr";
 A.ComposeService.joindre(t.data);
-eq(t.data.pjs.length, 1, "pièce jointe ajoutée");
+eq(t.data.pieces_jointes.length, 1, "pièce jointe ajoutée");
 const avant = A.Corpus.dossiers.sent.length;
 A.Controllers.Compose.finir(t, true); await tick(p);
 eq(A.Corpus.dossiers.sent.length, avant + 1, "message envoyé, présent dans Envoyés");
 const envoi = A.Corpus.dossiers.sent[0];
-eq(envoi.pj, 1, "la pièce jointe a suivi");
+eq(envoi.nb_pieces_jointes, 1, "la pièce jointe a suivi");
 const q = A.QueryLog.entrees.find(x => x.label.startsWith("Envoyer"));
 const det = e => (e.detail || "");
 vrai(!!q, "l'envoi est journalisé");
@@ -438,13 +438,13 @@ vrai(q.etapes.some(e => e.warn), "l'étage mixte porte l'avertissement");
 console.log("— transfert par référence ————————————————————————");
 A.Controllers.Compose.demarrer("tr", src);
 t = A.Store.ui.tabs.find(x => x.type === "compo");
-eq(t.data.ref, true, "transfert par référence par défaut");
+eq(t.data.reference, true, "transfert par référence par défaut");
 t.data.a = "collegue@iprospective.eu";
 A.Controllers.Compose.finir(t, true);
 await tick(p);
 
-eq(A.Corpus.dossiers.sent[0].ref, src.id, "le message porte un lien, pas une copie");
-eq(A.Corpus.dossiers.sent[0].pj, 0, "aucune pièce jointe recopiée");
+eq(A.Corpus.dossiers.sent[0].reference, src.id, "le message porte un lien, pas une copie");
+eq(A.Corpus.dossiers.sent[0].nb_pieces_jointes, 0, "aucune pièce jointe recopiée");
 
 console.log("— brouillon ——————————————————————————————————");
 A.Controllers.Compose.demarrer("new", null);
@@ -452,8 +452,8 @@ t = A.Store.ui.tabs.find(x => x.type === "compo");
 t.data.sujet = "Un brouillon"; t.data.corps = "à finir";
 A.Controllers.Compose.finir(t, false); await tick(p);
 const br = A.Corpus.dossiers.drafts[0];
-eq(br.subject, "Un brouillon", "brouillon enregistré");
-vrai(!!br.compo, "il se rouvrira en composition");
+eq(br.sujet, "Un brouillon", "brouillon enregistré");
+vrai(!!br.composition, "il se rouvrira en composition");
 
 console.log("— persistance et rechargement ————————————————————");
 const nRatt = Object.keys(A.Store.ratt).length, nCrees = A.Store.crees.length;
@@ -465,7 +465,7 @@ const B = p2.ABX;
 eq(B.Corpus.tous.length > 3000, true, "corpus réengendré");
 eq(Object.keys(B.Store.ratt).length, nRatt, "delta repris");
 eq(B.Store.crees.length, nCrees, "messages écrits repris");
-vrai(B.Corpus.dossiers.drafts.some(m => m.subject === "Un brouillon"), "le brouillon a survécu");
+vrai(B.Corpus.dossiers.drafts.some(m => m.sujet === "Un brouillon"), "le brouillon a survécu");
 vrai(!B.Corpus.tous.some(m => m.id === cible.id), "le message supprimé n'est pas ressuscité");
 vrai(B.Store.ui.tabs.length > 0, "les onglets sont restaurés");
 const m0 = B.Corpus.par(lignes[0].dataset.id);
@@ -527,7 +527,7 @@ vrai(A.QueryLog.entrees[0].etapes.some(e => (e.detail || "").includes("'ham'")),
      "le filtre désapprend");
 
 console.log("— cascade d'ouverture d'un message ————————————————");
-const cible2 = A.Corpus.tous.find(x => x.fid.startsWith("client:") && x.pj && x.tags.length && !x.lu);
+const cible2 = A.Corpus.tous.find(x => x.dossier_origine.startsWith("client:") && x.nb_pieces_jointes && x.tags.length && !x.lu);
 A.QueryLog.vider();
 A.Controllers.Tabs.ouvrir({ type: "msg", id: cible2.id }, false); await tick(p);
 const tr = A.QueryLog.entrees.find(x => x.label.startsWith("Ouvrir «"));
@@ -540,11 +540,11 @@ vrai(types.indexOf("http") < types.indexOf("sql"), "l'appel précède les requê
 vrai(types.lastIndexOf("json") < types.lastIndexOf("render"), "le JSON précède le rendu");
 const js = tr.etapes.find(e => e.t === "json");
 const contrat = JSON.parse(js.detail);
-eq(contrat.comm_id, cible2.id, "le JSON porte l'identifiant");
-["sujet","de","a","boite","sens","date_reception","lu_le","sorti_le","thread_id",
- "taille_octets","nb_pieces_jointes","tags","pieces_jointes","corps"].forEach(k =>
+eq(contrat.id, cible2.id, "le JSON porte l'identifiant");
+["sujet","from_nom","from_adresse","destinataires","boite","sens","date_recue","lu",
+ "sorti_le","motif_sortie","thread_id","taille","nb_pieces_jointes","tags","pieces_jointes","corps"].forEach(k =>
   vrai(k in contrat, "contrat d'API : champ « " + k + " »"));
-eq(contrat.pieces_jointes.length, cible2.pj, "les pièces jointes y sont");
+eq(contrat.pieces_jointes.length, cible2.nb_pieces_jointes, "les pièces jointes y sont");
 vrai("mime_declare" in contrat.pieces_jointes[0] && "mime_detecte" in contrat.pieces_jointes[0],
      "avec les deux types, déclaré et détecté (D032)");
 vrai(tr.etapes.some(e => e.warn), "la cascade signale ses points coûteux");
@@ -569,7 +569,7 @@ const w = A.Corpus.par(lignes[6].dataset.id);
 eq(w.statut, w.statut, "statut initial : " + w.statut);
 A.MessageService.statuer(w, "a_faire"); await tick(p);
 eq(w.statut, "a_faire", "passé à faire");
-eq(w.motif, null, "à faire ne sort PAS de la file");
+eq(w.motif_sortie, null, "à faire ne sort PAS de la file");
 const qw = A.QueryLog.entrees[0];
 vrai(qw.etapes.some(e => (e.detail || "").includes("SET statut")), "le statut est une colonne");
 vrai(qw.etapes.some(e => e.t === "note" && (e.index || "").includes("un tag est ouvert")),
@@ -577,15 +577,15 @@ vrai(qw.etapes.some(e => e.t === "note" && (e.index || "").includes("un tag est 
 A.MessageService.statuer(w, "en_cours"); await tick(p);
 eq(w.statut, "en_cours", "puis en cours");
 A.MessageService.statuer(w, "traite"); await tick(p);
-eq(w.motif, "traite", "« traité » sort de la file");
-vrai(w.sorti > 0, "et pose sorti_le");
+eq(w.motif_sortie, "traite", "« traité » sort de la file");
+vrai(w.sorti_le > 0, "et pose sorti_le");
 vrai(A.QueryLog.entrees[0].etapes.some(e => e.warn), "en avertissant du changement de partition");
 A.MessageService.statuer(w, "a_faire"); await tick(p);
-eq(w.motif, null, "revenir en arrière remet dans la file (Q009)");
+eq(w.motif_sortie, null, "revenir en arrière remet dans la file (Q009)");
 vrai(A.Corpus.aFaire().includes(w), "il apparaît dans la file de travail");
 eq(A.Corpus.filtrer(dossierAxe, "file", "date_desc", "tous", "en_cours")
     .every(m => m.statut === "en_cours"), true, "le filtre par statut fonctionne");
-vrai(A.Corpus.cnt(w.fid).f >= 1, "les compteurs suivent la file de travail");
+vrai(A.Corpus.cnt(w.dossier_origine).f >= 1, "les compteurs suivent la file de travail");
 
 console.log("— capacités enfichables —————————————————————————");
 const P = A.Providers;
@@ -640,14 +640,14 @@ console.log("— arborescence Développement (D077) —————————�
 const tickets = A.Fixtures.valeurs.developpement;
 vrai(tickets.length === 34, tickets.length + " tickets sous Développement");
 vrai(/^RM\d+ · /.test(tickets[0].label), "un ticket est nommé RM<id> · titre");
-const mdev = A.Corpus.tous.find(m => m.fid.startsWith("developpement:"));
+const mdev = A.Corpus.tous.find(m => m.dossier_origine.startsWith("developpement:"));
 vrai(!!mdev, "les tickets portent des messages");
 const tdev = mdev.tags.find(t => t.axe === "developpement");
 eq(tdev && tdev.src, "redmine-ipro", "le tag vient de Redmine, pas de l'ERP");
 eq(A.Views.List.variante(mdev), "developpement", "la carte a sa variante");
 vrai(A.Registry.render("message.card", { m: mdev, variant: "developpement" })
       .includes("RM"), "et elle met le numéro de ticket en avant");
-const notifs = A.Corpus.tous.filter(m => m.fid.startsWith("notification:"));
+const notifs = A.Corpus.tous.filter(m => m.dossier_origine.startsWith("notification:"));
 vrai(notifs.every(m => m.sens !== "out"), "on n'envoie rien à une alerte de supervision");
 
 console.log("— pièces jointes ————————————————————————————————");
@@ -720,7 +720,7 @@ eq(C.Corpus.tous.length,
    demarrer(creerStockage()).ABX.Corpus.tous.length, "deux amorçages donnent le même corpus");
 const f1 = C.Erp.fiche("client", A.Fixtures.valeurs.client[0].label);
 const f2 = (await drainer(demarrer(creerStockage()))).ABX.Erp.fiche("client", A.Fixtures.valeurs.client[0].label);
-eq(f1.ref, f2.ref, "les fiches ERP sont reproductibles");
+eq(f1.reference, f2.reference, "les fiches ERP sont reproductibles");
 eq(f1.encours, f2.encours, "leurs montants aussi");
 
 bilan();
