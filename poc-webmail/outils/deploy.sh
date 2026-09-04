@@ -29,13 +29,15 @@ node test/bundle.js | tail -1
 echo "→ envoi vers $HOTE:$CIBLE"
 printf 'User-agent: *\nDisallow: /\n' > /tmp/atombox-robots.txt
 ssh -o BatchMode=yes "$HOTE" "mkdir -p '$CIBLE' && cd '$CIBLE' && rm -rf css js index.html README.md autonome.html robots.txt"
-tar czf - index.html README.md css js | ssh -o BatchMode=yes "$HOTE" "tar xzf - -C '$CIBLE'"
+tar czf - index.html index.prod.html README.md css js | ssh -o BatchMode=yes "$HOTE" "tar xzf - -C '$CIBLE'"
 scp -q dist/index.html "$HOTE:$CIBLE/autonome.html"
+# le MODE PRODUIT (D141) : les mêmes vues sans le POC — sans API il dit « service indisponible », c'est la démonstration
+scp -q dist/prod.html "$HOTE:$CIBLE/prod.html"
 scp -q /tmp/atombox-robots.txt "$HOTE:$CIBLE/robots.txt"
 ssh -o BatchMode=yes "$HOTE" "chown -R root:siteadm /home/siteadm/atombox && chmod -R a+rX /home/siteadm/atombox"
 
 echo "→ vérification"
-for p in "" css/app.css js/app.js autonome.html; do
+for p in "" css/app.css js/app.js autonome.html prod.html index.prod.html; do
   printf '   %-16s ' "/${p}"
   curl -s -o /dev/null -w '%{http_code} %{size_download}o\n' "${URL}${p}"
 done
