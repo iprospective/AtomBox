@@ -95,8 +95,9 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .node .tw{width:12px;color:var(--muted);font-size:10px;flex:none;text-align:center}
 .node .ic{width:16px;flex:none;text-align:center}
 .node .lb{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.node .ct{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
-.node .ct.b{color:var(--accent);font-weight:700}
+.node .ct{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.node .ct b{color:var(--accent);font-weight:700}
+.node .ct .sep{margin:0 1px;opacity:.6}
 .node.child{padding-left:34px}
 .node.child2{padding-left:52px}
 .more{padding:3px 10px 3px 34px;color:var(--accent);cursor:pointer;font-size:11.5px}

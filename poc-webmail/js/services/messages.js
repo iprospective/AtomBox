@@ -17,11 +17,10 @@
     const p = patch.suppr ? ABX.Api.detacher(m.id) : ABX.Api.patcher(m.id, patch);
     if (typeof log === "function") log(m);
     else if (log) ABX.log(...(Array.isArray(log) ? log : [log]));
-    return p.then(r => {
-      ABX.Api.compteurs();                         // les non-lus / la file bougent
-      ABX.Bus.emit("corpus:changed", { message: m, patch, reponse: r });
+    return p.then(r => ABX.Api.compteurs().then(() => {   // les non-lus / la file bougent
+      ABX.Bus.emit("corpus:changed", { message: m, patch, reponse: r });   // …puis on repeint
       return r;
-    });
+    }));
   }
 
   const M = {
