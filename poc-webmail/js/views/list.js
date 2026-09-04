@@ -17,7 +17,7 @@
     /* Ce qui compte est le SENS, pas le dossier : un message sortant rangé dans un
        dossier client doit montrer son destinataire, comme dans « Envoyés ». */
     if ((m.sens || "in") === "out") return "sent";
-    const f = m.dossier || m.fid;
+    const f = m.dossier || m.dossier_origine;
     const ax = f.split(":")[0];
     return R.has("message.card.meta", ax) || R.has("message.card.body", ax)
         || R.has("message.card.header", ax) ? ax : null;
@@ -29,7 +29,7 @@
     render(ui, messages, selection) {
       const vueSortie = ABX.Ref.estVue(ui.folder.id);
       let h = `<div class="backbar"><button data-vue="nav">‹ Dossiers</button>
-          <span style="color:var(--muted);font-size:11.5px">${F.esc(ui.folder.label)}</span></div>
+          <span style="color:var(--muted);font-taille:11.5px">${F.esc(ui.folder.label)}</span></div>
         <div class="lbar"><div class="t">${F.esc(ui.folder.label)}
           <small>${messages.length} message${messages.length > 1 ? "s" : ""}</small>
           ${ui.folder.id === "trash" && messages.length

@@ -13,16 +13,16 @@
 
   /* --- Envoyés et brouillons : ce qui compte est le DESTINATAIRE ---------- */
   R.defineFor("message.card.header", "sent", ({ m }) =>
-    `<div class="r1"><span class="from">À : ${F.esc((m.to || []).join(", ") || "—")}</span>
-       <span class="dt">${F.dt(m.date)}</span></div>`);
+    `<div class="r1"><span class="from">À : ${F.esc((m.destinataires || []).join(", ") || "—")}</span>
+       <span class="dt">${F.dt(m.date_recue)}</span></div>`);
 
   /* --- Notifications : volumineuses et répétitives, donc compactes -------- */
   R.defineFor("message.card.body", "notification", ({ m }) =>
-    `<div class="subj">${F.esc(m.subject)}</div>`);
+    `<div class="subj">${F.esc(m.sujet)}</div>`);
 
   R.defineFor("message.card.meta", "notification", ({ m }) =>
-    `<div class="meta"><span class="tag">${F.esc(m.mail.split("@")[1] || "système")}</span>
-       ${m.pj ? `<span class="pj">📎 ${m.pj}</span>` : ""}</div>`);
+    `<div class="meta"><span class="tag">${F.esc(m.from_adresse.split("@")[1] || "système")}</span>
+       ${m.nb_pieces_jointes ? `<span class="pj">📎 ${m.nb_pieces_jointes}</span>` : ""}</div>`);
 
   /* --- SAV : le ticket et son état passent AVANT le reste ----------------- */
   R.defineFor("message.card.meta", "sav", ctx => {
@@ -30,9 +30,9 @@
     const f = t ? ABX.Erp.fiche(t.axe, t.val) : null;
     const piece = f && f.objets[0];
     return `<div class="meta">
-      ${f ? `<span class="tag ax">${F.esc(f.ref)}</span>` : ""}
+      ${f ? `<span class="tag ax">${F.esc(f.reference)}</span>` : ""}
       ${piece ? `<span class="st ${ABX.Erp.statutClasse(piece)}">${piece.statut}</span>` : ""}
-      ${m.pj ? `<span class="pj">📎 ${m.pj} · ${F.poids(m.pj_ko)}</span>` : ""}
+      ${m.nb_pieces_jointes ? `<span class="pj">📎 ${m.nb_pieces_jointes} · ${F.poids(m.pj_ko)}</span>` : ""}
       ${R.render("statut.chip", { m })}</div>`;
   });
 
@@ -45,7 +45,7 @@
     const num = t ? (t.val.match(/RM\d+/) || [t.val])[0] : null;
     return `<div class="meta">
       ${num ? `<span class="tag ax" title="${F.esc(t.val)}">${F.esc(num)}</span>` : ""}
-      ${m.pj ? `<span class="pj">📎 ${m.pj} · ${F.poids(m.pj_ko)}</span>` : ""}
+      ${m.nb_pieces_jointes ? `<span class="pj">📎 ${m.nb_pieces_jointes} · ${F.poids(m.pj_ko)}</span>` : ""}
       ${R.render("statut.chip", { m })}
       ${m.tags.filter(x => x.axe !== "developpement")
               .map(tag => R.render("tag.chip", { tag })).join("")}</div>`;

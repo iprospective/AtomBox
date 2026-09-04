@@ -14,7 +14,7 @@
 
     /* Un brouillon enregistré se rouvre dans l'état où il a été laissé. */
     rouvrir(m) {
-      Tabs().ouvrir({ type:"compo", data: m.compo, brouillon: m.id }, false);
+      Tabs().ouvrir({ type:"compo", data: m.composition, brouillon: m.id }, false);
       if (App().MOBILE()) App().setVue("detail");
     },
 
@@ -30,7 +30,7 @@
 
       el.querySelector("#f_de").onchange = e => { d.de = e.target.value; t.sale = true; };
       const ref = el.querySelector("#f_ref");
-      if (ref) ref.onchange = e => { d.ref = e.target.checked; t.sale = true; };
+      if (ref) ref.onchange = e => { d.reference = e.target.checked; t.sale = true; };
 
       el.querySelector("#c_pj").onclick  = () => { Svc.joindre(d); t.sale = true;
                                                    App().peindre("detail"); };

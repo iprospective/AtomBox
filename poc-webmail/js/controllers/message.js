@@ -20,13 +20,12 @@
       t._charge = false;
       /* le fil se charge par promesse (D141) : on peint sans, puis on repeint avec —
          l'utilisateur voit le message tout de suite, le fil arrive ensuite */
-      if (!m._fil) ABX.Api.fil(m).then(fil => { m._fil = fil.map(r => r._m || r);   // dette _m (D141)
-        if (St.ui.tab === t.key) Message.peindre(t); });
+      if (!m._fil) ABX.Api.fil(m).then(fil => { m._fil = fil; if (St.ui.tab === t.key) Message.peindre(t); });
       const el = D.paint("detail", ABX.Views.Message.render(m, St.ui));
       App().bindRetour(el);
 
       const suivre = el.querySelector("#suivre");
-      if (suivre) suivre.onclick = () => ABX.Controllers.Tabs.ouvrir({ type:"msg", id:m.ref }, false);
+      if (suivre) suivre.onclick = () => ABX.Controllers.Tabs.ouvrir({ type:"msg", id:m.reference }, false);
 
       const stat = el.querySelector("#stat");
       if (stat) stat.onchange = e => M.statuer(m, e.target.value);
@@ -47,7 +46,7 @@
       Message.cablerTags(el, m);
       D.on(el, "[data-c]", "onclick", b => ABX.Controllers.Compose.demarrer(b.dataset.c, m));
       D.on(el, "[data-a]", "onclick", b => Message.logMessage(b.dataset.a, m));
-      D.on(el, ".pjc",     "onclick", c => Message.logPieceJointe(m, +c.dataset.pj));
+      D.on(el, ".pjc",     "onclick", c => Message.logPieceJointe(m, +c.dataset.nb_pieces_jointes));
       D.on(el, "[data-e]", "onclick", b => Message.logErp(m, b.dataset.e));
     },
 
@@ -74,7 +73,7 @@
       if (quoi === "archiver") return M.archiver(m);
       if (quoi === "tache")    return ABX.Capacites.creerTache(m);
       if (quoi === "contact")  return ABX.Capacites.ficheContact(m);
-      if (quoi === "fichiers") return m.pjs.forEach((_, i) => ABX.Capacites.deposerFichier(m, i));
+      if (quoi === "fichiers") return m.pieces_jointes.forEach((_, i) => ABX.Capacites.deposerFichier(m, i));
       return Message.logMessage(quoi, m);
     },
 
@@ -95,7 +94,7 @@ SELECT l.ordre, l.nom_fichier, l.mime_declare, l.transfer_encoding, l.dispositio
     },
 
     logPieceJointe(m, i) {
-      const p = m.pjs[i], b = p.b;
+      const p = m.pieces_jointes[i], b = p.b;
       ABX.log("Ouvrir « " + p.nom + " »",
 `SELECT p.blob_ref, p.sha256, p.mime_detecte, p.octets,
        l.nom_fichier, l.mime_declare, l.transfer_encoding, l.ordre
@@ -139,13 +138,13 @@ UPDATE piece_jointe
               sql:
 `SELECT c.correspondant_id, c.libelle
   FROM adresse a JOIN correspondant c USING (correspondant_id)
- WHERE a.adresse = lower('${m.mail}');`,
+ WHERE a.adresse = lower('${m.from_adresse}');`,
               index: "index UNIQUE (adresse) — un correspondant, N adresses : changer d'adresse " +
                      "ne coupe pas l'historique du tiers" },
             { label: "2. l'identité est reliée au tiers de CHAQUE application connectée",
               sql:
 `SELECT application_id, ref_externe FROM correspondant_externe
- WHERE correspondant_id = :cid;               -- ${c.app} → ${f.ref}`,
+ WHERE correspondant_id = :cid;               -- ${c.app} → ${f.reference}`,
               index: "index (correspondant_id) — c'est la table D085, sans laquelle le " +
                      "rattachement automatique n'existe pas" },
             { label: "3. le tag est posé par le CONNECTEUR, pas par AtomBox (D021)",
@@ -155,12 +154,12 @@ UPDATE piece_jointe
           ] },
 
         lie: {
-          label: "Lier ce message à " + o.type.toLowerCase() + " " + o.ref,
+          label: "Lier ce message à " + o.type.toLowerCase() + " " + o.reference,
           kind: "api",
           sql:
 `POST /api/v1/messages/{comm_id}/tags        Authorization: Bearer <token ${c.app}>
 { "axe": "${tg.axe}", "valeur": "${tg.val}",
-  "ref_externe": "${f.ref}", "piece": "${o.ref}" }`,
+  "ref_externe": "${f.reference}", "piece": "${o.reference}" }`,
           index: "l'ACL de l'axe est vérifiée avant d'écrire (D018) : poser un tag sur un axe " +
                  "qu'on ne peut que lire doit être refusé, pas ignoré",
           enfants: [
@@ -181,7 +180,7 @@ VALUES (:id, :tag, :application, now()) ON CONFLICT DO NOTHING;`,
           ] },
 
         inv: {
-          label: "Onglet « Emails » de la fiche " + f.ref + ", vu depuis " + c.app,
+          label: "Onglet « Emails » de la fiche " + f.reference + ", vu depuis " + c.app,
           kind: "api",
           sql:
 `GET /api/v1/messages?axe=${tg.axe}&valeur=${encodeURIComponent(tg.val)}
@@ -210,7 +209,7 @@ Authorization: Bearer <token opaque de l'application>          -- D063`,
           sql:
 `POST https://${c.app}.lan/api/atombox/hook          (asynchrone, rejouable)
 { "evenement": "message.tague", "comm_id": "…", "axe": "${tg.axe}",
-  "valeur": "${tg.val}", "ref_externe": "${f.ref}", "pieces_jointes": ${m.pj} }`,
+  "valeur": "${tg.val}", "ref_externe": "${f.reference}", "pieces_jointes": ${m.nb_pieces_jointes} }`,
           index: "cet appel n'est PAS fait ici : il est empilé, et un worker le sortira. " +
                  "Une application injoignable ne doit jamais bloquer la réception du courrier",
           enfants: [

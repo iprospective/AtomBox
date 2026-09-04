@@ -20,7 +20,7 @@
   Cd("reponse.refus", () => md("**D131** / **D119** — on refuse sur un **fait** (un DSN 5xx corrélé par VERP), jamais sur le mot « noreply ». La marque est datée et se réévalue (**D127**)."));
   Cd("reponse.diffusion", () => md("**D130** / **D132** — nature `liste` : hors de la file des non traités ; désabonnement jamais automatique (un lien suivi sans geste est un confirmateur d'adresse)."));
   Cd("reponse.notification", () => md("**D130** — nature `notification` : *entre* dans la file. Une facture est une machine qui attend un paiement ; un booléen « automatique » l'aurait cachée."));
-  Cd("usurpation", ({ m }) => md("**D128** règle **B1** — le meilleur signal du catalogue, et le seul qu'un anti-spam générique ne peut pas produire." + (m && /iprospect/.test((m.mail || "").split("@")[1] || "") ? " S'y ajoute **A8** : domaine sosie." : "") + " On alerte, on ne rejette pas (**D139** : un score ne refuse jamais)."));
+  Cd("usurpation", ({ m }) => md("**D128** règle **B1** — le meilleur signal du catalogue, et le seul qu'un anti-spam générique ne peut pas produire." + (m && /iprospect/.test((m.from_adresse || "").split("@")[1] || "") ? " S'y ajoute **A8** : domaine sosie." : "") + " On alerte, on ne rejette pas (**D139** : un score ne refuse jamais)."));
   Cd("transfert.reference", () => md("**D058** / **D067** — transfert par référence, sans copie ; le pointeur peut mourir (**Q030**)."));
   Cd("statut", () => md("**D093** — un statut *pilote*, un tag *classe*. « Traité » = `sorti_le` + `motif_sortie` (**D014**), la clé d'archivage."));
   Cd("nav.v0", () => md("**D140b** — dossiers IMAP ingérés comme tags d'origine (**D046**), états synchronisés avec IMAP qui reste la vérité jusqu'à la V2."));

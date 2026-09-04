@@ -22,13 +22,13 @@
       return Promise.resolve().then(() => ABX.ServeurSimule.traiter(methode, chemin, corps));
     return fetch(BASE + chemin, { method: methode,
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: corps === undefined ? undefined : JSON.stringify(corps) })
+      corps: corps === undefined ? undefined : JSON.stringify(corps) })
       .then(r => { if (r.status === 404) return null;
         if (!r.ok) throw new Error(methode + " " + chemin + " → " + r.status); return r.json(); });
   }
   const q = o => Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== "")
     .map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
-  const garde = m => { if (m) cache.messages[m.comm_id] = m; return m; };
+  const garde = m => { if (m) cache.messages[m.id] = m; return m; };
 
   const ImplHttp = {
     /* ---- lecture --------------------------------------------------------- */
@@ -39,7 +39,7 @@
       req("GET", "/messages?" + q({ dossier: folder.id, kind: folder.kind, axe: folder.axe, tout: 1 }))
         .then(r => ((r && r.messages) || []).map(garde)),
     message: id => req("GET", "/messages/" + encodeURIComponent(id)).then(garde),
-    fil: m => req("GET", "/messages/" + encodeURIComponent(m.comm_id || m.id) + "/fil")
+    fil: m => req("GET", "/messages/" + encodeURIComponent(m.id) + "/fil")
         .then(r => ((r && r.messages) || []).map(garde)),
     compteurs: () => req("GET", "/arborescence").then(r => { cache.compteurs = (r && r.compteurs) || {}; return cache.compteurs; }),
     piecesJointes: () => req("GET", "/pieces-jointes").then(r => (r && r.pieces_jointes) || []),
@@ -54,10 +54,7 @@
         .then(r => { if (r && r.ok) delete cache.messages[id]; return r; }),
 
     /* ---- cache synchrone, pour les vues qui rendent en une passe ------------ */
-    /* DETTE (D141) : tant que les vues lisent l'objet interne, le cache le rend
-       via _m quand le serveur simulé l'a glissé ; en prod _m n'existe pas et
-       c'est le JSON qui sort — les vues devront alors le lire tel quel. */
-    cacheMessage: id => { const r = cache.messages[id]; return r ? (r._m || r) : null; },
+    cacheMessage: id => cache.messages[id] || null,
     cacheCompteur: k => cache.compteurs[k] || { t: 0, u: 0, f: 0 },
   };
 

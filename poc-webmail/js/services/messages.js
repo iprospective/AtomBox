@@ -39,10 +39,10 @@
       "le compteur redevient juste sans toucher au journal : la lecture reste tracée dans " +
       "activite, on n'efface pas un fait (D054/D059)"]),
 
-    traiter: m => appliquer(m, { motif:"traite", sorti: Date.now() },
+    traiter: m => appliquer(m, { motif_sortie:"traite", sorti_le: Date.now() },
       x => ABX.Traces.muter(x, {
         label:"Marquer traité", nom:"traiter",
-        corps:{ sorti: true, motif_sortie: "traite" },
+        corps:{ sorti_le: true, motif_sortie: "traite" },
         retour:{ comm_id: x.id, sorti_le: "2026-09-01T14:02:11+02:00",
                  motif_sortie: "traite", lu_le: "2026-09-01T14:01:58+02:00" },
       }, [
@@ -70,13 +70,13 @@ SELECT application_id, 'message.traite', :json, 'a_emettre', now()
                 "l'apprendre ne doit pas retarder le clic (D086)" },
       ])),
 
-    archiver: m => appliquer(m, { motif:"archive", sorti: Date.now() }, ["Archiver (sortir sans traiter)",
+    archiver: m => appliquer(m, { motif_sortie:"archive", sorti_le: Date.now() }, ["Archiver (sortir sans traiter)",
 `UPDATE rattachement SET sorti_le = now(), motif_sortie = 'archive'
  WHERE comm_id = :id AND compte_id = :moi;`,
       "motif_sortie distingue traité / archivé (D030) ; les vues « Traités » et « Archives » " +
       "n'en sont que la lecture (D051)"]),
 
-    refile: m => appliquer(m, { motif:null, sorti:null }, ["Remettre dans la file",
+    refile: m => appliquer(m, { motif_sortie:null, sorti_le:null }, ["Remettre dans la file",
 `UPDATE rattachement SET sorti_le = NULL, motif_sortie = NULL
  WHERE comm_id = :id AND compte_id = :moi;`,
       "⚠ retour de partition : c'est exactement Q009 (« un email sorti peut-il revenir ? »). " +
@@ -88,7 +88,7 @@ SELECT application_id, 'message.traite', :json, 'a_emettre', now()
         label:"Mettre à la corbeille", nom:"corbeille",
         corps:{ dossier: "trash" },
         retour:{ comm_id: x.id, dossier_id: "trash",
-                 dossier_origine: (x.fid || "inbox"), deplace_le: "2026-09-01T14:02:11+02:00" },
+                 dossier_origine: (x.dossier_origine || "inbox"), deplace_le: "2026-09-01T14:02:11+02:00" },
       }, [
         { t:"sql", label:"un déplacement, pas une suppression",
           detail:
@@ -169,8 +169,8 @@ VALUES (:id, 'ham', :moi, now());` },
     statuer(m, id) {
       const st = ABX.Fixtures.statut(id);
       const patch = { statut: id };
-      if (st.sortie) { patch.motif = st.sortie; patch.sorti = Date.now(); }
-      else if (m.motif === "traite") { patch.motif = null; patch.sorti = null; }
+      if (st.sortie) { patch.motif_sortie = st.sortie; patch.sorti_le = Date.now(); }
+      else if (m.motif_sortie === "traite") { patch.motif_sortie = null; patch.sorti_le = null; }
       appliquer(m, patch, x => ABX.Traces.muter(x, {
         label:"Statut : " + st.label, nom:"statuer",
         corps:{ statut: id },

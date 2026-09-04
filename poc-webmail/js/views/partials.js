@@ -13,8 +13,8 @@
   R.define("tag.chip", ({ tag }) => ABX.V0() ? "" :
     `<span class="tag ax">${F.esc(tag.axe)}=${F.esc(tag.val)}</span>`);
 
-  R.define("statut.chip", ({ m }) => ABX.V0() ? "" : m.motif
-    ? `<span class="tag">${m.motif === "archive" ? "archivé" : "traité"}</span>` : "");
+  R.define("statut.chip", ({ m }) => ABX.V0() ? "" : m.motif_sortie
+    ? `<span class="tag">${m.motif_sortie === "archive" ? "archivé" : "traité"}</span>` : "");
 
   /* ---- l'expediteur, normalise (D126) ------------------------------------
      Le nom affiche n'est PAS une identite : il est choisi par l'emetteur et rien
@@ -23,25 +23,25 @@
      gris, entre guillemets. L'usurpation par nom (D128, regle B1) porte en plus
      son propre signal. */
   R.define("expediteur", ({ m, long }) => {
-    if (m.sens === "out") return `<span class="from">${F.esc(m.from)}</span>`;
+    if (m.sens === "out") return `<span class="from">${F.esc(m.from_nom)}</span>`;
     /* V0 (D140) : pas de carnet, pas d'analyse — mais l'adresse reste visible à côté du
        nom (D126), parce que ça ne coûte rien et que c'est de la sécurité. */
     if (ABX.V0())
-      return `<span class="from">${F.esc(m.from)}</span> <span class="adr">&lt;${F.esc(m.mail)}&gt;</span>`;
+      return `<span class="from">${F.esc(m.from_nom)}</span> <span class="adr">&lt;${F.esc(m.from_adresse)}&gt;</span>`;
     if (m.connu)
-      return `<span class="from" title="${F.esc(m.mail)}">${F.esc(m.from)}</span>` +
-             (long ? ` <span class="adr">&lt;${F.esc(m.mail)}&gt;</span>` : "");
+      return `<span class="from" title="${F.esc(m.from_adresse)}">${F.esc(m.from_nom)}</span>` +
+             (long ? ` <span class="adr">&lt;${F.esc(m.from_adresse)}&gt;</span>` : "");
     /* D130 — une machine n'est pas un inconnu suspect. Mettre l'adresse d'une
        newsletter en evidence, comme on le fait d'un inconnu, ferait crier l'ecran
        sur du courrier parfaitement normal : on affiche le service, et sa NATURE. */
     if (m.nature && m.nature !== "humain")
-      return `<span class="from srv">${F.esc(m.from)}</span>` +
+      return `<span class="from srv">${F.esc(m.from_nom)}</span>` +
              R.render("nature.chip", { m }) +
-             (long ? ` <span class="adr">&lt;${F.esc(m.mail)}&gt;</span>` : "");
+             (long ? ` <span class="adr">&lt;${F.esc(m.from_adresse)}&gt;</span>` : "");
     /* inconnu : l'adresse d'abord, le nom declare relegue */
-    return `<span class="from adr-av">${F.esc(m.mail)}</span>` +
-           `<span class="decl">« ${F.esc(m.from)} »</span>` +
-           (m.spoof ? `<span class="alerte" title="Le nom correspond a un contact connu,`
+    return `<span class="from adr-av">${F.esc(m.from_adresse)}</span>` +
+           `<span class="decl">« ${F.esc(m.from_nom)} »</span>` +
+           (m.usurpation ? `<span class="alerte" title="Le nom correspond a un contact connu,`
                     + ` mais l'adresse n'est pas la sienne (D128, B1)">⚠ nom usurpe</span>` : "");
   });
 
@@ -50,11 +50,11 @@
      vient peut-être pas d'elle. Marquer fiable un identifiant usurpable, ce
      serait donner à l'attaquant la cible exacte. */
   R.define("fiabilite", ({ m }) => {
-    if (ABX.V0() || m.sens === "out" || m.fiab === undefined) return "";
-    if (m.fiab >= 2)
+    if (ABX.V0() || m.sens === "out" || m.fiabilite === undefined) return "";
+    if (m.fiabilite >= 2)
       return `<span class="fiab f2" title="Expéditeur validé par quelqu'un de chez vous,
         et ce message est authentifié (DMARC aligné) — D137">✓</span>`;
-    if (m.fiab === 1)
+    if (m.fiabilite === 1)
       return `<span class="fiab f1" title="Correspondant connu, message authentifié —
         aucune validation humaine (D137)">·</span>`;
     return "";
@@ -76,19 +76,19 @@
   /* ---- carte de message (liste) ----------------------------------------- */
   R.define("message.card.header", ({ m }) =>
     `<div class="r1">${R.render("fiabilite", { m })}${R.render("expediteur", { m })}
-       <span class="dt">${F.dt(m.date)}</span></div>`);
+       <span class="dt">${F.dt(m.date_recue)}</span></div>`);
 
   R.define("message.card.body", ({ m }) =>
-    `<div class="subj">${F.esc(m.subject)}</div>
+    `<div class="subj">${F.esc(m.sujet)}</div>
      <div class="snip">${F.esc(m.snippet)}</div>`);
 
   R.define("message.card.meta", ({ m }) =>
-    `<div class="meta">${m.pj ? `<span class="pj">📎 ${m.pj} · ${F.poids(m.pj_ko)}</span>` : ""}
+    `<div class="meta">${m.nb_pieces_jointes ? `<span class="pj">📎 ${m.nb_pieces_jointes} · ${F.poids(m.pj_ko)}</span>` : ""}
        ${R.render("statut.chip", { m })}
        ${m.tags.map(tag => R.render("tag.chip", { tag })).join("")}</div>`);
 
   R.define("message.card.actions", ({ m }) => {
-    const ou = m.dossier || m.fid;
+    const ou = m.dossier || m.dossier_origine;
     const boutons = ou === "trash"
       ? `<button data-act="restaurer" title="Restaurer">↩</button>`
       : ou === "junk"
@@ -133,11 +133,11 @@
   });
 
   R.define("attachment.list", ({ m }) => {
-    if (!m.pjs.length) return "";
+    if (!m.pieces_jointes.length) return "";
     const tot = m.pj_ko;
-    return `<div class="box"><h4>Pièces jointes — ${m.pjs.length} · ${F.poids(tot)} décodés,
+    return `<div class="box"><h4>Pièces jointes — ${m.pieces_jointes.length} · ${F.poids(tot)} décodés,
         ${F.poids(Math.round(tot * 1.37))} sur le fil (base64, D069)</h4>
-      <div class="pjl">${m.pjs.map((p, i) => R.render("attachment.card", { p, i })).join("")}</div>
+      <div class="pjl">${m.pieces_jointes.map((p, i) => R.render("attachment.card", { p, i })).join("")}</div>
       <div class="dmeta" style="margin-top:8px">Le <b>nom</b> et le <b>type déclaré</b> sont portés
         par la liaison, les <b>octets</b> et le <b>type détecté</b> par le blob : c'est ce qui permet
         de dédupliquer sans mentir sur le message d'origine (D024/D025/D032).</div></div>`;
@@ -151,16 +151,16 @@
     const f = Erp.fiche(t.axe, t.val), c = f.cfg;
     return `<div class="box erp"><h4>${c.ic} ${F.esc(c.nom)} — contexte métier</h4>
       <div class="kv"><span class="k">${F.esc(c.objet)}</span><span><b>${F.esc(t.val)}</b>
-        <span class="tag ax">${F.esc(f.ref)}</span>
+        <span class="tag ax">${F.esc(f.reference)}</span>
         <span class="tag">application ${F.esc(c.app)}</span>
         <span class="tag">client depuis ${f.depuis}</span></span></div>
-      <div class="kv"><span class="k">Correspondant</span><span>${F.esc(m.mail)}
+      <div class="kv"><span class="k">Correspondant</span><span>${F.esc(m.from_adresse)}
         <span class="tag">→ identité résolue par l'annuaire (D035)</span></span></div>
       <div class="kv"><span class="k">Encours</span><span><b>${F.euro(f.encours)}</b>
         ${f.echu ? `<span class="st due">dont ${F.euro(f.echu)} échu</span>`
                  : `<span class="st ok">rien d'échu</span>`}</span></div>
       <table class="erpl">${f.objets.map(o => `<tr>
-        <td>${o.type}</td><td><b>${F.esc(o.ref)}</b></td>
+        <td>${o.type}</td><td><b>${F.esc(o.reference)}</b></td>
         <td class="num">${F.euro(o.montant)}</td>
         <td class="num"><span class="st ${Erp.statutClasse(o)}">${o.statut}</span></td></tr>`).join("")}</table>
       <div class="dacts" style="margin-top:9px">
@@ -236,6 +236,6 @@
   /* ---- fil de discussion ------------------------------------------------- */
   R.define("thread.item", ({ x, courant }) =>
     `<div class="tm${courant ? " cur" : ""}">
-       <div class="h"><b>${F.esc(x.from)}</b><span class="dt">${F.dt(x.date)}</span></div>
-       <div class="b">${F.esc(x.body)}</div></div>`);
+       <div class="h"><b>${F.esc(x.from_nom)}</b><span class="dt">${F.dt(x.date_recue)}</span></div>
+       <div class="b">${F.esc(x.corps)}</div></div>`);
 })(window.ABX = window.ABX || {});

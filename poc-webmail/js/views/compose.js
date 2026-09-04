@@ -17,7 +17,7 @@
         <div class="dhead"><div class="dsubj">${titre}</div>
           <div class="dmeta">${d.mode === "new" ? "message sortant"
             : "en " + (d.mode === "tr" ? "transfert" : "réponse") + " de « " +
-              F.esc(src ? src.subject : "message supprimé") + " »"}</div></div>
+              F.esc(src ? src.sujet : "message supprimé") + " »"}</div></div>
         <div class="compo">
           <div class="frow"><label>De</label><select id="f_de">${ABX.Ref.moi.boites.map(b =>
             `<option value="${F.esc(b.adresse)}"${d.de === b.adresse ? " selected" : ""}>${
@@ -32,7 +32,7 @@
           <div class="frow"><label>Sujet</label><input id="f_sujet" value="${F.esc(d.sujet)}"></div>
           <textarea id="f_corps">${F.esc(d.corps)}</textarea>
           ${d.mode === "tr" && src ? `<div class="lien">
-            <label class="chk"><input type="checkbox" id="f_ref"${d.ref ? " checked" : ""}>
+            <label class="chk"><input type="checkbox" id="f_ref"${d.reference ? " checked" : ""}>
               <span>Transférer <b>par référence</b> — destinataires internes</span></label>
             <div class="hint" style="margin-top:5px">Coché : aucune copie. Le message reçu porte un
               <b>lien</b> vers l'original et une ACL de lecture (D058/D067) — le fil reste unique, et
@@ -40,8 +40,8 @@
               Décoché : l'original est <b>encapsulé</b> en <code>message/rfc822</code>, donc
               matérialisé — seule forme envoyable à l'extérieur, et dédupliquée comme un
               message (D066).</div></div>` : ""}
-          ${d.pjs.length ? `<div class="hint">📎 ${d.pjs.length} pièce(s) jointe(s) :
-            ${d.pjs.map(p => F.esc(p.nom) + " (" + F.poids(p.b.ko) + ")").join(", ")}</div>` : ""}
+          ${d.pieces_jointes.length ? `<div class="hint">📎 ${d.pieces_jointes.length} pièce(s) jointe(s) :
+            ${d.pieces_jointes.map(p => F.esc(p.nom) + " (" + F.poids(p.b.ko) + ")").join(", ")}</div>` : ""}
           <div class="cbar">
             <button class="hbtn prim" id="c_env">✈ Envoyer</button>
             <button class="hbtn" id="c_br">💾 Enregistrer le brouillon</button>

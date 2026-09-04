@@ -51,7 +51,7 @@ const { creerDocument } = require("./fake-dom");
     .filter(([, n]) => n > 0);
   const total = deballages.reduce((s, [, n]) => s + n, 0);
   console.log("  déballages _m hors serveur simulé : " + total + " (" + deballages.map(([f, n]) => f.replace("js/", "") + "×" + n).join(", ") + ")");
-  vrai(total <= 4, "la dette _m est bornée (" + total + " ≤ 4) — elle ne doit que baisser");
+  eq(total, 0, "la dette _m est SOLDÉE : les vues lisent le contrat, aucun déballage (" + total + ")");
 
   console.log("— bundle produit ————————————————————————————————");
   const BUNDLE = path.join(RACINE, "dist", "prod.html");

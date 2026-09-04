@@ -10,7 +10,7 @@
   const CLE = "abx.db.v2";
 
   const Store = {
-    /* delta d'état : comm_id -> { lu, sorti, motif, dossier, suppr } */
+    /* delta d'état : id -> { lu, sorti_le, motif_sortie, dossier, suppr } */
     ratt: {},
     /* messages écrits ici : envoyés et brouillons — eux n'ont pas de fixture */
     crees: [],
