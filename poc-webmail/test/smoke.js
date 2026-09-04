@@ -165,6 +165,52 @@ console.log("— cohérence du CDC lui-même (dictionnaire, ch. 16) ————
     (f.questions || []).length);
   eq(trancheeCitee.length, 0, "une fonctionnalité « à trancher » cite une question encore ouverte" +
      (trancheeCitee.length ? " — " + trancheeCitee.map(f => f.id).join(", ") : ""));
+  /* Les dépendances entre fonctionnalités donnent l'ORDRE DE CODAGE. Trois choses
+     doivent casser au commit : un cycle, une dépendance vers un id inconnu, et une
+     dépendance vers un jalon ULTÉRIEUR (on ne peut pas coder V0 sur du V2). */
+  {
+    const fids = new Set(D.fonctionnalites.map(f => f.id));
+    const inconnues = [], amont = [];
+    D.fonctionnalites.forEach(f => (f.depend_de || []).forEach(d => {
+      if (!fids.has(d)) inconnues.push(f.id + "→" + d);
+      else { const g = D.fonctionnalites.find(x => x.id === d);
+        if (f.jalon !== null && g.jalon !== null && g.jalon > f.jalon) amont.push(f.id + "(V" + f.jalon + ")→" + d + "(V" + g.jalon + ")"); }
+    }));
+    eq(inconnues.length, 0, "chaque dépendance pointe une fonctionnalité déclarée" + (inconnues.length ? " — " + inconnues.join(", ") : ""));
+    eq(amont.length, 0, "aucune fonctionnalité ne dépend d'un jalon ultérieur — déplacer en aval oblige à déplacer la descendance" + (amont.length ? " — " + amont.join(", ") : ""));
+    /* Écarter (jalon null) = suppression en cascade : une F… à jalon qui dépend d'une
+       F… écartée est une incohérence à nommer — c'est le warning et la confirmation. */
+    const orphelines = [];
+    D.fonctionnalites.forEach(f => { if (f.jalon === null || f.jalon === undefined) return;
+      (f.depend_de || []).forEach(d => { const g = D.fonctionnalites.find(x => x.id === d);
+        if (g && (g.jalon === null || g.jalon === undefined)) orphelines.push(f.id + "→" + d + " (écartée)"); }); });
+    eq(orphelines.length, 0, "aucune fonctionnalité à jalon ne dépend d'une fonctionnalité écartée — écarter est une cascade" + (orphelines.length ? " — " + orphelines.join(", ") : ""));
+    const deps = {}; D.fonctionnalites.forEach(f => deps[f.id] = (f.depend_de || []).slice());
+    const vus = {}, pile = {}; let cycle = null;
+    const visite = id => { if (cycle) return; if (pile[id]) { cycle = id; return; } if (vus[id]) return;
+      pile[id] = 1; deps[id].forEach(visite); pile[id] = 0; vus[id] = 1; };
+    Object.keys(deps).forEach(visite);
+    vrai(!cycle, "le graphe des dépendances est sans cycle" + (cycle ? " — cycle passant par " + cycle : ""));
+    const ren = D.fonctionnalites.filter(f => f.depend_de !== null && f.depend_de !== undefined);
+    vrai(ren.length >= 25, ren.length + " fonctionnalités ont leurs dépendances renseignées");
+    vrai(D.fonctionnalites.filter(f => f.jalon === 0).every(f => f.depend_de !== null && f.depend_de !== undefined),
+         "toutes les fonctionnalités V0 ont leurs dépendances renseignées — c'est l'ordre de codage immédiat");
+  }
+  /* Feuille de route et Fonctionnalités : DEUX VUES DES MÊMES F… — la roadmap doit
+     tout couvrir, et dans l'ordre de réalisation. */
+  {
+    const R = A.Views.Pages.ROADMAP, tous = D.fonctionnalites.filter(f => f.jalon !== null && f.jalon !== undefined);
+    const dansRoadmap = new Set(R.flatMap(r => r.feats.map(f => f.id)));
+    const manquent = tous.filter(f => !dansRoadmap.has(f.id)).map(f => f.id);
+    eq(manquent.length, 0, "la feuille de route couvre TOUTES les fonctionnalités à jalon" + (manquent.length ? " — manquent " + manquent.join(", ") : ""));
+    const v0 = R.find(r => r.v === 0);
+    const ids0 = v0.feats.map(f => f.id);
+    vrai(ids0.indexOf("F114") < ids0.indexOf("F101") && ids0.indexOf("F101") < ids0.indexOf("F113") && ids0.indexOf("F113") < ids0.indexOf("F102"),
+         "V0 est dans l'ordre de codage : base → ingestion → synchronisation → dossiers");
+    const page = A.Views.Pages.render("roadmap");
+    vrai(page.includes(">F114<") && page.includes(">F101<"), "la page Feuille de route affiche les identifiants F…");
+    vrai(A.Views.Pages.render("features").includes(">F101<"), "la page Fonctionnalités aussi — mêmes données, autre organisation");
+  }
   const tplCites = new Set(D.templates.map(t => t.nom));
   const tplManquants = A.Registry.liste().filter(n => !n.includes("@") && !tplCites.has(n));
   eq(tplManquants.length, 0, "chaque partielle du registre est décrite au dictionnaire" +

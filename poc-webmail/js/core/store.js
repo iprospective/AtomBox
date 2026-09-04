@@ -25,7 +25,7 @@
          donc persistés. Une arborescence engendrée n'interdit pas de choisir
          son ordre — elle interdit seulement de le coder dans les noms. */
       ordreAxes: null, triAxe: {},
-      /* jalon simulé : 0 = la V0 (client IMAP, D140), null = la maquette complète */
+      /* jalon simulé : 0 = la V0 (la V1 réduite, D140b), null = la maquette complète */
       jalon: null,
       tabs: [], tab: null,
     },
@@ -66,6 +66,7 @@
   };
 
   ABX.Store = Store;
-  /* La V0 (D140) : tout ce qui demande une base rend vide. Un seul test, partout. */
+  /* La V0 (D140b) : tout ce que la V1 ajoute rend vide — la base existe, ses tables
+     de V1 sont vides. Un seul test, partout. */
   ABX.V0 = () => Store.ui.jalon === 0;
 })(window.ABX = window.ABX || {});

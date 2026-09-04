@@ -150,22 +150,76 @@ w("> Hypothèse REST (**Q07** non tranchée) : ce tableau décrit les **opérati
 w(table([("Méthode", g("methode")), ("Chemin", lambda r: "`%s`" % r["chemin"]), ("Rôle", g("role")), ("Portée", g("portee")),
          ("Entités", g("entites")), ("État", g("etat")), ("Décisions", lambda r: refs(r.get("decisions")))], ROU))
 
-# ---- jalons & fonctionnalités ----
-w("\n\n---\n\n## 16.11 — Jalons\n")
-for j in JAL:
-    w("\n### %s — %s *(%s)*\n" % (j["id"], j["titre"], j.get("etat", "")))
-    if j.get("note"): w("> %s\n" % j["note"])
-    w("\n".join("- %s" % c for c in j.get("contenu", [])) + "\n")
+# ---- ordre de réalisation : tri topologique du graphe depend_de ----
+def ordre_realisation(feats):
+    par = { f["id"]: f for f in feats }
+    deps = { f["id"]: list(f.get("depend_de") or []) for f in feats }
+    # Kahn, stable : à égalité, le jalon le plus bas puis l'identifiant
+    entrants = { k: len(v) for k, v in deps.items() }
+    suiv = {}
+    for k, v in deps.items():
+        for d in v: suiv.setdefault(d, []).append(k)
+    prets = sorted([k for k, n in entrants.items() if n == 0], key=lambda k: (par[k].get("jalon") if par[k].get("jalon") is not None else 99, k))
+    ordre = []
+    while prets:
+        k = prets.pop(0); ordre.append(k)
+        for s2 in suiv.get(k, []):
+            entrants[s2] -= 1
+            if entrants[s2] == 0:
+                prets.append(s2); prets.sort(key=lambda x: (par[x].get("jalon") if par[x].get("jalon") is not None else 99, x))
+    cycle = [k for k, n in entrants.items() if n > 0]
+    return ordre, cycle, par
 
-w("\n---\n\n## 16.12 — Fonctionnalités\n")
+# ---- jalons : la feuille de route DÉRIVÉE des fonctionnalités ----
+# Deux vues des mêmes F… : ici par jalon, dans l'ordre de réalisation ; en 16.13 par domaine.
+# Le « contenu » libre de jalons.yml devient une note d'intention ; la liste est calculée.
+w("\n\n---\n\n## 16.11 — Feuille de route\n")
+w("Chaque jalon liste **toutes** ses fonctionnalités (`F…`), **dans l'ordre de réalisation** (16.12). "
+  "C'est la même donnée que 16.13, organisée par jalon plutôt que par domaine — aucune fonctionnalité "
+  "n'existe hors d'un jalon, sauf celles écartées volontairement.\n")
+_ordre_j, _cycle_j, _par_j = ordre_realisation(FEA)
+_rang = { k: i for i, k in enumerate(_ordre_j) }
+for j in JAL:
+    v = int(j["id"].lstrip("V"))
+    feats = sorted([f for f in FEA if f.get("jalon") == v], key=lambda f: (_rang.get(f["id"], 10**6), f["id"]))
+    w("\n### %s — %s *(%s)* — %d fonctionnalités\n" % (j["id"], j["titre"], j.get("etat", ""), len(feats)))
+    if j.get("note"): w("> %s\n" % j["note"])
+    if j.get("contenu"):
+        w("*Intention :* " + " · ".join(j["contenu"]) + "\n")
+    w(table([("Ordre", lambda f: (_rang[f["id"]] + 1) if f["id"] in _rang else "—"), ("#", g("id")),
+             ("Fonctionnalité", g("libelle")), ("Domaine", g("domaine")), ("État", g("etat")),
+             ("Dépend de", lambda f: f.get("depend_de") if f.get("depend_de") is not None else "à renseigner")], feats))
+_ecartees = [f for f in FEA if f.get("jalon") is None]
+if _ecartees:
+    w("\n### Écartées volontairement — %d\n" % len(_ecartees))
+    w(table([("#", g("id")), ("Fonctionnalité", g("libelle")), ("État", g("etat")), ("Questions", lambda f: refs(f.get("questions")))], _ecartees))
+
+w("\n---\n\n## 16.12 — Ordre de réalisation\n")
+w("Calculé depuis `depend_de` (tri topologique, stable par jalon puis identifiant). **C'est l'ordre "
+  "dans lequel coder** : une fonctionnalité n'apparaît qu'après tout ce dont elle dépend. Les "
+  "identifiants `F…` sont stables — on n'en réattribue jamais un.\n")
+_ordre, _cycle, _par = ordre_realisation(FEA)
+_ren = [f for f in FEA if f.get("depend_de") is not None]
+w("| Renseignées | Racines (aucune dépendance) | À renseigner (`null`) | Cycle |\n|---|---|---|---|")
+w("| %d / %d | %d | %d | %s |" % (len(_ren), len(FEA), sum(1 for f in _ren if not f["depend_de"]),
+   len(FEA) - len(_ren), ("⚠ " + ", ".join(_cycle)) if _cycle else "aucun"))
+w("")
+w(table([("Rang", lambda k: _ordre.index(k) + 1), ("#", lambda k: k), ("Fonctionnalité", lambda k: _par[k]["libelle"]),
+         ("Jalon", lambda k: "V%s" % _par[k]["jalon"] if _par[k].get("jalon") is not None else "—"),
+         ("Dépend de", lambda k: _par[k].get("depend_de") or "—")],
+        [k for k in _ordre if _par[k].get("depend_de") is not None]))
+w("\n*Les fonctionnalités dont `depend_de` est encore `null` ne figurent pas dans l'ordre : elles sont à renseigner.*\n")
+
+w("\n---\n\n## 16.13 — Fonctionnalités\n")
 w("La même liste que la page « Fonctionnalités » du POC — c'est la même source.\n")
 doms = []
 for f in FEA:
     if f["domaine"] not in doms: doms.append(f["domaine"])
 for dom in doms:
     w("\n### %s\n" % dom)
-    w(table([("#", g("id")), ("Fonctionnalité", g("libelle")), ("Jalon", lambda f: "V%s" % f["jalon"] if f.get("jalon") else "—"),
-             ("État", g("etat")), ("Décisions", lambda f: refs(f.get("decisions"))), ("Questions", lambda f: refs(f.get("questions")))],
+    w(table([("#", g("id")), ("Fonctionnalité", g("libelle")), ("Jalon", lambda f: "V%s" % f["jalon"] if f.get("jalon") is not None else "—"),
+             ("État", g("etat")), ("Dépend de", lambda f: f.get("depend_de") if f.get("depend_de") is not None else "à renseigner"),
+             ("Décisions", lambda f: refs(f.get("decisions"))), ("Questions", lambda f: refs(f.get("questions")))],
             [f for f in FEA if f["domaine"] == dom]))
 
 io.open(SORTIE, "w", encoding="utf-8").write("\n".join(md) + "\n")
