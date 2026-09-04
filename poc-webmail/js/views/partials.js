@@ -206,7 +206,18 @@
        <span class="tw">${o.tw || ""}</span><span class="ic">${o.icon || ""}</span>
        <span class="lb">${F.esc(o.label)}</span>
        ${o.axe && o.kind === "axe" ? R.render("nav.axe.outils", { o }) : ""}
-       <span class="ct${o.unread ? " b" : ""}">${o.unread ? o.unread : (o.total || "")}</span></div>`);
+       ${R.render("nav.compteur", { o })}</div>`);
+
+  /* Le compteur d'un dossier : NON LUS / TOTAL. Le non-lu en gras quand il y en
+     a, le total toujours en gris — un dossier vide ne montre rien. Deux nombres
+     parce qu'ils répondent à deux questions : « ai-je du nouveau ? » et « combien
+     y a-t-il là-dedans ? » — et l'ancien affichage cachait la seconde dès que
+     la première avait une réponse. */
+  R.define("nav.compteur", ({ o }) => {
+    const t = o.total || 0, u = o.unread || 0;
+    return `<span class="ct" title="${u} non lu${u > 1 ? "s" : ""} sur ${t}">${
+      u ? `<b>${u}</b>` : u}<span class="sep">/</span>${t}</span>`;
+  });
 
   /* Les commandes d'ordre n'apparaissent qu'au survol : une arborescence n'est
      pas un tableau de bord, et six boutons par ligne la rendraient illisible. */

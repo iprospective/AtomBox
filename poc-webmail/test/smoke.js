@@ -308,6 +308,16 @@ console.log("— fiabilité de l'expéditeur (D136, D137) ———————�
        "aucun bandeau de confiance sur une usurpation — le bandeau d'alerte suffit");
 }
 
+console.log("— compteurs : littéralement « non lu / total » ——————————");
+{
+  const c = A.Registry.render("nav.compteur", { o: { unread: 12, total: 64 } });
+  vrai(c.includes("<b>12</b>") && /\/<\/span>64</.test(c), "12 non lus sur 64 → « 12 / 64 », le non-lu en gras");
+  const l = A.Registry.render("nav.compteur", { o: { unread: 0, total: 64 } });
+  vrai(/>0<span class="sep">\/<\/span>64</.test(l) && !l.includes("<b>"), "tout lu → « 0 / 64 », toujours les deux nombres");
+  vrai(/>0<span class="sep">\/<\/span>0</.test(A.Registry.render("nav.compteur", { o: {} })), "dossier vide → « 0 / 0 »");
+  vrai(/<b>\d+<\/b><span class="sep">\/<\/span>\d+/.test(A.Views.Nav.render(A.Store.ui)), "l'arborescence réelle affiche les deux");
+}
+
 console.log("— ordre des dossiers (D135) ——————————————————————");
 {
   const ui = A.Store.ui, nav0 = A.Views.Nav.render(ui);

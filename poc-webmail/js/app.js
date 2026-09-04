@@ -81,7 +81,9 @@
 
   /* les référentiels arrivent par promesse (D141) ; on peint quand on les a.
      En POC c'est immédiat ; en prod c'est le premier aller-retour du produit. */
-  ABX.pret = ABX.Ref.charger().then(() => App.peindre("all")).then(() => true)
+  /* référentiels PUIS compteurs PUIS peinture : l'arborescence a besoin des deux
+     avant de s'afficher — sinon elle montre « 0 / 0 » partout (D141) */
+  ABX.pret = ABX.Ref.charger().then(() => ABX.Api.compteurs()).then(() => App.peindre("all")).then(() => true)
     /* l'API peut être indisponible (réseau, serveur arrêté) : l'interface TIENT —
        arborescence vide, liste qui le dit — et ne lève rien. C'est du produit
        (D141), et c'est ce que le harnais vérifie en mode produit sans réseau. */
