@@ -40,11 +40,15 @@
     },
 
     finir(t, envoyer) {
-      const m = Svc.enregistrer(t.data, t.brouillon, envoyer);
-      if (!m) return alert("Aucun destinataire.");
-      Tabs().fermer(t.key);
-      if (envoyer) Tabs().ouvrir({ type:"msg", id:m.id }, false);
-      else App().peindre("all");
+      const cree = Svc.enregistrer(t.data, t.brouillon, envoyer);
+      if (!cree) return alert("Aucun destinataire.");
+      /* on attend la réponse de la couche d'accès avant d'ouvrir l'onglet du
+         message créé : en prod c'est le POST qui donne l'identifiant (D141) */
+      return cree.then(m => {
+        Tabs().fermer(t.key);
+        if (envoyer) Tabs().ouvrir({ type:"msg", id:m.id }, false);
+        else App().peindre("all");
+      });
     },
   };
 

@@ -27,7 +27,7 @@
   ABX.Views.List = {
     FILTRES, SENS, variante,
     render(ui, messages, selection) {
-      const vueSortie = !!C.VUES[ui.folder.id];
+      const vueSortie = ABX.Ref.estVue(ui.folder.id);
       let h = `<div class="backbar"><button data-vue="nav">‹ Dossiers</button>
           <span style="color:var(--muted);font-size:11.5px">${F.esc(ui.folder.label)}</span></div>
         <div class="lbar"><div class="t">${F.esc(ui.folder.label)}

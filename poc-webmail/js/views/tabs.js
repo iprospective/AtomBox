@@ -14,7 +14,7 @@
       if (t.type === "admin") return "Administration";
       if (t.type === "pj")    return "Pièces jointes";
       if (t.type === "page")  return ABX.Views.Pages.titre(t.page);
-      const m = C.par(t.id);
+      const m = ABX.Api.cache.message(t.id);
       return m ? m.subject : "(message effacé)";
     },
     render(ui) {

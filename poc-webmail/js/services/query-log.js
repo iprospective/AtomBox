@@ -68,6 +68,14 @@
       ABX.Bus.emit("querylog:changed");
     },
     vider() { entrees.length = 0; ABX.Bus.emit("querylog:changed"); },
+
+    /* OBSERVATEUR de la couche Api (D141) : chaque appel réel — nom, arguments,
+       durée — arrive ici sans que personne l'appelle à la main. En POC la durée
+       est nulle ; en prod c'est la latence que l'interface a dû absorber. */
+    mesure(a) {
+      const e = entrees.find(x => x.api === a.nom && !x.ms && Date.now() - x.t < 2000);
+      if (e) { e.ms = a.ms; e.n = Array.isArray(a.res) ? a.res.length : undefined; ABX.Bus.emit("querylog:changed"); }
+    },
   };
 
   ABX.log = (...a) => ABX.QueryLog.add(...a);

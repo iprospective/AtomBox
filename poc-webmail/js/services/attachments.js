@@ -6,8 +6,11 @@
    déclare parfois n'importe quoi : les deux faits doivent survivre au stockage. */
 (function (ABX) {
   "use strict";
-  const { int, pick, next, hex } = { int: (...a) => ABX.PRNG.int(...a), pick: a => ABX.PRNG.pick(a),
-                                     next: () => ABX.PRNG.next(), hex: n => ABX.PRNG.hex(n) };
+  /* Le PRNG n'existe qu'en POC (D141) : en prod ce service ne fabrique rien, il
+     ne fait qu'indexer ce que l'API sert. Les tirages sont donc optionnels. */
+  const P = ABX.PRNG || { int: () => 0, pick: a => a[0], next: () => 0, hex: n => "0".repeat(n) };
+  const { int, pick, next, hex } = { int: (...a) => P.int(...a), pick: a => P.pick(a),
+                                     next: () => P.next(), hex: n => P.hex(n) };
 
   const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";

@@ -16,7 +16,7 @@
     preparer(mode, m) {
       const d = { mode, src: m ? m.id : null, cc:"", pjs:[], ref: mode === "tr" };
       if (mode === "new") {
-        Object.assign(d, { de: Fx.MOI.boites[0].adresse, a:"", sujet:"", corps:"" });
+        Object.assign(d, { de: (ABX.Ref.moi.boites[0] || {}).adresse || "", a:"", sujet:"", corps:"" });
       } else if (mode === "tr") {
         Object.assign(d, { de: m.boite, a:"",
           sujet: /^tr:/i.test(m.subject) ? m.subject : "Tr: " + m.subject, corps: cite(m) });
@@ -49,7 +49,7 @@ VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj
 
     fabriquer(d, fid) {
       const id = fid + "/u" + (++St.seq);
-      const m = { id, fid, sens: "out", from: Fx.MOI.nom, mail: d.de, boite: d.de,
+      const m = { id, fid, sens: "out", from: ABX.Ref.moi.nom, mail: d.de, boite: d.de,
         to: d.a.split(",").map(x => x.trim()).filter(Boolean),
         subject: d.sujet || "(sans sujet)", body: d.corps,
         snippet: (d.corps || "").split("\n").find(l => l.trim()) || "…",
@@ -58,7 +58,7 @@ VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj
         pjs: d.pjs.slice(), ref: d.ref && d.src ? d.src : null, compo: null };
       /* Transfert par VALEUR : l'original est encapsulé, donc matérialisé (D066). */
       if (d.mode === "tr" && d.src && !d.ref) {
-        const s = C.par(d.src);
+        const s = ABX.Api.cache.message(d.src);
         if (s) m.pjs.push(At.encapsuler(s));
       }
       At.recompter(m);
@@ -69,13 +69,14 @@ VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj
     /* Renvoie le message créé, ou null si l'envoi est refusé. */
     enregistrer(d, brouillonId, envoyer) {
       if (envoyer && !d.a.trim()) return null;
-      const ancien = brouillonId ? C.par(brouillonId) : null;
-      if (ancien) { St.patch(ancien, { suppr: true }); C.retire(ancien); }
+      /* un brouillon réenregistré remplace le précédent : DELETE puis POST (D141) */
+      if (brouillonId) ABX.Api.detacher(brouillonId);
 
       const m = Compose.fabriquer(d, envoyer ? "sent" : "drafts");
       if (!envoyer) m.compo = d;              // un brouillon se rouvre en composition
-      St.crees.push(m); C.ajoute(m);
-      C.recompte(); St.save();
+      /* la création passe par la couche d'accès (D141) : on rend la PROMESSE du
+         message créé — l'appelant n'ouvre l'onglet qu'une fois la réponse là */
+      const cree = ABX.Api.creer(m).then(() => ABX.Api.compteurs()).then(() => m);
 
       if (!envoyer) {
         ABX.log("Enregistrer le brouillon",
@@ -90,7 +91,7 @@ ON CONFLICT (comm_id) DO UPDATE SET corps = EXCLUDED.corps, maj_le = now();`,
         ABX.Traces.envoyer(m, d, int, ext);
       }
       ABX.Bus.emit("corpus:changed", { message: m });
-      return m;
+      return cree;
     },
   };
 

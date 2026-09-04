@@ -32,8 +32,12 @@ const sandbox = { console: { log(){}, warn(){}, error(){} }, document: doc, loca
   alert: () => {}, confirm: () => true, location: { reload(){} },
   setTimeout, clearTimeout, encodeURIComponent, Math, Date, JSON };
 sandbox.window = sandbox;
+sandbox.Promise = Promise; sandbox.setImmediate = setImmediate;
 vm.runInContext(js, vm.createContext(sandbox), { filename: "dist/index.html" });
 const B = sandbox.ABX;
+(async () => {
+/* l'amorçage est asynchrone (D141) : on laisse la page se peindre avant de lire le DOM */
+await new Promise(r => setImmediate(() => (B.pret || Promise.resolve()).then(() => setImmediate(r), () => setImmediate(r))));
 
 console.log("— même comportement que les sources ————————————");
 const src = demarrer(creerStockage()).ABX;
@@ -48,3 +52,4 @@ vrai(doc.getElementById("list").innerHTML.includes("msg"), "la liste aussi");
 vrai(doc.getElementById("qpanel").innerHTML.includes("casc"), "et la trace");
 
 bilan();
+})();

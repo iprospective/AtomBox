@@ -8,13 +8,12 @@
   "use strict";
   const F = ABX.Fmt, C = ABX.Corpus, At = ABX.Attachments;
 
-  /* Toutes les liaisons du corpus, à plat — c'est la vue « fichiers ». */
-  function toutes() {
-    const out = [];
-    C.tous.forEach(m => (m.pjs || []).forEach((p, i) =>
-      out.push({ m, p, i, b: p.b })));
-    return out;
-  }
+  /* Toutes les liaisons, à plat — c'est la vue « fichiers ». Elles arrivent par
+     la couche d'accès (D141) : le contrôleur les charge, la vue rend ce qu'on lui
+     a donné, et rien tant qu'on n'a rien. */
+  let cache = null;
+  function charger(liste) { cache = liste.map(({ m, p, i }) => ({ m, p, i, b: p.b })); }
+  function toutes() { return cache || []; }
 
   function filtrer(q, type) {
     const f = (q || "").trim().toLowerCase();
@@ -26,6 +25,7 @@
 
   ABX.Views = ABX.Views || {};
   ABX.Views.Attachments = {
+    charger, get charge() { return cache !== null; },
     toutes, filtrer,
     render(ui) {
       const q = ui.pjq || "", type = ui.pjtype || "tous";

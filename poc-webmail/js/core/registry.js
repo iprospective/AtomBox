@@ -29,6 +29,27 @@
       return fn(c);
     },
 
+    /* ---- POINTS DE CONTEXTE (D142) --------------------------------------
+       Un point de contexte est un endroit de l'interface où quelque chose
+       peut s'expliquer. Il est nommé (« contexte.fiabilite.valide ») et VIDE
+       par défaut. Des surcouches y branchent un contenu par MODE : « cdc » en
+       POC (la décision, la règle, la requête), « aide » en prod (ce que
+       l'utilisateur doit comprendre). Plusieurs modes peuvent être actifs ;
+       on rend la concaténation. Un point sans contenu rend une chaîne vide —
+       ce n'est pas une erreur, c'est le comportement normal en prod. */
+    modes: [],
+    contexte(point, ctx) {
+      return Registry.modes.map(mode => parts[cle("contexte." + point, mode)])
+        .filter(Boolean).map(fn => fn(ctx || {})).join("");
+    },
+    aContexte: point => Registry.modes.some(mode => !!parts[cle("contexte." + point, mode)]),
+    /* la liste des points nommés quelque part, tous modes — sert au harnais */
+    points: () => { const s = new Set();
+      Object.keys(parts).forEach(k => { const m = k.match(/^contexte\.(.+)@(\w+)$/); if (m) s.add(m[1]); });
+      return [...s].sort(); },
+    pointsDuMode: mode => Object.keys(parts).filter(k => k.startsWith("contexte.") && k.endsWith("@" + mode))
+      .map(k => k.slice(9, -(mode.length + 1))).sort(),
+
     /* Ce que le registre connaît — sert à la page de démonstration et au test. */
     liste: () => Object.keys(parts).sort(),
   };

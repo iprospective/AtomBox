@@ -106,6 +106,12 @@ INSERT INTO acl_axe (axe_id, principal, droit) VALUES (:id, :moi, 'administrer')
 
     /* ---- pièces jointes ---------------------------------------------- */
     peindrePJ() {
+      /* les liaisons arrivent par la couche d'accès (D141) : au premier passage on
+         charge, on peint l'attente, et on repeint à la réponse */
+      if (!ABX.Views.Attachments.charge) {
+        D.paint("detail", `<div class="empty">Chargement des pièces jointes…</div>`);
+        return ABX.Api.piecesJointes().then(l => { ABX.Views.Attachments.charger(l); Admin.peindrePJ(); });
+      }
       const el = D.paint("detail", ABX.Views.Attachments.render(St.ui));
       ABX.Controllers.App.bindRetour(el);
       const liste = () => ABX.Views.Attachments.filtrer(St.ui.pjq, St.ui.pjtype);
