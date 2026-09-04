@@ -118,7 +118,7 @@ console.log("— tri des fonctionnalités par colonne ————————�
   vrai(j(jd[0]) === null || j(jd[0]) >= 4, "inversé : les jalons les plus lointains (ou écartés) en tête");
   ui.triFeat = "rang"; ui.triFeatDesc = false;
   const parRang = ids(A.Views.Pages.render("features"));
-  vrai(parRang.indexOf("F114") < parRang.indexOf("F101") && parRang.indexOf("F101") < parRang.indexOf("F113"),
+  vrai(parRang.indexOf("F114") < parRang.indexOf("F001") && parRang.indexOf("F001") < parRang.indexOf("F113"),
        "trié par ordre de codage : base → ingestion → synchronisation");
   ui.triFeat = "domaine"; ui.triFeatDesc = false;
   vrai(A.Views.Pages.render("features").includes('class="trih on"'), "l'en-tête actif est marqué");
@@ -130,6 +130,23 @@ console.log("— la V0 : le client IMAP (D140) ———————————
   eq(v0.id, "V0", "le premier jalon du dictionnaire est la V0");
   vrai(A.CDC.dict.fonctionnalites.filter(f => f.jalon === 0).length >= 10,
        "la V0 a ses fonctionnalités, jalon 0");
+  /* F001/F101 : la même ingestion IMAP en deux lignes, l'une en V1, l'autre en V0 — une
+     décision nouvelle (D140b) avait engendré une F… au lieu de déplacer l'existante.
+     Deux fonctionnalités ACTIVES du même domaine citant deux décisions communes = doublon
+     probable ; le harnais les nomme, et refuse. */
+  {
+    const actives = A.CDC.dict.fonctionnalites.filter(f => f.jalon !== null);
+    const doublons = [];
+    actives.forEach((f, i) => actives.slice(i + 1).forEach(g => {
+      if (f.domaine !== g.domaine) return;
+      const communes = (f.decisions || []).filter(d => (g.decisions || []).includes(d));
+      if (communes.length >= 2) doublons.push(f.id + "/" + g.id + " (" + communes.join(", ") + ")");
+    }));
+    eq(doublons.length, 0, "aucun doublon probable de fonctionnalité" + (doublons.length ? " — " + doublons.join(" ; ") : ""));
+    vrai(A.CDC.dict.fonctionnalites.every(f => f.etat !== "écarté" || f.jalon === null), "une fonctionnalité écartée n'a pas de jalon");
+    const f1 = A.CDC.dict.fonctionnalites.find(f => f.id === "F001");
+    eq(f1.jalon, 0, "F001, l'ingestion IMAP, est en V0 (D140b)");
+  }
   vrai(A.CDC.dict.fonctionnalites.every(f => f.etat !== "en pause" || f.jalon === null),
        "une fonctionnalité en pause n'a PAS de jalon (null), ce qui la distingue de la V0");
   const fp = A.Views.Pages.render("features");
@@ -264,10 +281,10 @@ console.log("— cohérence du CDC lui-même (dictionnaire, ch. 16) ————
     eq(manquent.length, 0, "la feuille de route couvre TOUTES les fonctionnalités à jalon" + (manquent.length ? " — manquent " + manquent.join(", ") : ""));
     const v0 = R.find(r => r.v === 0);
     const ids0 = v0.feats.map(f => f.id);
-    vrai(ids0.indexOf("F114") < ids0.indexOf("F101") && ids0.indexOf("F101") < ids0.indexOf("F113") && ids0.indexOf("F113") < ids0.indexOf("F102"),
+    vrai(ids0.indexOf("F114") < ids0.indexOf("F001") && ids0.indexOf("F001") < ids0.indexOf("F113") && ids0.indexOf("F113") < ids0.indexOf("F102"),
          "V0 est dans l'ordre de codage : base → ingestion → synchronisation → dossiers");
     const page = A.Views.Pages.render("roadmap");
-    vrai(page.includes(">F114<") && page.includes(">F101<"), "la page Feuille de route affiche les identifiants F…");
+    vrai(page.includes(">F114<") && page.includes(">F001<"), "la page Feuille de route affiche les identifiants F…");
     vrai(A.Views.Pages.render("features").includes(">F101<"), "la page Fonctionnalités aussi — mêmes données, autre organisation");
   }
   const tplCites = new Set(D.templates.map(t => t.nom));
