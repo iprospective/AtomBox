@@ -96,7 +96,9 @@
         String(e && e.message || e).replace(/</g, "&lt;")}</small></div>`);
       return false; });
 
-  ABX.log("Amorçage — " + gen.n + " messages engendrés en " + gen.ms + " ms",
+  /* la version servie (estampillée par deploy.sh, « dev » en local) — pour savoir ce qu'on regarde */
+  ABX.version = (document.querySelector('meta[name="abx-version"]') || {}).content || "dev";
+  ABX.log("Amorçage " + ABX.version + " — " + gen.n + " messages engendrés en " + gen.ms + " ms",
 `-- rien à charger : le corpus est reconstruit, seul le rattachement était stocké.
 -- Côté serveur c'est l'inverse : le message est le fait durable, et c'est le
 -- rattachement qui bouge — mais le partage des rôles est le même.`,

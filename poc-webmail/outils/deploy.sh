@@ -26,10 +26,20 @@ echo "→ tests"
 node test/smoke.js  | tail -1
 node test/bundle.js | tail -1
 
+# La VERSION servie : commit court + date. Chaque <script src="js/…"> et <link href="css/…">
+# reçoit ?v=<version> dans les copies ENVOYÉES (jamais dans les sources : le harnais et le
+# bundle lisent des chemins nus) — un navigateur qui a l'ancien index recharge tout le reste.
+VERSION="$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M)"
+ENVOI="$(mktemp -d)"; trap 'rm -rf "$ENVOI"' EXIT
+cp -r css js README.md "$ENVOI"/
+for f in index.html index.prod.html; do
+  sed -E "s#(src|href)=\"((js|css)/[^\"?]+)\"#\1=\"\2?v=$VERSION\"#g; s#(<meta name=\"abx-version\" content=\")[^\"]*#\1$VERSION#" "$f" > "$ENVOI/$f"
+done
+echo "→ version $VERSION : $(grep -c "?v=$VERSION" "$ENVOI/index.html") références estampillées dans index.html"
 echo "→ envoi vers $HOTE:$CIBLE"
 printf 'User-agent: *\nDisallow: /\n' > /tmp/atombox-robots.txt
 ssh -o BatchMode=yes "$HOTE" "mkdir -p '$CIBLE' && cd '$CIBLE' && rm -rf css js index.html README.md autonome.html robots.txt"
-tar czf - index.html index.prod.html README.md css js | ssh -o BatchMode=yes "$HOTE" "tar xzf - -C '$CIBLE'"
+tar czf - -C "$ENVOI" index.html index.prod.html README.md css js | ssh -o BatchMode=yes "$HOTE" "tar xzf - -C '$CIBLE'"
 scp -q dist/index.html "$HOTE:$CIBLE/autonome.html"
 # le MODE PRODUIT (D141) : les mêmes vues sans le POC — sans API il dit « service indisponible », c'est la démonstration
 scp -q dist/prod.html "$HOTE:$CIBLE/prod.html"
