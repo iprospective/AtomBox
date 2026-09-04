@@ -7,7 +7,12 @@
    kilo-octets là où le corpus en pèse plusieurs méga. */
 (function (ABX) {
   "use strict";
-  const CLE = "abx.db.v2";
+  /* Le SCHÉMA du delta est versionné par la clé. Un delta écrit par un schéma
+     antérieur n'est pas migré : c'est un état de simulation, pas une donnée —
+     on l'oublie, et l'amorçage le dit. Sans cela, un message composé hier avec
+     d'anciens noms de champs faisait planter l'amorçage d'aujourd'hui, avant toute
+     peinture : page blanche. Incrémenter à CHAQUE changement de forme persistée. */
+  const CLE = "abx.db.v3", VERSION = 3, ANCIENNES = ["abx.db.v2"];
 
   const Store = {
     /* delta d'état : id -> { lu, sorti_le, motif_sortie, dossier, suppr } */
@@ -35,10 +40,17 @@
       tabs: [], tab: null,
     },
 
+    /* vrai si un stockage d'un schéma antérieur a été trouvé et oublié */
+    perime: false,
+
     charge() {
       let d = null;
-      try { d = JSON.parse(localStorage.getItem(CLE) || "null"); } catch (e) {}
-      if (!d || d.v !== 2) return null;
+      try {
+        ANCIENNES.forEach(k => { if (localStorage.getItem(k) !== null) { this.perime = true; localStorage.removeItem(k); } });
+        d = JSON.parse(localStorage.getItem(CLE) || "null");
+      } catch (e) {}
+      if (d && d.v !== VERSION) { this.perime = true; d = null; }
+      if (!d) return null;
       Object.assign(this.ratt, d.ratt || {});
       (d.crees || []).forEach(m => this.crees.push(m));
       (d.virtuels || []).forEach(v => this.virtuels.push(v));
@@ -55,7 +67,7 @@
          message lui-même, ce qui ferait échouer la sérialisation en silence */
       const sansPrive = (k, v) => k.startsWith("_") ? undefined : v;
       try { localStorage.setItem(CLE, JSON.stringify({
-        v: 2, seq: this.seq, ratt: this.ratt, crees: this.crees, virtuels: this.virtuels,
+        v: VERSION, seq: this.seq, ratt: this.ratt, crees: this.crees, virtuels: this.virtuels,
         ui: { folder: this.ui.folder, filtre: this.ui.filtre, tri: this.ui.tri,
               sens: this.ui.sens, statut: this.ui.statut,
               ordreAxes: this.ui.ordreAxes, triAxe: this.ui.triAxe, jalon: this.ui.jalon,
