@@ -62,6 +62,10 @@
 
   /* ---- amorçage ----------------------------------------------------------- */
   const repris = St.charge();
+  if (St.perime) ABX.log("Stockage d'une version antérieure oublié",
+`-- le delta local (rattachements, brouillons, réglages) était d'un schéma antérieur :
+-- il n'est pas migré, il est jeté. Le corpus est reconstruit ; rien du produit n'est perdu.`,
+    "un état de simulation ne se migre pas ; un état de produit vivrait côté serveur");
   ABX.Providers.charge(St.ui.providers);
   /* MODE POC (D141) : le corpus engendré existe, on l'amorce. En mode produit
      ces trois lignes n'ont pas d'objet — Corpus n'est pas chargé — et l'API

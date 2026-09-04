@@ -21,6 +21,19 @@ vrai(A.Registry.liste().length >= 15, "partielles enregistrées : " + A.Registry
 vrai(p.doc.getElementById("nav").innerHTML.includes("Fournisseurs"), "arborescence peinte");
 vrai(p.doc.getElementById("list").innerHTML.includes("msg"), "liste peinte");
 
+/* Un stockage écrit par la version PRÉCÉDENTE (test/stockage-v2-ancien.json, produit
+   par son propre harnais) ne doit jamais bloquer l'amorçage : il est oublié, pas migré. */
+{
+  const vieux = creerStockage();
+  vieux.setItem("abx.db.v2", require("fs").readFileSync(require("path").join(__dirname, "stockage-v2-ancien.json"), "utf8"));
+  let pv = null, err = null;
+  try { pv = demarrer(vieux); await drainer(pv); } catch (e) { err = e; }
+  vrai(!err, "un stockage d'un schéma antérieur ne fait pas planter l'amorçage" + (err ? " : " + String(err.message).slice(0, 80) : ""));
+  vrai(pv && pv.ABX.Store.perime === true, "et il est signalé comme périmé");
+  vrai(pv && vieux.getItem("abx.db.v2") === null, "l'ancienne clé est retirée du navigateur");
+  vrai(pv && pv.doc.getElementById("list").innerHTML.includes("msg"), "la page se peint quand même");
+}
+
 console.log("— expéditeur normalisé (D126) et usurpation (D128) —————");
 const ent = A.Corpus.tous.filter(m => m.sens !== "out");
 const connu = ent.find(m => m.connu);
