@@ -713,6 +713,71 @@ vrai(A.Views.Pages.ROADMAP.length === A.CDC.dict.jalons.length && A.Views.Pages.
 vrai(p.doc.getElementById("detail").innerHTML.includes("jalon v5"),
      "le jalon V5 a son propre style");
 
+console.log("— dossiers virtuels personnels (D143) et épingles (D144) ——");
+{
+  /* attendre une réponse de l'Api PUIS laisser la page se peindre */
+  const attend = async pr => { const r = await pr; await tick(); return r; };
+  const nb0 = A.Api.cache.virtuels().length;
+  const src = A.Corpus.tous.find(m => m.tags.length >= 2 && m.dossier !== "trash" && !m.motif_sortie);
+  const crit = src.tags.slice(0, 2).map(t => ({ axe: t.axe, val: t.val }));
+  const r = await attend(A.Api.creerDossier({ label: "Mon filtre", criteres: crit }));
+  vrai(r && r.ok && r.crees === 1 && /^perso:/.test(r.dossier.id), "POST /dossiers-virtuels répond {ok, crees:1, dossier}");
+  const vid = r.dossier.id;
+  eq(A.Api.cache.virtuels().length, nb0 + 1, "le cache des dossiers virtuels suit la création");
+  await attend(A.Api.compteurs());
+  const attendu = A.Corpus.tous.filter(m => m.dossier !== "trash" && !m.motif_sortie && A.Corpus.correspond(m, crit));
+  eq(A.Api.cache.compteur(vid).t, attendu.length, "compté dans la même passe que le reste (D078) : " + attendu.length);
+  vrai(attendu.length > 0 && attendu.every(m => crit.every(c => m.tags.some(t => t.axe === c.axe && t.val === c.val))),
+       "conjonction : les deux tags, pas l'un ou l'autre");
+  A.Controllers.Nav.peindre();
+  let hn = p.doc.getElementById("nav").innerHTML;
+  vrai(hn.includes("Mes dossiers") && hn.includes("Mon filtre"), "le dossier apparaît sous « Mes dossiers »");
+  A.Controllers.List.ouvrir({ id: vid, label: "Mon filtre", kind: "perso" }); await tick();
+  vrai(A.Controllers.List._cache.length === attendu.length && A.Controllers.List._cache.every(m => A.Corpus.correspond(m, crit)),
+       "sa liste ne contient que ce qui satisfait le prédicat (" + attendu.length + ")");
+  vrai(p.doc.getElementById("list").innerHTML.includes(crit[0].axe + " = "), "et rappelle ses critères en tête de liste");
+
+  const r2 = await attend(A.Api.creerDossier({ label: "Tous mes clients", criteres: [{ axe: "client" }] }));
+  const fam = A.Corpus.tous.filter(m => m.dossier !== "trash" && m.tags.some(t => t.axe === "client"));
+  eq(A.Corpus.vue({ id: r2.dossier.id, kind: "perso" }).length, fam.length,
+     "un critère sans valeur prend toute la famille (" + fam.length + ")");
+
+  const r3 = await attend(A.Api.regler("epingles", ["sent", vid]));
+  vrai(r3.ok && r3.parametre.cle === "epingles" && r3.parametre.valeur.length === 2, "PUT /parametres répond {ok, modifies, parametre}");
+  A.Controllers.Nav.peindre(); hn = p.doc.getElementById("nav").innerHTML;
+  vrai(hn.includes("Épinglés") && hn.indexOf("Épinglés") < hn.indexOf(">Dossiers<"), "le groupe Épinglés est en tête de l'arborescence");
+  vrai(hn.indexOf("Mon filtre") < hn.indexOf(">Dossiers<"), "et le dossier virtuel épinglé y figure, avant sa place habituelle");
+  const pins = p.doc.getElementById("nav").querySelectorAll("[data-pin]").filter(b => b.dataset.pin === "sent");
+  vrai(pins.length >= 1 && pins[0]._cls.includes("on"), "l'épingle d'un dossier épinglé est allumée");
+  clic(pins[0]); await tick();
+  eq(A.Api.cache.epingles().join(","), vid, "un clic sur l'épingle allumée désépingle");
+
+  const p2 = demarrer(ls); await drainer(p2);
+  eq(p2.ABX.Api.cache.virtuels().length, nb0 + 2, "les dossiers virtuels survivent au rechargement");
+  eq(p2.ABX.Api.cache.epingles().join(","), vid, "les épingles aussi");
+
+  const r4 = await attend(A.Controllers.Nav.creerVirtuel({ criteres: [{ axe: src.tags[0].axe, val: src.tags[0].val }] }));
+  eq(r4.label, src.tags[0].axe + " = " + src.tags[0].val, "créé depuis un tag sans rien saisir : le libellé est le tag");
+  vrai(A.Registry.render("message.tags", { m: src }).includes("data-newv"), "chaque tag du message ouvert offre le geste");
+  eq(A.Store.ui.folder.id, r4.id, "et le dossier s'ouvre aussitôt");
+
+  const n0 = A.Corpus.tous.length;
+  const r5 = await attend(A.Api.supprimerDossier(vid));
+  vrai(r5.ok && r5.supprimes === 1, "DELETE /dossiers-virtuels/{id} répond {ok, supprimes:1}");
+  eq(A.Corpus.tous.length, n0, "aucun message n'est supprimé avec le dossier");
+  eq(A.Api.cache.epingles().length, 0, "son épingle est partie avec lui");
+  eq(await attend(A.Api.supprimerDossier(vid)), null, "le supprimer deux fois : 404 (null), pas une erreur");
+
+  A.Store.ui.formVirtuel = { label: "", criteres: [{ axe: "fournisseur", val: "" }] };
+  A.Controllers.Nav.peindre(); hn = p.doc.getElementById("nav").innerHTML;
+  vrai(hn.includes('id="vform"') && hn.includes("toute la famille"), "le formulaire : un critère par axe, valeur facultative");
+  A.Store.ui.formVirtuel = null;
+
+  A.Store.ui.jalon = 0; A.Controllers.Nav.peindre(); hn = p.doc.getElementById("nav").innerHTML;
+  vrai(!hn.includes("Mes dossiers") && !hn.includes("data-pin"), "en V0, ni dossiers virtuels ni épingles (D140b)");
+  A.Store.ui.jalon = null; A.Controllers.Nav.peindre();
+}
+
 console.log("— déterminisme ————————————————————————————————");
 const p3 = demarrer(creerStockage()); await drainer(p3);   // stockage vierge
 const C = p3.ABX;

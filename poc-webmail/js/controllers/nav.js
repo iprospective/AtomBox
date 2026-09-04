@@ -70,6 +70,54 @@
  GROUP BY valeur ORDER BY max(r.recu_le) DESC OFFSET :n LIMIT 200;`,
           "index (axe_id, valeur) — pagination de l'arborescence elle-même");
       });
+
+      const stop = e => { if (e && e.stopPropagation) e.stopPropagation(); };
+      /* Épingler / désépingler (D144) : un réglage par compte, par la même route que
+         tout paramètre personnel. L'ordre du groupe est l'ordre d'épinglage. */
+      D.on(el, "[data-pin]", "onclick", (n, e) => { stop(e);
+        const id = n.dataset.pin, cur = ABX.Api.cache.epingles();
+        const suiv = cur.includes(id) ? cur.filter(x => x !== id) : cur.concat([id]);
+        ABX.Api.regler("epingles", suiv).then(() => Nav.peindre());
+      });
+      /* Supprimer un dossier virtuel personnel (D143) : une définition, jamais un
+         message — donc pas de confirmation. S'il était ouvert, on revient à la boîte. */
+      D.on(el, "[data-delv]", "onclick", (n, e) => { stop(e);
+        const id = n.dataset.delv;
+        ABX.Api.supprimerDossier(id).then(() => ABX.Api.compteurs()).then(() => {
+          if (ui.folder.id === id)
+            return ABX.Controllers.List.ouvrir({ id: "inbox", label: "Boîte de réception", kind: "special" });
+          Nav.peindre();
+        });
+      });
+      const vnew = el.querySelector("#v_new");
+      if (vnew) vnew.onclick = e => { stop(e);
+        ui.formVirtuel = { label: "", criteres: [{ axe: ABX.Ref.axes[0].id, val: "" }] }; Nav.peindre(); };
+      const form = el.querySelector("#vform");
+      if (form) {
+        const lire = () => { const fv = ui.formVirtuel; fv.label = D.byId("v_label").value;
+          form.querySelectorAll(".v_axe").forEach(s => { fv.criteres[+s.dataset.i].axe = s.value; });
+          form.querySelectorAll(".v_val").forEach(s => { fv.criteres[+s.dataset.i].val = s.value; }); };
+        form.querySelectorAll(".v_axe").forEach(s => { s.onchange = () => { lire(); Nav.peindre(); }; });
+        D.byId("v_plus").onclick = () => { lire(); ui.formVirtuel.criteres.push({ axe: ABX.Ref.axes[0].id, val: "" }); Nav.peindre(); };
+        D.byId("v_non").onclick = () => { ui.formVirtuel = null; Nav.peindre(); };
+        D.byId("v_ok").onclick = () => { lire(); Nav.creerVirtuel(ui.formVirtuel); };
+      }
+    },
+
+    /* Créer un dossier virtuel personnel (D143) et l'ouvrir. Sans libellé, le
+       libellé est le critère lui-même : « fournisseur = Acme », « famille client ». */
+    creerVirtuel(def) {
+      const criteres = ((def && def.criteres) || []).map(c => ({ axe: c.axe, val: (c.val || "").trim() }))
+        .filter(c => c.axe).map(c => c.val ? c : { axe: c.axe });
+      if (!criteres.length) return Promise.resolve(null);
+      const label = ((def && def.label) || "").trim()
+        || criteres.map(c => c.val ? c.axe + " = " + c.val : "famille " + c.axe).join(" · ");
+      return ABX.Api.creerDossier({ label, criteres }).then(r => {
+        St.ui.formVirtuel = null;
+        return ABX.Api.compteurs().then(() => {
+          ABX.Controllers.List.ouvrir({ id: r.dossier.id, label: r.dossier.label, kind: "perso" });
+          return r.dossier; });
+      });
     },
 
     /* Les compteurs de toute l'arborescence : une requête, pas une par dossier (D078). */

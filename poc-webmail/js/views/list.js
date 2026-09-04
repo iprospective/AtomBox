@@ -45,7 +45,8 @@
           ${SENS.map(([k, l]) => `<span class="chip${(ui.sens || "tous") === k ? " on" : ""}"
             data-s="${k}">${l}</span>`).join("")}
           ${ui.folder.kind === "axe"
-            ? `<span class="chip on" style="margin-left:6px">↳ inclut les sous-dossiers</span>` : ""}</div>`}
+            ? `<span class="chip on" style="margin-left:6px">↳ inclut les sous-dossiers</span>` : ""}${
+          ui.folder.kind === "perso" ? R.render("liste.criteres", { folder: ui.folder }) : ""}</div>`}
         ${SANS_SENS[ui.folder.id] && ui.folder.kind === "axe" ? `<div class="chips" style="margin-top:6px">
           <span class="chip on">↳ inclut les sous-dossiers</span></div>` : ""}</div>`;
 

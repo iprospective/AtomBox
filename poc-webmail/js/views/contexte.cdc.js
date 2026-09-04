@@ -26,5 +26,8 @@
   Cd("nav.v0", () => md("**D140b** — dossiers IMAP ingérés comme tags d'origine (**D046**), états synchronisés avec IMAP qui reste la vérité jusqu'à la V2."));
   Cd("liste.expediteur.inconnu", () => md("**D126** — le nom affiché n'est pas une identité : l'adresse en premier pour un inconnu. **D128** B1 quand le nom est connu et l'adresse non."));
 
+  Cd("nav.virtuel", () => md("**D143** / **D075** — un dossier virtuel personnel est un *filtre sans action* : une **conjonction** de critères `axe = valeur`, ou `axe` seul pour la famille. Ni OU ni négation ici — c'est une règle du moteur (**D074**). Compté dans la passe unique (**D078**). Par compte ; partage à la boîte : **Q058**."));
+  Cd("nav.epingle", () => md("**D144** / **D135** — l'épingle est un réglage par compte, nature *personnel* (**D106**) : un raccourci vers un nœud, pas une entité. L'ordre est celui de l'épinglage, sans réordonnancement manuel — même raison que D135."));
+
   ABX.ContexteCdc = { points: R.pointsDuMode("cdc") };
 })(window.ABX = window.ABX || {});

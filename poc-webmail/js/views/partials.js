@@ -184,7 +184,7 @@
           <span class="k">${F.esc(t.axe)}</span>
           <span class="v"><b>${F.esc(t.val)}</b>
             <span class="tag">posé par ${F.esc(t.src)}</span>
-            <button class="tagx" data-untag="${i}" title="Retirer ce tag">✕</button></span>
+            <button class="tagx" data-newv="${i}" title="Créer un dossier virtuel pour ce tag">⊕</button><button class="tagx" data-untag="${i}" title="Retirer ce tag">✕</button></span>
         </div>`).join("") : `<div class="dmeta">aucun tag</div>`}
       <div class="frow" style="margin-top:9px">
         <label>Ajouter</label>
@@ -206,6 +206,7 @@
        <span class="tw">${o.tw || ""}</span><span class="ic">${o.icon || ""}</span>
        <span class="lb">${F.esc(o.label)}</span>
        ${o.axe && o.kind === "axe" ? R.render("nav.axe.outils", { o }) : ""}
+       ${ABX.V0() ? "" : R.render("nav.dossier.outils", { o })}
        ${R.render("nav.compteur", { o })}</div>`);
 
   /* Le compteur d'un dossier : NON LUS / TOTAL. Le non-lu en gras quand il y en
@@ -232,6 +233,42 @@
                                        : "Trié par activité — passer en A→Z"}">${
            o.triAxe === "alpha" ? "A↓" : "⏱"}</button>
      </span>`);
+
+  /* Les outils de TOUT dossier, au survol : l'épingle (D144) — allumée quand le
+     dossier est en tête — et, pour un dossier virtuel personnel, sa suppression
+     (D143 : on jette une définition, jamais un message, donc sans confirmation). */
+  R.define("nav.dossier.outils", ({ o }) =>
+    `<span class="nops">${o.kind === "perso"
+       ? `<button class="axop" data-delv="${F.esc(o.id)}" title="Supprimer ce dossier virtuel — aucun message n'est touché">✕</button>` : ""
+     }<button class="axop${o.epingle ? " on" : ""}" data-pin="${F.esc(o.id)}"
+       title="${o.epingle ? "Désépingler" : "Épingler en tête de liste"}">📌</button></span>`);
+
+  /* Le formulaire d'un dossier virtuel personnel (D143) : un nom, des critères.
+     Chaque critère est un axe et une valeur FACULTATIVE — vide, c'est toute la
+     famille. Plusieurs critères se combinent en ET ; pour un OU ou une négation,
+     c'est une règle du moteur de filtres (D074), pas ce formulaire. */
+  R.define("nav.virtuel.form", ({ form }) => {
+    const axes = ABX.Ref.axes;
+    return `<div class="vform" id="vform">
+      <input id="v_label" placeholder="Nom du dossier (sinon : les critères)" value="${F.esc(form.label || "")}">
+      ${form.criteres.map((c, i) => `<div class="vcrit">
+        <select class="v_axe" data-i="${i}">${axes.map(a =>
+          `<option value="${F.esc(a.id)}"${a.id === c.axe ? " selected" : ""}>${F.esc(a.label)}</option>`).join("")}</select>
+        <input class="v_val" data-i="${i}" list="v_vals_${i}" placeholder="toute la famille" value="${F.esc(c.val || "")}">
+        <datalist id="v_vals_${i}">${(ABX.Ref.valeurs[c.axe] || []).map(v =>
+          `<option value="${F.esc(v.label)}">`).join("")}</datalist></div>`).join("")}
+      <div class="frow"><button class="hbtn" id="v_plus" title="Ajouter un critère — les critères se cumulent (ET)">+ critère</button>
+        <button class="hbtn on" id="v_ok">Créer</button><button class="hbtn" id="v_non">Annuler</button></div>
+      ${R.contexte("nav.virtuel", { form })}</div>`;
+  });
+
+  /* Les critères d'un dossier virtuel personnel, rappelés en tête de sa liste :
+     un filtre qu'on ne voit pas est un filtre qu'on oublie. */
+  R.define("liste.criteres", ({ folder }) => {
+    const v = ABX.Api.cache.virtuels().find(x => x.id === folder.id);
+    return v ? v.criteres.map(c => `<span class="chip on" style="margin-left:6px" title="critère du dossier virtuel">${
+      F.esc(c.val ? c.axe + " = " + c.val : "famille " + c.axe)}</span>`).join("") : "";
+  });
 
   /* ---- fil de discussion ------------------------------------------------- */
   R.define("thread.item", ({ x, courant }) =>

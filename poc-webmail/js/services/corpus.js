@@ -257,9 +257,18 @@
         if (m.nature === "liste" && m.listeId) {
           bump(m.listeId, m); bump("axe:abonnement", m);
         }
+        /* Un dossier virtuel personnel (D143) est un prédicat de plus dans la même
+           passe : le message y compte s'il satisfait tous ses critères. */
+        for (const v of (ABX.Store && ABX.Store.virtuels) || [])
+          if (Corpus.correspond(m, v.criteres)) bump(v.id, m);
       }
       return compte;
     },
+
+    /* Le prédicat d'un dossier virtuel personnel (D143) : une CONJONCTION de critères
+       {axe, val} sur les tags ; un critère sans valeur désigne toute la famille (l'axe). */
+    correspond: (m, criteres) => !!(criteres && criteres.length) && criteres.every(c =>
+      (m.tags || []).some(t => t.axe === c.axe && (!c.val || t.val === c.val))),
 
     cnt: k => compte[k] || { t:0, u:0, f:0 },
 
@@ -271,6 +280,10 @@
     vue(folder) {
       if (VUES[folder.id]) return tous.filter(VUES[folder.id]);
       const hors = m => m.dossier !== "trash";
+      if (folder.kind === "perso") {
+        const v = ((ABX.Store && ABX.Store.virtuels) || []).find(x => x.id === folder.id);
+        return v ? tous.filter(m => hors(m) && Corpus.correspond(m, v.criteres)) : [];
+      }
       if (folder.kind === "abo")
         return tous.filter(m => hors(m) && m.listeId === folder.id);
       if (folder.kind === "axe" && folder.axe === "abonnement")

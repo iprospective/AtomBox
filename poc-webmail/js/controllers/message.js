@@ -43,6 +43,9 @@
 
       D.on(el, "[data-x]", "onclick", b => M[b.dataset.x](m));
       D.on(el, "[data-untag]", "onclick", b => M.retirerTag(m, +b.dataset.untag));
+      /* un dossier virtuel depuis ce tag, sans rien saisir (D143) */
+      D.on(el, "[data-newv]", "onclick", b => { const t = m.tags[+b.dataset.newv];
+        if (t) ABX.Controllers.Nav.creerVirtuel({ criteres: [{ axe: t.axe, val: t.val }] }); });
       Message.cablerTags(el, m);
       D.on(el, "[data-c]", "onclick", b => ABX.Controllers.Compose.demarrer(b.dataset.c, m));
       D.on(el, "[data-a]", "onclick", b => Message.logMessage(b.dataset.a, m));

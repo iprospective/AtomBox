@@ -44,4 +44,11 @@
     affichée en premier, le nom déclaré ensuite — le nom, lui, n'est pas vérifié.</div>`);
 
   ABX.ContexteAide = { points: R.pointsDuMode("aide") };
+  A("nav.virtuel", () => `<div class="hint">Un dossier virtuel est un filtre : un message y
+    apparaît s'il porte <b>tous</b> les tags choisis. Une valeur laissée vide prend toute la
+    famille. Le supprimer n'efface aucun message.</div>`);
+  A("nav.epingle", () => `<div class="hint">Les dossiers épinglés restent en tête, dans
+    l'ordre où vous les avez épinglés. Ils sont aussi à leur place habituelle. C'est un réglage
+    personnel : il ne change rien pour vos collègues.</div>`);
+
 })(window.ABX = window.ABX || {});
