@@ -11,13 +11,17 @@
   const App = {
     MOBILE, TABLET,
 
+    /* Rend la promesse de ce qui arrive par la couche d'accès (la liste, D141) :
+       l'amorçage et le harnais peuvent attendre que tout soit peint. */
     peindre(quoi) {
       const q = quoi || "all";
+      let attente = Promise.resolve();
       if (q === "all" || q === "tabs")   ABX.Controllers.Tabs.peindre();
       if (q === "all" || q === "nav")    ABX.Controllers.Nav.peindre();
-      if (q === "all" || q === "list")   ABX.Controllers.List.peindre();
+      if (q === "all" || q === "list")   attente = ABX.Controllers.List.charger();
       if (q === "all" || q === "detail") App.peindreDetail();
       if (q === "all" || q === "q")      App.peindreQ();
+      return attente;
     },
 
     /* Le panneau de détail affiche l'onglet actif : un message, ou une composition. */

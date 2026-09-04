@@ -63,18 +63,32 @@
   /* ---- amorçage ----------------------------------------------------------- */
   const repris = St.charge();
   ABX.Providers.charge(St.ui.providers);
-  const gen = C.engendre();
-  C.applique();
-  C.recompte();
+  /* MODE POC (D141) : le corpus engendré existe, on l'amorce. En mode produit
+     ces trois lignes n'ont pas d'objet — Corpus n'est pas chargé — et l'API
+     réelle répond aux mêmes appels. */
+  const gen = C ? (C.engendre(), C.applique(), C.recompte(), C) && { n: C.tous.length, ms: 0 } : { n: 0, ms: 0 };
+  /* le journal des requêtes OBSERVE la couche d'accès ; il n'est appelé à la main nulle part */
+  if (ABX.QueryLog && ABX.Api.on) ABX.Api.on(a => { if (a.ms > 0) ABX.QueryLog.mesure && ABX.QueryLog.mesure(a); });
 
-  /* Un onglet dont le message a disparu (corbeille vidée) ne se restaure pas. */
-  const AUTONOMES = { compo:1, admin:1, pj:1, page:1 };
-  St.ui.tabs = (St.ui.tabs || []).filter(t => AUTONOMES[t.type] || C.par(t.id));
+  /* Les onglets sont restaurés TELS QUELS (D141) : au démarrage le cache de la
+     couche d'accès est vide — un onglet de message ira chercher son message
+     quand il se peindra, et dira « n'existe plus » si la réponse est 404. C'est
+     le comportement du produit ; l'ancien filtre lisait le corpus engendré. */
+  St.ui.tabs = St.ui.tabs || [];
   if (!St.ui.tabs.some(t => t.key === St.ui.tab))
     St.ui.tab = St.ui.tabs.length ? St.ui.tabs[0].key : null;
   if (!repris) St.ui.ouverts.fournisseur = true;
 
-  App.peindre("all");
+  /* les référentiels arrivent par promesse (D141) ; on peint quand on les a.
+     En POC c'est immédiat ; en prod c'est le premier aller-retour du produit. */
+  ABX.pret = ABX.Ref.charger().then(() => App.peindre("all")).then(() => true)
+    /* l'API peut être indisponible (réseau, serveur arrêté) : l'interface TIENT —
+       arborescence vide, liste qui le dit — et ne lève rien. C'est du produit
+       (D141), et c'est ce que le harnais vérifie en mode produit sans réseau. */
+    .catch(e => { App.peindre("nav"); App.peindre("tabs");
+      D.paint("list", `<div class="empty">Service indisponible.<br><small>${
+        String(e && e.message || e).replace(/</g, "&lt;")}</small></div>`);
+      return false; });
 
   ABX.log("Amorçage — " + gen.n + " messages engendrés en " + gen.ms + " ms",
 `-- rien à charger : le corpus est reconstruit, seul le rattachement était stocké.

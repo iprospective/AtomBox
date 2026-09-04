@@ -7,14 +7,21 @@
   "use strict";
   const St = ABX.Store, C = ABX.Corpus;
 
+  /* Un geste sur un message = UN appel à la couche d'accès (D141) : PATCH du
+     rattachement, ou DELETE (détacher, D118). L'état local est mis à jour tout
+     de suite (l'interface répond) ; la promesse confirme, et les compteurs se
+     rechargent. En prod c'est la latence réseau ; en POC c'est immédiat — mais
+     l'interface est déjà écrite pour l'attente. */
   function appliquer(m, patch, log) {
-    St.patch(m, patch);
-    if (patch.suppr) C.retire(m);
-    C.recompte();
-    St.save();
+    Object.assign(m, patch);                       // optimiste : l'écran répond
+    const p = patch.suppr ? ABX.Api.detacher(m.id) : ABX.Api.patcher(m.id, patch);
     if (typeof log === "function") log(m);
     else if (log) ABX.log(...(Array.isArray(log) ? log : [log]));
-    ABX.Bus.emit("corpus:changed", { message: m, patch });
+    return p.then(r => {
+      ABX.Api.compteurs();                         // les non-lus / la file bougent
+      ABX.Bus.emit("corpus:changed", { message: m, patch, reponse: r });
+      return r;
+    });
   }
 
   const M = {
@@ -247,7 +254,7 @@ VALUES (:id, :tag, :moi, now()) ON CONFLICT DO NOTHING;`,
     /* Vider la corbeille : le seul endroit où la déduplication se paie. */
     viderCorbeille(liste) {
       const n = liste.length;
-      liste.slice().forEach(m => { St.patch(m, { suppr: true }); C.retire(m); });
+      liste.slice().forEach(m => { Object.assign(m, { suppr: true }); ABX.Api.detacher(m.id); });
       C.recompte(); St.save();
       ABX.log({
         label: "Vider la corbeille — " + n + " message(s)", warn: true,

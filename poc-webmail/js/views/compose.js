@@ -9,7 +9,7 @@
   ABX.Views = ABX.Views || {};
   ABX.Views.Compose = {
     render(t, ui) {
-      const d = t.data, src = d.src ? C.par(d.src) : null;
+      const d = t.data, src = d.src ? ABX.Api.cache.message(d.src) : null;
       const titre = d.mode === "tr" ? "Transférer"
                   : d.mode === "new" ? "Nouveau message" : "Répondre";
       return `
@@ -19,10 +19,10 @@
             : "en " + (d.mode === "tr" ? "transfert" : "réponse") + " de « " +
               F.esc(src ? src.subject : "message supprimé") + " »"}</div></div>
         <div class="compo">
-          <div class="frow"><label>De</label><select id="f_de">${Fx.MOI.boites.map(b =>
+          <div class="frow"><label>De</label><select id="f_de">${ABX.Ref.moi.boites.map(b =>
             `<option value="${F.esc(b.adresse)}"${d.de === b.adresse ? " selected" : ""}>${
               F.esc(b.adresse)} — ${F.esc(b.label)}</option>`).join("")}</select></div>
-          ${d.mode !== "new" && d.de !== Fx.MOI.boites[0].adresse
+          ${d.mode !== "new" && d.de !== ABX.Ref.moi.boites[0].adresse
             ? `<div class="hint">↳ présélectionné sur la boîte qui a <b>reçu</b> le message —
                  répondre depuis une autre identité ampute le fil pour les collègues qui partagent
                  la boîte (Q026).</div>` : ""}

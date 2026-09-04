@@ -11,9 +11,12 @@ QU'IL DÉCLARE — le même ordre que le harnais de test.
 import io, os, re, sys, datetime
 
 RACINE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+# usage : bundle.py [sortie] [index source] — le second argument permet de bundler
+# index.prod.html (le produit, sans les fichiers du POC — D141) vers dist/prod.html.
 SORTIE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(RACINE, "dist", "index.html")
+INDEX = sys.argv[2] if len(sys.argv) > 2 else "index.html"
 
-html = io.open(os.path.join(RACINE, "index.html"), encoding="utf-8").read()
+html = io.open(os.path.join(RACINE, INDEX), encoding="utf-8").read()
 
 # 1. la feuille de style
 css = io.open(os.path.join(RACINE, "css", "app.css"), encoding="utf-8").read()

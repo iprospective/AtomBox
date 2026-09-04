@@ -44,6 +44,10 @@
     },
 
     save() {
+      /* les clés en « _ » sont de l'état de session (fil chargé, objet interne
+         glissé par le serveur simulé) : jamais persistées — et _fil contient le
+         message lui-même, ce qui ferait échouer la sérialisation en silence */
+      const sansPrive = (k, v) => k.startsWith("_") ? undefined : v;
       try { localStorage.setItem(CLE, JSON.stringify({
         v: 2, seq: this.seq, ratt: this.ratt, crees: this.crees,
         ui: { folder: this.ui.folder, filtre: this.ui.filtre, tri: this.ui.tri,
@@ -51,7 +55,7 @@
               ordreAxes: this.ui.ordreAxes, triAxe: this.ui.triAxe, jalon: this.ui.jalon,
               triFeat: this.ui.triFeat, triFeatDesc: this.ui.triFeatDesc,
               tabs: this.ui.tabs, tab: this.ui.tab },
-      })); } catch (e) { /* quota ou navigation privée : le POC reste utilisable */ }
+      }, sansPrive)); } catch (e) { /* quota ou navigation privée : le POC reste utilisable */ }
     },
 
     /* Applique un patch au message ET au delta persisté, d'un seul geste :

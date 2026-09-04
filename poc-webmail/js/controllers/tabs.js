@@ -42,7 +42,12 @@
       ui.tab = key;
 
       if (spec.type === "msg") {
-        const m = C.par(spec.id);
+        const m = ABX.Api.cache.message(spec.id);
+        /* pas en cache : la couche d'accès le charge, et la cascade est tracée à
+           la réponse — comme le produit le fera pour un onglet restauré (D141) */
+        if (!m) ABX.Api.message(spec.id).then(() => {
+          const m2 = ABX.Api.cache.message(spec.id);
+          if (m2 && !t.vu) { t.vu = true; ABX.Traces.ouvrirMessage(m2, m2.lu); } });
         const dejaOuvert = !!t.vu;
         if (m && !dejaOuvert) { t.vu = true; ABX.Traces.ouvrirMessage(m, m.lu); }
         else if (m) ABX.log({ label:"Revenir sur l'onglet « " + m.subject + " »", etapes:[

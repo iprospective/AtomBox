@@ -18,11 +18,11 @@
 
       if (!f) {
         h += `<div class="grp">Dossiers</div>`;
-        Fx.SPECIAUX.forEach(o => h += noeud(
-          { ...o, kind:"special", unread: C.cnt(o.id).u, total: C.cnt(o.id).t },
+        ABX.Ref.speciaux.forEach(o => h += noeud(
+          { ...o, kind:"special", unread: ABX.Api.cache.compteur(o.id).u, total: ABX.Api.cache.compteur(o.id).t },
           "", ui.folder.id === o.id));
-        Fx.UTIL.forEach(o => h += noeud(
-          { ...o, kind:"user", unread: C.cnt(o.id).u, total: C.cnt(o.id).t },
+        ABX.Ref.util.forEach(o => h += noeud(
+          { ...o, kind:"user", unread: ABX.Api.cache.compteur(o.id).u, total: ABX.Api.cache.compteur(o.id).t },
           "", ui.folder.id === o.id));
       }
 
@@ -35,12 +35,12 @@
       /* L'ordre des axes appartient à l'utilisateur (D135). Un axe ajouté depuis
          son dernier réglage se range à la fin plutôt que de disparaître. */
       const ordre = ui.ordreAxes || [];
-      const axes = Fx.AXES.slice().sort((x, y) => {
+      const axes = ABX.Ref.axes.slice().sort((x, y) => {
         const i = ordre.indexOf(x.id), j = ordre.indexOf(y.id);
         return (i < 0 ? 999 : i) - (j < 0 ? 999 : j);
       });
       axes.forEach((a, rang) => {
-        let vals = Fx.valeurs[a.id].filter(v => !f || v.label.toLowerCase().includes(f));
+        let vals = ABX.Ref.valeurs[a.id].filter(v => !f || v.label.toLowerCase().includes(f));
         if (f && !vals.length) return;
         /* Deux tris seulement, et le manuel n'en fait pas partie : ordonner deux
            cents fournisseurs à la main n'est pas une fonction, c'est une corvée. */
@@ -51,7 +51,7 @@
            d'un nœud « Tous — <axe> ». Le nœud porte le nom, un point c'est tout. */
         h += noeud({ id:"axe:" + a.id, label: a.label + (a.sub ? " · " + a.sub : ""),
                      icon:a.icon,
-                     unread: C.cnt("axe:" + a.id).u, total: C.cnt("axe:" + a.id).t,
+                     unread: ABX.Api.cache.compteur("axe:" + a.id).u, total: ABX.Api.cache.compteur("axe:" + a.id).t,
                      tw: ouvert ? "▾" : "▸", kind:"axe", axe:a.id,
                      rang, dernier: rang === axes.length - 1,
                      triAxe: ui.triAxe[a.id] || "recent" },
@@ -59,7 +59,7 @@
         if (!ouvert) return;
         const lim = ui.plus[a.id] ? vals.length : PAGE;
         vals.slice(0, lim).forEach(v => h += noeud(
-          { ...v, unread: C.cnt(v.id).u, total: C.cnt(v.id).t,
+          { ...v, unread: ABX.Api.cache.compteur(v.id).u, total: ABX.Api.cache.compteur(v.id).t,
             icon: a.id === "client" && v.actif ? "🟢" : "•",
             /* Un axe dérivé ne se sélectionne pas par chemin : ses dossiers sont
                un prédicat sur le corpus, pas un rangement (D133). */

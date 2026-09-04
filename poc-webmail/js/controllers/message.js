@@ -7,8 +7,21 @@
 
   const Message = {
     peindre(t) {
-      const m = C.par(t.id);
-      if (!m) return void D.paint("detail", `<div class="empty">Ce message n'existe plus.</div>`);
+      const m = ABX.Api.cache.message(t.id);
+      /* pas en cache (onglet restauré, message créé à l'instant) : on le CHARGE par
+         la couche d'accès, on peint l'attente, et on repeint à la réponse — ou
+         « n'existe plus » sur 404 (D141) */
+      if (!m) {
+        if (t._charge) return void D.paint("detail", `<div class="empty">Ce message n'existe plus.</div>`);
+        t._charge = true;
+        ABX.Api.message(t.id).then(r => { if (St.ui.tab === t.key) Message.peindre(t); });
+        return void D.paint("detail", `<div class="empty">Chargement…</div>`);
+      }
+      t._charge = false;
+      /* le fil se charge par promesse (D141) : on peint sans, puis on repeint avec —
+         l'utilisateur voit le message tout de suite, le fil arrive ensuite */
+      if (!m._fil) ABX.Api.fil(m).then(fil => { m._fil = fil.map(r => r._m || r);   // dette _m (D141)
+        if (St.ui.tab === t.key) Message.peindre(t); });
       const el = D.paint("detail", ABX.Views.Message.render(m, St.ui));
       App().bindRetour(el);
 

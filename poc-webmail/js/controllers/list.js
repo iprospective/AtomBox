@@ -18,10 +18,10 @@
     ouvrir(folder) {
       const ui = St.ui;
       ui.folder = folder;
-      ABX.Traces.ouvrirDossier(folder, C.filtrer(folder, ui.filtre, ui.tri, ui.sens).length);
       St.save();
       ABX.Controllers.Nav.peindre();
-      List.peindre();
+      /* la liste arrive par promesse ; la trace est journalisée avec ce qui a été servi */
+      List.charger().then(() => ABX.Traces.ouvrirDossier(folder, List._cache.length));
       if (App().MOBILE()) App().setVue("liste"); else App().fermerNav();
     },
 
@@ -49,9 +49,25 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
             " · partition (type='email', période) : ni le chat ni les canaux à venir ne sont balayés (D138/D013)");
     },
 
+    /* La liste se CHARGE par promesse (D141 : asynchrone, même quand la réponse est
+       immédiate) puis se PEINT depuis ce qui a été chargé. Une clé de requête évite
+       de peindre une réponse périmée quand l'utilisateur a déjà changé de dossier. */
+    _cache: [], _cle: null,
+    charger() {
+      const ui = St.ui, cle = [ui.folder.id, ui.filtre, ui.tri, ui.sens, ui.statut].join("|");
+      List._cle = cle;
+      return ABX.Api.liste(ui.folder, ui.filtre, ui.tri, ui.sens, ui.statut).then(l => {
+        if (List._cle !== cle) return;            // réponse périmée : on ne peint pas
+        /* DETTE (D141) : les vues sont encore écrites contre l'objet interne du
+           corpus ; le serveur simulé le glisse dans la réponse sous _m. Chaque
+           déballage est compté par le harnais — l'objectif est zéro, et alors
+           les vues lisent le contrat JSON, comme en prod. */
+        List._cache = l.map(r => r._m || r); List.peindre();
+      });
+    },
     peindre() {
       const ui = St.ui;
-      const messages = C.filtrer(ui.folder, ui.filtre, ui.tri, ui.sens);
+      const messages = List._cache;
       const actif = ui.tabs.find(t => t.key === ui.tab);
       const selection = actif && actif.type === "msg" ? actif.id : null;
       const el = D.paint("list", ABX.Views.List.render(ui, messages, selection));
@@ -59,7 +75,7 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
       el.querySelector("#tri").value = ui.tri;
 
       const vider = el.querySelector("#vider");
-      if (vider) vider.onclick = () => M.viderCorbeille(C.vue(ui.folder));
+      if (vider) vider.onclick = () => ABX.Api.contenu(ui.folder).then(l => M.viderCorbeille(l.map(r => r._m || r)));
 
       D.on(el, ".chip[data-f]", "onclick", c => { ui.filtre = c.dataset.f; St.save();
         List.peindre(); List.logFiltre(ui.filtre); });
@@ -75,7 +91,7 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
       };
 
       D.on(el, ".msg", "onclick", (d, e) => {
-        const m = C.par(d.dataset.id);
+        const m = ABX.Api.cache.message(d.dataset.id);
         const b = D.closest(e, "data-act");
         if (b) { e.stopPropagation(); return M[b.dataset.act](m); }
         /* Un brouillon ne s'ouvre pas en lecture : il se rouvre en composition. */

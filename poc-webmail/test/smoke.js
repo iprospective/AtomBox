@@ -1,14 +1,19 @@
 /* Parcours fonctionnel complet : ouverture, onglets, actions, composition,
    persistance et rechargement. */
 "use strict";
-const { demarrer, creerStockage, eq, vrai, bilan } = require("./run");
+const { demarrer, drainer, creerStockage, eq, vrai, bilan } = require("./run");
+/* L'amorçage et les listes arrivent par promesse (D141) : après un démarrage ou
+   un geste qui recharge, on laisse la page se peindre — comme un navigateur. */
+const tick = p => drainer(p || { ABX: {} });
 const { evt } = require("./fake-dom");
 
+process.on("unhandledRejection", e => { console.error("  ✗ rejet non géré :", (e && e.stack || e).toString().split("\n").slice(0, 4).join("\n      ")); process.exit(1); });
+(async () => {
 const clic = (el, e) => el.onclick && el.onclick(e || evt(el));
 
 console.log("— chargement ————————————————————————————————");
 const ls = creerStockage();
-let p = demarrer(ls);
+let p = demarrer(ls); await drainer(p);
 let A = p.ABX;
 vrai(p.fichiers.length > 25, p.fichiers.length + " scripts déclarés par index.html");
 vrai(A.Corpus.tous.length > 3000, "corpus engendré (" + A.Corpus.tous.length + " messages)");
@@ -267,7 +272,7 @@ console.log("— le pivot comm dans les requêtes (D138) ———————�
 {
   A.QueryLog.vider && A.QueryLog.vider();
   const d = A.Fixtures.valeurs.client[0];
-  A.Controllers.List.ouvrir({ id: d.id, label: d.label, kind: "virtuel", axe: "client" });
+  A.Controllers.List.ouvrir({ id: d.id, label: d.label, kind: "virtuel", axe: "client" }); await tick(p);
   const tout = JSON.stringify(A.QueryLog.entrees);
   vrai(/JOIN comm /.test(tout), "les requêtes lisent le tronc `comm`");
   const q = A.QueryLog.entrees.find(e => e.label.startsWith("Ouvrir"));
@@ -370,7 +375,7 @@ vrai(A.Registry.render("message.card", { m: envoye, variant: "sent" }).includes(
 
 console.log("— ouverture d'un dossier et onglets —————————————");
 const dossier = A.Fixtures.valeurs.client[0];
-A.Controllers.List.ouvrir({ id: dossier.id, label: dossier.label, kind: "virtuel", axe: "client" });
+A.Controllers.List.ouvrir({ id: dossier.id, label: dossier.label, kind: "virtuel", axe: "client" }); await tick(p);
 const lignes = p.doc.getElementById("list").querySelectorAll(".msg");
 vrai(lignes.length > 0, lignes.length + " messages listés");
 clic(lignes[0]); clic(lignes[1]);
@@ -382,17 +387,17 @@ vrai(p.doc.getElementById("tabs").innerHTML.includes("class=\"tab"), "barre d'on
 console.log("— actions réelles ————————————————————————————");
 const cible = A.Corpus.par(lignes[3].dataset.id);
 eq(cible.lu, cible.lu, "état initial lu = " + cible.lu);
-A.MessageService.archiver(cible);
+A.MessageService.archiver(cible); await tick(p);
 eq(cible.motif, "archive", "archivé");
 vrai(A.Corpus.cnt("archives").t >= 1, "la vue Archives compte le message");
 vrai(A.Corpus.vue({ id: dossier.id, kind: "virtuel" }).includes(cible),
      "un message archivé reste dans son dossier");
 const enFile = A.Corpus.filtrer({ id: dossier.id, kind: "virtuel" }, "file", "date_desc");
 vrai(!enFile.includes(cible), "il a quitté la file");
-A.MessageService.corbeille(cible);
+A.MessageService.corbeille(cible); await tick(p);
 eq(cible.dossier, "trash", "mis à la corbeille");
 vrai(A.Corpus.vue({ id: "trash", kind: "special" }).includes(cible), "visible dans la corbeille");
-A.MessageService.supprimer(cible);
+A.MessageService.supprimer(cible); await tick(p);
 vrai(!A.Corpus.tous.includes(cible), "supprimé définitivement");
 
 console.log("— composition ————————————————————————————————");
@@ -407,7 +412,7 @@ t.data.a = "collegue@iprospective.eu, client@exemple.fr";
 A.ComposeService.joindre(t.data);
 eq(t.data.pjs.length, 1, "pièce jointe ajoutée");
 const avant = A.Corpus.dossiers.sent.length;
-A.Controllers.Compose.finir(t, true);
+A.Controllers.Compose.finir(t, true); await tick(p);
 eq(A.Corpus.dossiers.sent.length, avant + 1, "message envoyé, présent dans Envoyés");
 const envoi = A.Corpus.dossiers.sent[0];
 eq(envoi.pj, 1, "la pièce jointe a suivi");
@@ -426,6 +431,8 @@ t = A.Store.ui.tabs.find(x => x.type === "compo");
 eq(t.data.ref, true, "transfert par référence par défaut");
 t.data.a = "collegue@iprospective.eu";
 A.Controllers.Compose.finir(t, true);
+await tick(p);
+
 eq(A.Corpus.dossiers.sent[0].ref, src.id, "le message porte un lien, pas une copie");
 eq(A.Corpus.dossiers.sent[0].pj, 0, "aucune pièce jointe recopiée");
 
@@ -433,7 +440,7 @@ console.log("— brouillon —————————————————�
 A.Controllers.Compose.demarrer("new", null);
 t = A.Store.ui.tabs.find(x => x.type === "compo");
 t.data.sujet = "Un brouillon"; t.data.corps = "à finir";
-A.Controllers.Compose.finir(t, false);
+A.Controllers.Compose.finir(t, false); await tick(p);
 const br = A.Corpus.dossiers.drafts[0];
 eq(br.subject, "Un brouillon", "brouillon enregistré");
 vrai(!!br.compo, "il se rouvrira en composition");
@@ -443,7 +450,7 @@ const nRatt = Object.keys(A.Store.ratt).length, nCrees = A.Store.crees.length;
 vrai(nRatt > 0, nRatt + " rattachement(s) persistés");
 vrai(A.Store.tailleKo() < 60, "état local léger : " + A.Store.tailleKo() + " ko");
 
-const p2 = demarrer(ls);           // même localStorage = rechargement de la page
+const p2 = demarrer(ls); await drainer(p2);           // même localStorage = rechargement de la page
 const B = p2.ABX;
 eq(B.Corpus.tous.length > 3000, true, "corpus réengendré");
 eq(Object.keys(B.Store.ratt).length, nRatt, "delta repris");
@@ -478,24 +485,24 @@ vrai(qs.etapes.some(e => (e.detail || "").includes("r.sens")), "la requête s'ap
 console.log("— tags ————————————————————————————————————————");
 const mt = A.Corpus.par(lignes[0].dataset.id);
 const nTags = mt.tags.length;
-A.MessageService.ajouterTag(mt, "projet", "RM2937");
+A.MessageService.ajouterTag(mt, "projet", "RM2937"); await tick(p);
 eq(mt.tags.length, nTags + 1, "tag ajouté");
 eq(mt.tags[mt.tags.length - 1].src, "utilisateur", "posé par l'utilisateur");
-A.MessageService.ajouterTag(mt, "projet", "RM2937");
+A.MessageService.ajouterTag(mt, "projet", "RM2937"); await tick(p);
 eq(mt.tags.length, nTags + 1, "un doublon exact n'est pas reposé");
-A.MessageService.ajouterTag(mt, "projet", "  ");
+A.MessageService.ajouterTag(mt, "projet", "  "); await tick(p);
 eq(mt.tags.length, nTags + 1, "une valeur vide est refusée");
 const iAuto = mt.tags.findIndex(t => t.src === "dolibarr-mmi");
-if (iAuto >= 0) { A.MessageService.retirerTag(mt, iAuto);
+if (iAuto >= 0) { A.MessageService.retirerTag(mt, iAuto); await tick(p);
   vrai(A.QueryLog.entrees[0].warn, "retirer un tag de connecteur lève un avertissement"); }
 const iUser = mt.tags.findIndex(t => t.src === "utilisateur");
-A.MessageService.retirerTag(mt, iUser);
+A.MessageService.retirerTag(mt, iUser); await tick(p);
 vrai(!mt.tags.some(t => t.val === "RM2937"), "tag retiré");
 vrai(!!A.Store.ratt[mt.id].tags, "les tags sont dans le delta persisté");
 
 console.log("— quarantaine ————————————————————————————————");
 const spam = A.Corpus.par(lignes[4].dataset.id);
-A.MessageService.junk(spam);
+A.MessageService.junk(spam); await tick(p);
 eq(spam.dossier, "junk", "mis en quarantaine");
 const qj = A.QueryLog.entrees[0];
 eq(qj.etapes.filter(e => e.t === "sql").length, 2, "le geste classe ET apprend");
@@ -504,7 +511,7 @@ vrai(qj.etapes.some(e => (e.detail || "").includes("apprentissage_spam")),
 const barre = A.Views.Message.render(spam, A.Store.ui);
 vrai(barre.includes('data-x="nonJunk"'), "la barre propose « ce n'est pas un indésirable »");
 vrai(!barre.includes('data-x="junk"'), "et ne propose plus de le remarquer indésirable");
-A.MessageService.nonJunk(spam);
+A.MessageService.nonJunk(spam); await tick(p);
 eq(spam.dossier, null, "sorti de la quarantaine");
 vrai(A.QueryLog.entrees[0].etapes.some(e => (e.detail || "").includes("'ham'")),
      "le filtre désapprend");
@@ -512,7 +519,7 @@ vrai(A.QueryLog.entrees[0].etapes.some(e => (e.detail || "").includes("'ham'")),
 console.log("— cascade d'ouverture d'un message ————————————————");
 const cible2 = A.Corpus.tous.find(x => x.fid.startsWith("client:") && x.pj && x.tags.length && !x.lu);
 A.QueryLog.vider();
-A.Controllers.Tabs.ouvrir({ type: "msg", id: cible2.id }, false);
+A.Controllers.Tabs.ouvrir({ type: "msg", id: cible2.id }, false); await tick(p);
 const tr = A.QueryLog.entrees.find(x => x.label.startsWith("Ouvrir «"));
 vrai(!!tr, "la cascade est tracée");
 const types = tr.etapes.map(e => e.t);
@@ -550,20 +557,20 @@ vrai(rendu.includes("réseau — aller-retour"), "et marque le passage du résea
 console.log("— workflow de statut ————————————————————————————");
 const w = A.Corpus.par(lignes[6].dataset.id);
 eq(w.statut, w.statut, "statut initial : " + w.statut);
-A.MessageService.statuer(w, "a_faire");
+A.MessageService.statuer(w, "a_faire"); await tick(p);
 eq(w.statut, "a_faire", "passé à faire");
 eq(w.motif, null, "à faire ne sort PAS de la file");
 const qw = A.QueryLog.entrees[0];
 vrai(qw.etapes.some(e => (e.detail || "").includes("SET statut")), "le statut est une colonne");
 vrai(qw.etapes.some(e => e.t === "note" && (e.index || "").includes("un tag est ouvert")),
      "la trace explique pourquoi ce n'est pas un tag");
-A.MessageService.statuer(w, "en_cours");
+A.MessageService.statuer(w, "en_cours"); await tick(p);
 eq(w.statut, "en_cours", "puis en cours");
-A.MessageService.statuer(w, "traite");
+A.MessageService.statuer(w, "traite"); await tick(p);
 eq(w.motif, "traite", "« traité » sort de la file");
 vrai(w.sorti > 0, "et pose sorti_le");
 vrai(A.QueryLog.entrees[0].etapes.some(e => e.warn), "en avertissant du changement de partition");
-A.MessageService.statuer(w, "a_faire");
+A.MessageService.statuer(w, "a_faire"); await tick(p);
 eq(w.motif, null, "revenir en arrière remet dans la file (Q009)");
 vrai(A.Corpus.aFaire().includes(w), "il apparaît dans la file de travail");
 eq(A.Corpus.filtrer(dossierAxe, "file", "date_desc", "tous", "en_cours")
@@ -634,7 +641,7 @@ const notifs = A.Corpus.tous.filter(m => m.fid.startsWith("notification:"));
 vrai(notifs.every(m => m.sens !== "out"), "on n'envoie rien à une alerte de supervision");
 
 console.log("— pièces jointes ————————————————————————————————");
-A.Controllers.Admin.ouvrirPJ();
+A.Controllers.Admin.ouvrirPJ(); await tick(p);
 const vpj = p.doc.getElementById("detail").innerHTML;
 vrai(vpj.includes("pjrow"), "la liste des pièces jointes est peinte");
 vrai(vpj.includes("réellement stockés"), "avec le gain de déduplication");
@@ -697,13 +704,14 @@ vrai(p.doc.getElementById("detail").innerHTML.includes("jalon v5"),
      "le jalon V5 a son propre style");
 
 console.log("— déterminisme ————————————————————————————————");
-const p3 = demarrer(creerStockage());   // stockage vierge
+const p3 = demarrer(creerStockage()); await drainer(p3);   // stockage vierge
 const C = p3.ABX;
 eq(C.Corpus.tous.length, 
    demarrer(creerStockage()).ABX.Corpus.tous.length, "deux amorçages donnent le même corpus");
 const f1 = C.Erp.fiche("client", A.Fixtures.valeurs.client[0].label);
-const f2 = demarrer(creerStockage()).ABX.Erp.fiche("client", A.Fixtures.valeurs.client[0].label);
+const f2 = (await drainer(demarrer(creerStockage()))).ABX.Erp.fiche("client", A.Fixtures.valeurs.client[0].label);
 eq(f1.ref, f2.ref, "les fiches ERP sont reproductibles");
 eq(f1.encours, f2.encours, "leurs montants aussi");
 
 bilan();
+})();
