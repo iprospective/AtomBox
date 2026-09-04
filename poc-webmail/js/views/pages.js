@@ -101,14 +101,17 @@
       <p>Le nœud d'un axe porte simplement son nom — plus de « Tous — Fournisseurs » au-dessus
         d'un titre « Fournisseurs ».</p></div>
 
-    <div class="box"><h4>Voir la V0 — le client IMAP</h4>
+    <div class="box"><h4>Voir la V0 — la V1 réduite à l'essentiel</h4>
       <p>L'interrupteur <b>V0</b> de la barre du POC montre la maquette telle qu'elle sera en
-        V0 (D140) : <b>sans base ni moteur</b>, posée directement sur le serveur IMAP. Ce qui
-        disparaît est exactement ce qui demande une base — tags et axes, statut, arborescence
-        engendrée, nature, fiabilité, contexte ERP, bandeaux d'analyse. Ce qui reste est ce que
-        font Roundcube et Thunderbird : les dossiers IMAP, lire, classer, répondre.</p>
-      <p>Rien n'est réécrit entre les deux : les partielles sans donnée <b>rendent vide</b>, et
-        la V1 les remplit. C'est ce pour quoi le registre de vues existe.</p></div>
+        V0 (D140b) : <b>la base et l'ingestion IMAP sont déjà là</b>, mais rien de ce que la V1
+        ajoute n'est encore rempli — tags d'axe, statut, arborescence engendrée, nature,
+        fiabilité, contexte ERP, bandeaux d'analyse. Ce qui reste est ce que font Roundcube et
+        Thunderbird : les dossiers (des tags d'origine, affichés comme des dossiers), lire,
+        classer, répondre — et les états lus, drapeaux, déplacements restent synchronisés avec
+        IMAP dans les deux sens, IMAP restant la vérité jusqu'à la V2.</p>
+      <p>Rien n'est écrit deux fois : les partielles sans donnée <b>rendent vide</b>, et la V1
+        les remplit. Un client IMAP jetable aurait obligé à réécrire l'accès aux messages — c'est
+        ce que D140 proposait, et ce que D140b a écarté.</p></div>
 
     <div class="box"><h4>Tout le CDC est dans la maquette</h4>
       <p>La page <b>CDC</b> contient le texte intégral : chaque chapitre, chaque décision,
@@ -141,6 +144,7 @@
     });
     return doms.map(d => [d, par[d]]);
   })();
+  const FEAT_ID = {}; (ABX.CDC.dict.fonctionnalites || []).forEach(f => FEAT_ID[f.libelle] = f.id);
 
   const ETATS = { "maquetté":"ok", "décidé":"wait", "à trancher":"due", "à venir":"",
                   "en pause":"pause" };
@@ -155,8 +159,9 @@
         <span class="st pause">en pause</span> écarté volontairement, à reprendre sur un chiffre ·
         <span class="jalon v0">V0</span> le client IMAP, sans base ni moteur (D140)</div></div>
     ${FEATURES.map(([dom, liste]) => `<div class="box"><h4>${F.esc(dom)}</h4>
-      <table class="erpl"><tr><th>Fonctionnalité</th><th>Jalon</th><th>État</th><th>Réf.</th></tr>
+      <table class="erpl"><tr><th>#</th><th>Fonctionnalité</th><th>Jalon</th><th>État</th><th>Réf.</th></tr>
       ${liste.map(([lib, v, etat, ref]) => `<tr>
+        <td><b>${F.esc(FEAT_ID[lib] || "")}</b></td>
         <td>${F.esc(lib)}</td>
         <td>${v === null || v === undefined
                ? `<span class="jalon aucun" title="Aucun jalon : écarté volontairement">—</span>`
@@ -268,9 +273,30 @@
 
   /* ROADMAP — LUE dans l'index du CDC (docs/dict/jalons.yml), plus jamais
      saisie ici : le POC et le chapitre 16 lisent le même fichier. */
-  const ROADMAP = (ABX.CDC.dict.jalons || []).map(j => ({
-    v: parseInt(j.id.replace(/\D/g, ""), 10), titre: j.titre, etat: j.etat,
-    note: j.note || "", contenu: j.contenu || [] }));
+  /* Tri topologique de depend_de — le même calcul que gen-dict.py : c'est lui qui
+     donne l'ORDRE DE CODAGE. Stable par jalon puis identifiant. */
+  function ordreRealisation(feats) {
+    const par = {}, entrants = {}, suiv = {};
+    feats.forEach(f => { par[f.id] = f; entrants[f.id] = (f.depend_de || []).length;
+      (f.depend_de || []).forEach(d => (suiv[d] = suiv[d] || []).push(f.id)); });
+    const cle = k => [par[k].jalon === null || par[k].jalon === undefined ? 99 : par[k].jalon, k];
+    const cmp = (a, b) => cle(a)[0] - cle(b)[0] || (a < b ? -1 : a > b ? 1 : 0);
+    const prets = Object.keys(entrants).filter(k => !entrants[k]).sort(cmp), ordre = [];
+    while (prets.length) { const k = prets.shift(); ordre.push(k);
+      (suiv[k] || []).forEach(s2 => { if (--entrants[s2] === 0) { prets.push(s2); prets.sort(cmp); } }); }
+    return ordre;
+  }
+  const RANG = (() => { const r = {}; ordreRealisation(ABX.CDC.dict.fonctionnalites || []).forEach((k, i) => r[k] = i + 1); return r; })();
+  /* ROADMAP — DÉRIVÉE des fonctionnalités : chaque jalon porte TOUTES ses F…, dans
+     l'ordre de réalisation. Deux vues des mêmes données — ici par jalon, page
+     Fonctionnalités par domaine. Le « contenu » de jalons.yml n'est plus qu'une
+     note d'intention. */
+  const ROADMAP = (ABX.CDC.dict.jalons || []).map(j => {
+    const v = parseInt(j.id.replace(/\D/g, ""), 10);
+    const feats = (ABX.CDC.dict.fonctionnalites || []).filter(f => f.jalon === v)
+      .sort((a, b) => (RANG[a.id] || 1e6) - (RANG[b.id] || 1e6) || (a.id < b.id ? -1 : 1));
+    return { v, titre: j.titre, etat: j.etat, note: j.note || "", intention: j.contenu || [], feats };
+  });
 
   function roadmap() {
     return `<div class="box"><h4>Feuille de route</h4>
@@ -280,8 +306,14 @@
     ${ROADMAP.map(r => `<div class="box"><h4>
       <span class="jalon${r.v > 1 ? " v" + r.v : ""}">V${r.v}</span>
       ${F.esc(r.titre)} — <span class="st ${r.v === 1 ? "wait" : ""}">${r.etat}</span></h4>
-      <ul>${r.contenu.map(c => `<li>${F.esc(c)}</li>`).join("")}</ul>
-      <div class="hint">${F.esc(r.note)}</div></div>`).join("")}
+      <div class="hint">${F.esc(r.note)}</div>
+      ${r.intention.length ? `<div class="hint" style="margin-top:6px"><i>Intention :</i> ${r.intention.map(F.esc).join(" · ")}</div>` : ""}
+      <table class="erpl" style="margin-top:8px"><tr><th>Ordre</th><th>#</th><th>Fonctionnalité</th><th>Domaine</th><th>État</th><th>Dépend de</th></tr>
+      ${r.feats.map(f => `<tr><td>${RANG[f.id] || "—"}</td><td><b>${F.esc(f.id)}</b></td><td>${F.esc(f.libelle)}</td>
+        <td class="hint">${F.esc(f.domaine)}</td><td><span class="st ${ETATS[f.etat] || ""}">${F.esc(f.etat)}</span></td>
+        <td class="hash">${f.depend_de === null || f.depend_de === undefined ? "<i>à renseigner</i>" : (f.depend_de.length ? f.depend_de.join(", ") : "racine")}</td></tr>`).join("")}
+      </table>
+      <div class="hint" style="margin-top:4px">${r.feats.length} fonctionnalités — la même liste que la page Fonctionnalités, par jalon et dans l'ordre de codage.</div></div>`).join("")}
 
     <div class="box"><h4>Ce qui prépare la suite dès maintenant</h4>
       <div class="hint">Trois précautions gratuites aujourd'hui, très coûteuses plus tard —
