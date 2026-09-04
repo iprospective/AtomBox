@@ -14,6 +14,8 @@
     ratt: {},
     /* messages écrits ici : envoyés et brouillons — eux n'ont pas de fixture */
     crees: [],
+    /* dossiers virtuels personnels (D143) : des filtres sans action, portés par le compte */
+    virtuels: [],
     seq: 0,
 
     /* état d'interface, persisté pour retrouver la session telle qu'on l'a laissée */
@@ -25,6 +27,9 @@
          donc persistés. Une arborescence engendrée n'interdit pas de choisir
          son ordre — elle interdit seulement de le coder dans les noms. */
       ordreAxes: null, triAxe: {}, triFeat: "domaine", triFeatDesc: false,
+      /* les dossiers épinglés en tête (D144) — un réglage par compte, comme l'ordre des axes ;
+         le formulaire de dossier virtuel est de l'état de session, jamais persisté */
+      epingles: [], formVirtuel: null,
       /* jalon simulé : 0 = la V0 (la V1 réduite, D140b), null = la maquette complète */
       jalon: null,
       tabs: [], tab: null,
@@ -36,8 +41,9 @@
       if (!d || d.v !== 2) return null;
       Object.assign(this.ratt, d.ratt || {});
       (d.crees || []).forEach(m => this.crees.push(m));
+      (d.virtuels || []).forEach(v => this.virtuels.push(v));
       this.seq = d.seq || 0;
-      ["folder","filtre","tri","sens","statut","ordreAxes","triAxe","jalon","triFeat","triFeatDesc"]
+      ["folder","filtre","tri","sens","statut","ordreAxes","triAxe","jalon","triFeat","triFeatDesc","epingles"]
         .forEach(k => { if (d.ui && d.ui[k]) this.ui[k] = d.ui[k]; });
       if (d.ui) { this.ui.tabs = d.ui.tabs || []; this.ui.tab = d.ui.tab || null; }
       return d;
@@ -49,11 +55,11 @@
          message lui-même, ce qui ferait échouer la sérialisation en silence */
       const sansPrive = (k, v) => k.startsWith("_") ? undefined : v;
       try { localStorage.setItem(CLE, JSON.stringify({
-        v: 2, seq: this.seq, ratt: this.ratt, crees: this.crees,
+        v: 2, seq: this.seq, ratt: this.ratt, crees: this.crees, virtuels: this.virtuels,
         ui: { folder: this.ui.folder, filtre: this.ui.filtre, tri: this.ui.tri,
               sens: this.ui.sens, statut: this.ui.statut,
               ordreAxes: this.ui.ordreAxes, triAxe: this.ui.triAxe, jalon: this.ui.jalon,
-              triFeat: this.ui.triFeat, triFeatDesc: this.ui.triFeatDesc,
+              triFeat: this.ui.triFeat, triFeatDesc: this.ui.triFeatDesc, epingles: this.ui.epingles,
               tabs: this.ui.tabs, tab: this.ui.tab },
       }, sansPrive)); } catch (e) { /* quota ou navigation privée : le POC reste utilisable */ }
     },

@@ -33,8 +33,9 @@
                  : `r.boite_id = :boite AND <vue ${folder.id}>`)
         : folder.kind === "user" ? `r.dossier_id = :dossier`
         : folder.kind === "axe"  ? `t.axe_id = :axe            -- récursif : l'axe sans la valeur`
+        : folder.kind === "perso" ? `EXISTS (…) AND EXISTS (…)  -- un EXISTS par critère du filtre (D143), conjonction`
         : `t.axe_id = :axe AND t.valeur = :valeur`;
-      const jointure = folder.kind === "virtuel" || folder.kind === "axe"
+      const jointure = (folder.kind === "virtuel" || folder.kind === "axe")
         ? "\n  JOIN comm_tag mt USING (comm_id) JOIN tag t USING (tag_id)" : "";
       ABX.log("Ouvrir « " + folder.label + " »",
 `-- la liste ne touche QUE le tronc : aucune jointure vers comm_email (D138)
@@ -43,7 +44,7 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
  WHERE r.compte_id = :moi AND ${where}
  ORDER BY m.date_reception DESC
  LIMIT 50;`,
-        folder.kind === "axe" || folder.kind === "virtuel"
+        folder.kind === "axe" || folder.kind === "virtuel" || folder.kind === "perso"
           ? "index (tag_id, sorti_le DESC, comm_id) — D016, date dénormalisée dans la liaison"
           : "index (compte_id, sorti_le DESC) — D036 : la portée EST le chemin d'accès" +
             " · partition (type='email', période) : ni le chat ni les canaux à venir ne sont balayés (D138/D013)");

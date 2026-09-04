@@ -30,7 +30,12 @@
       moi: Fx.MOI, speciaux: Fx.SPECIAUX, util: Fx.UTIL, axes: Fx.AXES, valeurs: Fx.valeurs,
       statuts: Fx.STATUTS, vues: Object.keys(C.VUES) }; }],
 
-    ["GET", /^\/arborescence$/, () => ({ compteurs: C.recompte() })],
+    /* l'arborescence de l'utilisateur : les compteurs (D078), ses dossiers virtuels
+       personnels (D143) et ses épingles (D144) — une seule réponse */
+    ["GET", /^\/arborescence$/, () => ({ compteurs: C.recompte(),
+      /* des COPIES : le vrai serveur sérialise, le cache du client ne doit pas partager
+         le tableau du store — sinon un push s'y verrait deux fois */
+      virtuels: St.virtuels.map(v => ({ ...v })), epingles: (St.ui.epingles || []).slice() })],
 
     ["GET", /^\/messages$/, (_, p) => {
       const f = dossierDe(p);
@@ -60,6 +65,31 @@
       const x = C.par(dec(m[1])); if (!x) return null;
       St.patch(x, { suppr: true }); C.retire(x); St.save();
       return ok({ modifies: 1, detache: true }); }],
+
+    /* un dossier virtuel personnel = un filtre sans action (D075, D143) : une
+       conjonction de critères {axe, val?} ; le vrai serveur écrira une ligne de `filtre` */
+    ["POST", /^\/dossiers-virtuels$/, (_, __, corps) => {
+      const d = { id: "perso:" + (++St.seq), label: ((corps || {}).label || "").trim(),
+                  criteres: ((corps || {}).criteres || []).filter(c => c && c.axe)
+                    .map(c => ({ axe: c.axe, val: (c.val || "").trim() || undefined })) };
+      if (!d.label || !d.criteres.length) throw new Error("POST /dossiers-virtuels → 400 : libellé et au moins un critère");
+      St.virtuels.push(d); St.save();
+      return ok({ crees: 1, dossier: { ...d } }); }],
+
+    ["DELETE", /^\/dossiers-virtuels\/([^/]+)$/, (m) => {
+      const id = dec(m[1]), i = St.virtuels.findIndex(v => v.id === id); if (i < 0) return null;
+      St.virtuels.splice(i, 1);
+      St.ui.epingles = (St.ui.epingles || []).filter(e => e !== id);   // l'épingle part avec lui (D144)
+      St.save();
+      return ok({ supprimes: 1 }); }],
+
+    /* un réglage personnel (D106) — la même route que tout paramètre ; le POC ne
+       connaît que les épingles (D144) */
+    ["PUT", /^\/parametres$/, (_, __, corps) => {
+      const c = corps || {};
+      if (c.cle !== "epingles") throw new Error("PUT /parametres → 400 : réglage inconnu " + c.cle);
+      St.ui.epingles = (c.valeur || []).slice(); St.save();
+      return ok({ modifies: 1, parametre: { cle: c.cle, valeur: St.ui.epingles.slice(), portee: "compte" } }); }],
   ];
   const dec = s => decodeURIComponent(s);
 

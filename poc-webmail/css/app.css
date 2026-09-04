@@ -415,3 +415,12 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .trih{cursor:pointer;user-select:none;white-space:nowrap}
 .trih:hover{color:var(--accent)}
 .trih.on{color:var(--accent)}
+
+/* ---- outils de tout dossier (D144 épingle, D143 suppression) et formulaire de dossier virtuel */
+.nops{display:none;gap:2px;margin-left:4px}
+.node:hover .nops{display:inline-flex}
+.node.pin .ic{color:var(--accent)}
+.grp .axop{margin-left:6px;vertical-align:middle;font-size:11px;padding:0 5px}
+.vform{padding:6px 10px 8px;display:flex;flex-direction:column;gap:5px;background:var(--panel2)}
+.vform input,.vform select{font:inherit;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:inherit;min-width:0}
+.vcrit{display:flex;gap:4px}.vcrit select{flex:0 0 46%}.vcrit input{flex:1}
