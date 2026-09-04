@@ -409,3 +409,8 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 .pocv0{margin-left:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);
   border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
 .pocv0.on{border-color:var(--fg);color:var(--fg);font-weight:700}
+
+/* en-tetes de colonne triables (page Fonctionnalites) */
+.trih{cursor:pointer;user-select:none;white-space:nowrap}
+.trih:hover{color:var(--accent)}
+.trih.on{color:var(--accent)}

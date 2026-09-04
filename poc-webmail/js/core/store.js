@@ -24,7 +24,7 @@
       /* Ordre des axes et tri interne de chacun : réglés par l'utilisateur,
          donc persistés. Une arborescence engendrée n'interdit pas de choisir
          son ordre — elle interdit seulement de le coder dans les noms. */
-      ordreAxes: null, triAxe: {},
+      ordreAxes: null, triAxe: {}, triFeat: "domaine", triFeatDesc: false,
       /* jalon simulé : 0 = la V0 (la V1 réduite, D140b), null = la maquette complète */
       jalon: null,
       tabs: [], tab: null,
@@ -37,7 +37,7 @@
       Object.assign(this.ratt, d.ratt || {});
       (d.crees || []).forEach(m => this.crees.push(m));
       this.seq = d.seq || 0;
-      ["folder","filtre","tri","sens","statut","ordreAxes","triAxe","jalon"]
+      ["folder","filtre","tri","sens","statut","ordreAxes","triAxe","jalon","triFeat","triFeatDesc"]
         .forEach(k => { if (d.ui && d.ui[k]) this.ui[k] = d.ui[k]; });
       if (d.ui) { this.ui.tabs = d.ui.tabs || []; this.ui.tab = d.ui.tab || null; }
       return d;
@@ -49,6 +49,7 @@
         ui: { folder: this.ui.folder, filtre: this.ui.filtre, tri: this.ui.tri,
               sens: this.ui.sens, statut: this.ui.statut,
               ordreAxes: this.ui.ordreAxes, triAxe: this.ui.triAxe, jalon: this.ui.jalon,
+              triFeat: this.ui.triFeat, triFeatDesc: this.ui.triFeatDesc,
               tabs: this.ui.tabs, tab: this.ui.tab },
       })); } catch (e) { /* quota ou navigation privée : le POC reste utilisable */ }
     },

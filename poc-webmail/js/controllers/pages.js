@@ -22,10 +22,18 @@
         if (e && e.preventDefault) e.preventDefault();
         St.ui.cdc = St.ui.cdc || {};
         if ("sec" in a.dataset) { St.ui.cdc.sec = a.dataset.sec || null; if (!a.dataset.sec) St.ui.cdc.chap = St.ui.cdc.chap || null; }
-        if ("chap" in a.dataset) { St.ui.cdc.chap = a.dataset.chap || null; St.ui.cdc.sec = null; }
+        if ("chap" in a.dataset) { St.ui.cdc.chap = a.dataset.chap || null; St.ui.cdc.sec = null; St.ui.cdc.modele = null; }
+        if ("modele" in a.dataset) { St.ui.cdc.modele = a.dataset.modele || null; St.ui.cdc.sec = null; St.ui.cdc.chap = null; }
         t.page = St.ui.page = "cdc"; Pages.peindre(t);
         const zone = el.querySelector && el.querySelector(".lecture");
         if (zone && zone.scrollIntoView) zone.scrollIntoView({ block: "start" });
+      });
+      /* Tri des fonctionnalités : un clic trie, un second inverse. Persisté. */
+      D.on(el, "th[data-trif]", "onclick", th => {
+        const k = th.dataset.trif;
+        if (St.ui.triFeat === k) St.ui.triFeatDesc = !St.ui.triFeatDesc;
+        else { St.ui.triFeat = k; St.ui.triFeatDesc = false; }
+        St.save(); Pages.peindre(t);
       });
       D.on(el, ".chip[data-dict]", "onclick", c => {
         St.ui.dictTable = c.dataset.dict; Pages.peindre(t);
