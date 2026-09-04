@@ -144,6 +144,8 @@ console.log("— la V0 : le client IMAP (D140) ———————————
     }));
     eq(doublons.length, 0, "aucun doublon probable de fonctionnalité" + (doublons.length ? " — " + doublons.join(" ; ") : ""));
     vrai(A.CDC.dict.fonctionnalites.every(f => f.etat !== "écarté" || f.jalon === null), "une fonctionnalité écartée n'a pas de jalon");
+    const sansDep = A.CDC.dict.fonctionnalites.filter(f => f.depend_de === null || f.depend_de === undefined).map(f => f.id);
+    eq(sansDep.length, 0, "toutes les fonctionnalités ont leurs dépendances renseignées — l'ordre de codage couvre tous les jalons" + (sansDep.length ? " — " + sansDep.join(", ") : ""));
     const f1 = A.CDC.dict.fonctionnalites.find(f => f.id === "F001");
     eq(f1.jalon, 0, "F001, l'ingestion IMAP, est en V0 (D140b)");
   }
