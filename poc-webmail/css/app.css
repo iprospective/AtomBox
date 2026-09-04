@@ -315,7 +315,7 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
   border:1px solid var(--muted);color:var(--muted);margin-left:4px;vertical-align:1px}
 .jalon.v3{border-color:var(--accent);color:var(--accent)}
 .jalon.v4{border-color:var(--warn);color:var(--warn)}
-.jalon.v5{border-color:var(--danger);color:var(--danger);border-style:dashed}
+.jalon.v6{border-color:var(--danger);color:var(--danger);border-style:dashed}
 .chip.futur{opacity:.6;border-style:dashed}
 
 /* ---- bandeau « ceci est un POC » ---- */
