@@ -136,10 +136,15 @@ console.log("— la V0 : le client IMAP (D140) ———————————
      probable ; le harnais les nomme, et refuse. */
   {
     const actives = A.CDC.dict.fonctionnalites.filter(f => f.jalon !== null);
+    /* une décision citée par cinq fonctionnalités ou plus (un phasage : D140b, D146) ne
+       discrimine rien — seules les décisions RARES trahissent un doublon */
+    const citations = {};
+    actives.forEach(f => (f.decisions || []).forEach(d => { citations[d] = (citations[d] || 0) + 1; }));
+    const rare = d => citations[d] < 5;
     const doublons = [];
     actives.forEach((f, i) => actives.slice(i + 1).forEach(g => {
       if (f.domaine !== g.domaine) return;
-      const communes = (f.decisions || []).filter(d => (g.decisions || []).includes(d));
+      const communes = (f.decisions || []).filter(d => rare(d) && (g.decisions || []).includes(d));
       if (communes.length >= 2) doublons.push(f.id + "/" + g.id + " (" + communes.join(", ") + ")");
     }));
     eq(doublons.length, 0, "aucun doublon probable de fonctionnalité" + (doublons.length ? " — " + doublons.join(" ; ") : ""));
@@ -742,8 +747,8 @@ vrai(hf.includes("expéditeur externe"), "l'affichage sûr est listé");
 A.Controllers.Pages.ouvrir("roadmap");
 vrai(A.Views.Pages.ROADMAP.length === A.CDC.dict.jalons.length && A.Views.Pages.ROADMAP.length >= 5,
      A.Views.Pages.ROADMAP.length + " jalons dans la feuille de route — autant que le dictionnaire");
-vrai(p.doc.getElementById("detail").innerHTML.includes("jalon v5"),
-     "le jalon V5 a son propre style");
+vrai(p.doc.getElementById("detail").innerHTML.includes("jalon v6"),
+     "le jalon V6 a son propre style");
 
 console.log("— dossiers virtuels personnels (D143) et épingles (D144) ——");
 {
