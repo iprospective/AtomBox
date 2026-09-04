@@ -27,7 +27,7 @@
        count(DISTINCT b.boite_id) FILTER (WHERE b.alias_de IS NOT NULL) AS alias
   FROM domaine d LEFT JOIN boite b USING (domaine_id)
  GROUP BY d.nom, d.role;`,
-          "un alias est une BOÎTE, pas une redirection (D39) : d'où alias_de plutôt qu'une " +
+          "un alias est une BOÎTE, pas une redirection (D039) : d'où alias_de plutôt qu'une " +
           "table à part — et d'où le fait qu'un message adressé à un alias garde son destinataire"],
         apps: ["Administration — applications et jetons",
 `SELECT a.code, a.libelle, a.derniere_vue,
@@ -38,7 +38,7 @@
   LEFT JOIN portee_application p ON p.application_id = a.application_id
  GROUP BY a.application_id;`,
           "le jeton n'apparaît PAS dans cette requête : on stocke son empreinte, jamais sa " +
-          "valeur (D63) — un jeton perdu se régénère, il ne se relit pas"],
+          "valeur (D063) — un jeton perdu se régénère, il ne se relit pas"],
         axes: ["Administration — axes et volumétrie des tags",
 `SELECT ax.axe_id, ax.libelle, count(DISTINCT t.valeur) AS valeurs,
        count(mt.comm_id) AS usages
@@ -52,7 +52,7 @@
 SELECT canal, count(*) FROM comm GROUP BY canal;   -- ('email', 4412)`,
           "⚠ écrire cette colonne dès la V1 coûte un octet par message ; l'ajouter en V4 " +
           "coûte une migration sur des dizaines de millions de lignes et la relecture de " +
-          "toutes les requêtes. Même raisonnement que D62 : on ne construit pas, on ne se " +
+          "toutes les requêtes. Même raisonnement que D062 : on ne construit pas, on ne se " +
           "ferme pas la porte", true],
         suite: ["Administration — fournisseurs de la suite",
 `SELECT cle, valeur FROM configuration
@@ -69,7 +69,7 @@ SELECT canal, count(*) FROM comm GROUP BY canal;   -- ('email', 4412)`,
         boite: ["Créer une boîte",
 `INSERT INTO boite (domaine_id, adresse, type, quota_octets)
 VALUES (:domaine, :adresse, 'personnelle', :quota) RETURNING boite_id;
--- les dossiers SPECIAL-USE sont créés en même temps, et protégés (D47)
+-- les dossiers SPECIAL-USE sont créés en même temps, et protégés (D047)
 INSERT INTO dossier (boite_id, nom, special_use, protege)
 SELECT :boite, x.nom, x.usage, true
   FROM (VALUES ('INBOX',NULL),('Sent','\\\\Sent'),('Drafts','\\\\Drafts'),
@@ -80,7 +80,7 @@ SELECT :boite, x.nom, x.usage, true
 `INSERT INTO boite (domaine_id, adresse, type, alias_de)
 VALUES (:domaine, :adresse, 'alias', :cible);`,
           "l'alias a sa propre boîte_id : un message qui lui est adressé sait qu'il l'était " +
-          "(D39), là où une simple redirection perdrait cette information à jamais"],
+          "(D039), là où une simple redirection perdrait cette information à jamais"],
         app: ["Connecter une application",
 `INSERT INTO application (code, libelle, type) VALUES (:code, :libelle, :type)
 RETURNING application_id;
@@ -94,11 +94,11 @@ VALUES (:app, sha256(:secret), :portee, now() + interval '1 year');`,
 INSERT INTO jeton (application_id, empreinte, portee, expire_le)
 VALUES (:app, sha256(:nouveau), :portee, now() + interval '1 year');`,
           "révoquer ne touche PAS aux tags déjà posés : ils appartiennent à l'application, pas " +
-          "au jeton. Une révocation coupe l'accès, elle ne réécrit pas l'histoire (D20)"],
+          "au jeton. Une révocation coupe l'accès, elle ne réécrit pas l'histoire (D020)"],
         axe: ["Créer un axe",
 `INSERT INTO axe (axe_id, libelle, type_valeur) VALUES (:id, :libelle, 'texte');
 INSERT INTO acl_axe (axe_id, principal, droit) VALUES (:id, :moi, 'administrer');`,
-          "⚠ Q05 : le mécanisme existe, la politique non. Qui a le droit de créer un axe décide " +
+          "⚠ Q005 : le mécanisme existe, la politique non. Qui a le droit de créer un axe décide " +
           "de l'interopérabilité de toute l'installation", true],
       }[quoi];
       if (G) ABX.log(G[0], G[1], G[2], G[3]);
@@ -165,7 +165,7 @@ ON CONFLICT DO NOTHING;`,
  WHERE comm_id = '${x.m.id}' AND pj_id = ${x.b.pj_id};`,
           index:"le blob n'est pas touché : les " + (x.b.refs - 1) + " autre(s) liaison(s) " +
                 "gardent leur nom, et le message d'origine reste reconstructible à l'identique " +
-                "(D25/D32). C'est la seule forme de renommage qui ne casse pas DKIM" },
+                "(D025/D032). C'est la seule forme de renommage qui ne casse pas DKIM" },
         { t:"note", label:"ce qu'on ne peut pas faire",
           detail:"renommer le fichier « partout »",
           index:"⚠ il n'y a pas de « partout » : un octet n'a pas de nom, seules les liaisons " +

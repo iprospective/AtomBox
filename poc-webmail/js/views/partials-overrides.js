@@ -37,7 +37,7 @@
   });
 
   /* --- Développement : le TICKET prime, et il vient d'une autre application
-         que l'ERP (Redmine, D19/D20). La carte montre le numéro plutôt que le
+         que l'ERP (Redmine, D019/D020). La carte montre le numéro plutôt que le
          libellé complet : sous « RM2845 · moteur de filtres », répéter le titre
          sur chaque ligne n'apprend rien. ------------------------------------ */
   R.defineFor("message.card.meta", "developpement", ({ m }) => {

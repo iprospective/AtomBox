@@ -2,7 +2,7 @@
 
    Le partage est celui du modèle, rendu littéral : le MESSAGE est un fait
    immuable — il est engendré, jamais stocké ; le RATTACHEMENT porte ce que le
-   compte en a fait (lu, sorti de la file, déplacé, supprimé — D36/D30/D41), et
+   compte en a fait (lu, sorti de la file, déplacé, supprimé — D036/D030/D041), et
    lui seul va en localStorage. C'est pourquoi ce POC persiste quelques
    kilo-octets là où le corpus en pèse plusieurs méga. */
 (function (ABX) {

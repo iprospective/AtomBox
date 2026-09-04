@@ -40,7 +40,7 @@
 
     /* Le champ de valeur propose les valeurs existantes de l'axe choisi : sans
        cela, chacun écrit « Belair SAS », « belair » et « Belair sas », et l'axe
-       ne regroupe plus rien — c'est la gouvernance des axes de Q05, vue de l'écran. */
+       ne regroupe plus rien — c'est la gouvernance des axes de Q005, vue de l'écran. */
     cablerTags(el, m) {
       const axe = el.querySelector("#t_axe"), val = el.querySelector("#t_val");
       const liste = el.querySelector("#t_vals");
@@ -68,7 +68,7 @@
     logMessage(quoi, m) {
       const A = {
         orig: ["Télécharger le message original (.eml)",
-`-- réassemblage : le corps, puis chaque partie ré-encodée À L'IDENTIQUE (D25)
+`-- réassemblage : le corps, puis chaque partie ré-encodée À L'IDENTIQUE (D025)
 -- blob_ref et headers vivent dans la FILLE, pas dans le tronc (D138)
 SELECT blob_ref, headers FROM comm_email WHERE comm_id = :id;
 SELECT l.ordre, l.nom_fichier, l.mime_declare, l.transfer_encoding, l.disposition,
@@ -76,7 +76,7 @@ SELECT l.ordre, l.nom_fichier, l.mime_declare, l.transfer_encoding, l.dispositio
   FROM comm_piece_jointe l JOIN piece_jointe p USING (pj_id)
  WHERE l.comm_id = :id ORDER BY l.ordre;`,
           "la liaison doit conserver l'ordre, l'encodage et les paramètres de partie : sans eux le " +
-          "message se reconstruit mais DKIM ne se revérifie plus (D25/D26)"],
+          "message se reconstruit mais DKIM ne se revérifie plus (D025/D026)"],
       }[quoi];
       ABX.log(A[0], A[1], A[2], A[3]);
     },
@@ -88,7 +88,7 @@ SELECT l.ordre, l.nom_fichier, l.mime_declare, l.transfer_encoding, l.dispositio
        l.nom_fichier, l.mime_declare, l.transfer_encoding, l.ordre
   FROM comm_piece_jointe l JOIN piece_jointe p USING (pj_id)
  WHERE l.comm_id = :id AND l.pj_id = ${b.pj_id};
--- les octets ne transitent jamais par PostgreSQL : zstd -d <blob_ref> (D05/D07)`,
+-- les octets ne transitent jamais par PostgreSQL : zstd -d <blob_ref> (D005/D007)`,
         "index (comm_id, ordre) sur la liaison — le fichier lui-même reste hors base");
 
       ABX.log("« " + p.nom + " » — qui d'autre porte CES octets ?",
@@ -99,18 +99,18 @@ SELECT l.ordre, l.nom_fichier, l.mime_declare, l.transfer_encoding, l.dispositio
         b.refs > 1
           ? "index (pj_id, comm_id) — sans ce sens de parcours, la dédup n'est qu'un gain de " +
             "disque : ici elle économise " + F.poids(b.ko * (b.refs - 1)) +
-            " et donne « où ai-je déjà vu ce fichier ? » (D24)"
+            " et donne « où ai-je déjà vu ce fichier ? » (D024)"
           : "index (pj_id, comm_id) — un seul porteur ici : sur ce fichier la dédup ne gagne " +
             "rien, et c'est le cas le plus fréquent. Le gain vient des quelques blobs très partagés");
 
-      if (At.recompressable(b)) ABX.log("Recompression proposée (D70)",
+      if (At.recompressable(b)) ABX.log("Recompression proposée (D070)",
 `-- geste EXPLICITE, jamais automatique
 UPDATE piece_jointe
    SET blob_origine = blob_ref, blob_ref = :neuf, octets = :neufs, recompresse_le = now()
  WHERE pj_id = ${b.pj_id};`,
         "⚠ le blob est partagé par " + b.refs + " liaison(s) : un seul UPDATE libère ≈ " +
         F.poids(At.gain(b)) + " mais modifie l'octet de TOUS les porteurs — l'original doit rester " +
-        "tant qu'un message doit être revérifiable (D25/D26)", true);
+        "tant qu'un message doit être revérifiable (D025/D026)", true);
     },
 
     logErp(m, quoi) {
@@ -122,7 +122,7 @@ UPDATE piece_jointe
           index: "trois étages, et aucun n'est facultatif : sans le second, AtomBox connaît " +
                  "l'identité mais pas le tiers ; sans le troisième, personne ne pose le tag",
           enfants: [
-            { label: "1. l'adresse pointe une IDENTITÉ, jamais l'inverse (D35)",
+            { label: "1. l'adresse pointe une IDENTITÉ, jamais l'inverse (D035)",
               sql:
 `SELECT c.correspondant_id, c.libelle
   FROM adresse a JOIN correspondant c USING (correspondant_id)
@@ -133,9 +133,9 @@ UPDATE piece_jointe
               sql:
 `SELECT application_id, ref_externe FROM correspondant_externe
  WHERE correspondant_id = :cid;               -- ${c.app} → ${f.ref}`,
-              index: "index (correspondant_id) — c'est la table D85, sans laquelle le " +
+              index: "index (correspondant_id) — c'est la table D085, sans laquelle le " +
                      "rattachement automatique n'existe pas" },
-            { label: "3. le tag est posé par le CONNECTEUR, pas par AtomBox (D21)",
+            { label: "3. le tag est posé par le CONNECTEUR, pas par AtomBox (D021)",
               sql:
 `-- aucune requête ici : c'est l'application qui appelle POST /messages/{id}/tags
 -- Adresse inconnue ⇒ message sans tag. C'est voulu, pas un échec d'ingestion.` },
@@ -148,7 +148,7 @@ UPDATE piece_jointe
 `POST /api/v1/messages/{comm_id}/tags        Authorization: Bearer <token ${c.app}>
 { "axe": "${tg.axe}", "valeur": "${tg.val}",
   "ref_externe": "${f.ref}", "piece": "${o.ref}" }`,
-          index: "l'ACL de l'axe est vérifiée avant d'écrire (D18) : poser un tag sur un axe " +
+          index: "l'ACL de l'axe est vérifiée avant d'écrire (D018) : poser un tag sur un axe " +
                  "qu'on ne peut que lire doit être refusé, pas ignoré",
           enfants: [
             { label: "le tag de CETTE application, créé ou mis à jour",
@@ -158,8 +158,8 @@ VALUES (:axe, :app, :valeur, :ref)
 ON CONFLICT (axe_id, application_id, valeur) DO UPDATE
    SET ref_externe = EXCLUDED.ref_externe
 RETURNING tag_id;`,
-              index: "l'application est DANS la clé d'unicité (D20) : quatre Dolibarr font " +
-                     "quatre jeux de tags et aucun n'écrase l'autre (D17)" },
+              index: "l'application est DANS la clé d'unicité (D020) : quatre Dolibarr font " +
+                     "quatre jeux de tags et aucun n'écrase l'autre (D017)" },
             { label: "la liaison message ↔ tag",
               sql:
 `INSERT INTO comm_tag (comm_id, tag_id, pose_par, pose_le)
@@ -173,7 +173,7 @@ VALUES (:id, :tag, :application, now()) ON CONFLICT DO NOTHING;`,
           sql:
 `GET /api/v1/messages?axe=${tg.axe}&valeur=${encodeURIComponent(tg.val)}
     &application=${c.app}&limite=20&curseur=eyJkIjoiMjAyNi0wMy0xMSIsImkiOjkxfQ
-Authorization: Bearer <token opaque de l'application>          -- D63`,
+Authorization: Bearer <token opaque de l'application>          -- D063`,
           index: "un ERP pagine PROFOND : le curseur n'est pas un raffinement, c'est la seule " +
                  "forme qui tienne à la millième page",
           warn: true,
@@ -183,12 +183,12 @@ Authorization: Bearer <token opaque de l'application>          -- D63`,
 `SELECT m.comm_id, m.sujet, m.from_adresse, m.date_reception, m.nb_pieces_jointes
   FROM comm_tag mt JOIN comm m USING (comm_id)
  WHERE mt.tag_id = :tag
-   AND m.boite_id = ANY (:portee_du_token)                     -- D37
+   AND m.boite_id = ANY (:portee_du_token)                     -- D037
    AND (m.date_reception, m.comm_id) < (:cur_date, :cur_id) -- curseur, pas OFFSET
  ORDER BY m.date_reception DESC, m.comm_id DESC
  LIMIT 20;`,
               index: "⚠ index (tag_id, date_reception DESC, comm_id DESC). La portée du " +
-                     "token s'applique ICI, jamais dans l'appelant (D18/D37)", warn: true },
+                     "token s'applique ICI, jamais dans l'appelant (D018/D037)", warn: true },
           ] },
 
         push: {
@@ -206,7 +206,7 @@ Authorization: Bearer <token opaque de l'application>          -- D63`,
 `INSERT INTO evenement_sortant (application_id, type, charge, etat, prochaine_tentative)
 VALUES (:app, 'message.tague', :json::jsonb, 'a_emettre', now());`,
               index: "index PARTIEL (prochaine_tentative) WHERE etat <> 'emis' — la file reste " +
-                     "minuscule après des millions d'événements (D86)" },
+                     "minuscule après des millions d'événements (D086)" },
           ] },
       }[quoi];
       ABX.log(E);

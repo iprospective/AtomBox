@@ -126,9 +126,9 @@
             : `<span class="badge">octets uniques</span>`}
           ${div ? `<span class="badge w">déclaré ${F.esc(F.mimeC(p.declare))} — c'est le type
                    DÉTECTÉ qui fait foi</span>` : ""}
-          ${b.eml ? `<span class="badge">message/rfc822 — dédupliqué comme un message (D66)</span>` : ""}
+          ${b.eml ? `<span class="badge">message/rfc822 — dédupliqué comme un message (D066)</span>` : ""}
           ${At.recompressable(b)
-            ? `<span class="badge w">recompression proposée · gain ≈ ${F.poids(At.gain(b))} (D70)</span>` : ""}
+            ? `<span class="badge w">recompression proposée · gain ≈ ${F.poids(At.gain(b))} (D070)</span>` : ""}
         </span></span></div>`;
   });
 
@@ -136,11 +136,11 @@
     if (!m.pjs.length) return "";
     const tot = m.pj_ko;
     return `<div class="box"><h4>Pièces jointes — ${m.pjs.length} · ${F.poids(tot)} décodés,
-        ${F.poids(Math.round(tot * 1.37))} sur le fil (base64, D69)</h4>
+        ${F.poids(Math.round(tot * 1.37))} sur le fil (base64, D069)</h4>
       <div class="pjl">${m.pjs.map((p, i) => R.render("attachment.card", { p, i })).join("")}</div>
       <div class="dmeta" style="margin-top:8px">Le <b>nom</b> et le <b>type déclaré</b> sont portés
         par la liaison, les <b>octets</b> et le <b>type détecté</b> par le blob : c'est ce qui permet
-        de dédupliquer sans mentir sur le message d'origine (D24/D25/D32).</div></div>`;
+        de dédupliquer sans mentir sur le message d'origine (D024/D025/D032).</div></div>`;
   });
 
   /* ---- contexte métier --------------------------------------------------- */
@@ -155,7 +155,7 @@
         <span class="tag">application ${F.esc(c.app)}</span>
         <span class="tag">client depuis ${f.depuis}</span></span></div>
       <div class="kv"><span class="k">Correspondant</span><span>${F.esc(m.mail)}
-        <span class="tag">→ identité résolue par l'annuaire (D35)</span></span></div>
+        <span class="tag">→ identité résolue par l'annuaire (D035)</span></span></div>
       <div class="kv"><span class="k">Encours</span><span><b>${F.euro(f.encours)}</b>
         ${f.echu ? `<span class="st due">dont ${F.euro(f.echu)} échu</span>`
                  : `<span class="st ok">rien d'échu</span>`}</span></div>
@@ -170,16 +170,16 @@
         <button class="hbtn" data-e="push">⇪ Notifier l'application</button>
       </div>
       <div class="dmeta" style="margin-top:8px">AtomBox ne stocke aucun montant : il porte le tag et
-        la référence externe (D20). Ce cadre est <b>rempli par un appel à l'application</b> au moment
+        la référence externe (D020). Ce cadre est <b>rempli par un appel à l'application</b> au moment
         de l'affichage — c'est le prix à payer pour ne pas dupliquer l'ERP, et le premier endroit
-        où il faudra un cache (Q31).</div></div>`;
+        où il faudra un cache (Q031).</div></div>`;
   });
 
   /* ---- tags : la seule partie du message que l'utilisateur écrit ---------- */
   R.define("message.tags", ({ m }) => {
     if (ABX.V0()) return "";
     const AXES = ABX.Fixtures.AXES.map(a => a.id).concat(["projet", "type"]);
-    return `<div class="box"><h4>Tags — plusieurs applications, sans écrasement (D17/D20)</h4>
+    return `<div class="box"><h4>Tags — plusieurs applications, sans écrasement (D017/D020)</h4>
       ${m.tags.length ? m.tags.map((t, i) => `<div class="kv">
           <span class="k">${F.esc(t.axe)}</span>
           <span class="v"><b>${F.esc(t.val)}</b>
@@ -195,7 +195,7 @@
       </div>
       <datalist id="t_vals"></datalist>
       <div class="hint">Un tag posé à la main appartient à l'utilisateur ; un tag posé par un
-        connecteur lui appartient (D19/D21) — le retirer ici ne l'empêche pas d'être reposé.</div>
+        connecteur lui appartient (D019/D021) — le retirer ici ne l'empêche pas d'être reposé.</div>
     </div>`;
   });
 

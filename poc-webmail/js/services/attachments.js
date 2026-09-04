@@ -1,4 +1,4 @@
-/* MAGASIN D'OCTETS DÉDUPLIQUÉ (D11 / D24 / D32).
+/* MAGASIN D'OCTETS DÉDUPLIQUÉ (D011 / D024 / D032).
 
    Le BLOB porte les octets, le sha256 et le type DÉTECTÉ.
    La LIAISON porte le nom de fichier, le type DÉCLARÉ et l'encodage d'origine.
@@ -80,7 +80,7 @@
       Attachments.recompter(m);
     },
 
-    /* +37 % sur le fil : c'est le coût du base64 (D69), et l'écart qui explique
+    /* +37 % sur le fil : c'est le coût du base64 (D069), et l'écart qui explique
        l'audit de dimensionnement du chapitre 08. */
     recompter(m) {
       m.pj = m.pjs.length;
@@ -95,7 +95,7 @@
                          ko: int(t.ko[0], t.ko[1]), refs:1 }), t.noms);
     },
 
-    /* Encapsulation d'un message dans un autre — dédupliquée comme un message (D66). */
+    /* Encapsulation d'un message dans un autre — dédupliquée comme un message (D066). */
     encapsuler(src) {
       return lien(blob({ ext:"eml", mime:"message/rfc822", ic:"✉",
         ko: Math.max(8, Math.round(src.size)), eml:true, refs:1 }), null);

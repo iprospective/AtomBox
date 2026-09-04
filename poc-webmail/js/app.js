@@ -3,7 +3,7 @@
    Ordre : charger le delta, engendrer le corpus, rejouer le delta dessus,
    compter, peindre. Le corpus n'est jamais lu depuis le stockage : il est
    reconstruit. C'est la démonstration que l'état d'un webmail tient dans le
-   rattachement, pas dans le message (D36). */
+   rattachement, pas dans le message (D036). */
 (function (ABX) {
   "use strict";
   const D = ABX.Dom, St = ABX.Store, C = ABX.Corpus, App = ABX.Controllers.App;
@@ -48,11 +48,11 @@
     ABX.log("Recherche globale plein texte",
 `SELECT m.comm_id, ts_rank(m.corps_tsv, plainto_tsquery('french', :q)) AS rang
   FROM rattachement r JOIN comm m USING (comm_id)
- WHERE r.compte_id = :moi                      -- la portée d'abord (D36)
+ WHERE r.compte_id = :moi                      -- la portée d'abord (D036)
    AND m.corps_tsv @@ plainto_tsquery('french', :q)
    AND r.sorti_le > now() - interval '2 years'  -- fenêtre par défaut : sans elle, pas d'élagage
  ORDER BY rang DESC LIMIT 50;`,
-      "GIN sur corps_tsv, chaud sur la zone active seulement (D34) — archives sur disque lent");
+      "GIN sur corps_tsv, chaud sur la zone active seulement (D034) — archives sur disque lent");
   };
 
   addEventListener("keydown", e => { if (e.key === "Escape" && App.qOuvert()) App.setQ(false); });

@@ -144,7 +144,7 @@ console.log("— tout le CDC dans la maquette (textes, sections, dictionnaire) �
   vrai(Object.keys(C.textes).length === C.chapitres.length, "chaque chapitre a son texte complet embarqué");
   vrai(Object.keys(C.sections).length >= 150, Object.keys(C.sections).length + " sections (décisions, questions, conseils) découpées");
   vrai(!!C.sections.D138 && C.sections.D138.includes("partitionn"), "la section D138 est là, et complète");
-  vrai(!!C.sections.Q54 && !!C.sections.C09, "les questions et les conseils ont aussi leur section");
+  vrai(!!C.sections.Q054 && !!C.sections.C009, "les questions et les conseils ont aussi leur section");
   const h = M.rendre("## Titre\n\n| a | b |\n|---|---|\n| **x** | `y` |\n\n> citation\n\n- un\n- deux\n\nVoir [le 03](cdc-rm2881-03-modele-donnees.md) et D138.");
   vrai(h.includes("<h3>") && h.includes("<table") && h.includes("<blockquote>") && h.includes("<li>deux</li>"),
        "le rendu markdown couvre titres, tableaux, citations, listes");
@@ -342,9 +342,9 @@ vrai(dansAbo.length > 0, "le dossier « " + abo.label + " » contient " + dansAb
 vrai(dansAbo.every(m => m.nature === "liste"), "et rien d'autre que des diffusions");
 const unAbo = dansAbo[0];
 vrai(A.Corpus.vue({ id: unAbo.fid, kind: "virtuel" }).includes(unAbo),
-     "le message est AUSSI dans le dossier de son correspondant — il n'a pas bougé (D77)");
+     "le message est AUSSI dans le dossier de son correspondant — il n'a pas bougé (D077)");
 vrai(A.Corpus.cnt(abo.id).t === dansAbo.length,
-     "les compteurs de la branche dérivée sont calculés dans la même passe (D78)");
+     "les compteurs de la branche dérivée sont calculés dans la même passe (D078)");
 vrai(A.Corpus.cnt("axe:abonnement").t ===
      A.Corpus.tous.filter(m => m.nature === "liste").length,
      "« Tous — Abonnements » compte toutes les diffusions");
@@ -400,7 +400,7 @@ const src = A.Corpus.par(lignes[0].dataset.id);
 A.Controllers.Compose.demarrer("rep", src);
 let t = A.Store.ui.tabs.find(x => x.type === "compo");
 vrai(!!t, "onglet de composition ouvert");
-eq(t.data.de, src.boite, "l'identité d'envoi est celle de la boîte qui a reçu (Q26)");
+eq(t.data.de, src.boite, "l'identité d'envoi est celle de la boîte qui a reçu (Q026)");
 vrai(t.data.sujet.startsWith("Re: "), "sujet préfixé");
 vrai(t.data.corps.includes("> "), "corps cité");
 t.data.a = "collegue@iprospective.eu, client@exemple.fr";
@@ -414,7 +414,7 @@ eq(envoi.pj, 1, "la pièce jointe a suivi");
 const q = A.QueryLog.entrees.find(x => x.label.startsWith("Envoyer"));
 const det = e => (e.detail || "");
 vrai(!!q, "l'envoi est journalisé");
-vrai(q.warn === true, "destinataires mixtes : l'avertissement D12 est levé");
+vrai(q.warn === true, "destinataires mixtes : l'avertissement D012 est levé");
 vrai(q.etapes.length >= 5, "l'envoi est décomposé en " + q.etapes.length + " étapes");
 vrai(q.etapes.some(e => det(e).includes("pg_notify")), "les externes passent au relais");
 vrai(q.etapes.some(e => det(e).includes("'recu'")), "les internes sont livrés en base");
@@ -529,10 +529,10 @@ eq(contrat.comm_id, cible2.id, "le JSON porte l'identifiant");
   vrai(k in contrat, "contrat d'API : champ « " + k + " »"));
 eq(contrat.pieces_jointes.length, cible2.pj, "les pièces jointes y sont");
 vrai("mime_declare" in contrat.pieces_jointes[0] && "mime_detecte" in contrat.pieces_jointes[0],
-     "avec les deux types, déclaré et détecté (D32)");
+     "avec les deux types, déclaré et détecté (D032)");
 vrai(tr.etapes.some(e => e.warn), "la cascade signale ses points coûteux");
 vrai(tr.etapes.filter(e => e.t === "http").length >= 2,
-     "un message tagué coûte un SECOND aller-retour, vers l'application (Q31)");
+     "un message tagué coûte un SECOND aller-retour, vers l'application (Q031)");
 const rc = A.Views.QueryLog.render([tr]);
 vrai(rc.includes("réseau — aller-retour") && rc.includes(">serveur<"),
      "la vue marque les passages de frontière");
@@ -564,7 +564,7 @@ eq(w.motif, "traite", "« traité » sort de la file");
 vrai(w.sorti > 0, "et pose sorti_le");
 vrai(A.QueryLog.entrees[0].etapes.some(e => e.warn), "en avertissant du changement de partition");
 A.MessageService.statuer(w, "a_faire");
-eq(w.motif, null, "revenir en arrière remet dans la file (Q09)");
+eq(w.motif, null, "revenir en arrière remet dans la file (Q009)");
 vrai(A.Corpus.aFaire().includes(w), "il apparaît dans la file de travail");
 eq(A.Corpus.filtrer(dossierAxe, "file", "date_desc", "tous", "en_cours")
     .every(m => m.statut === "en_cours"), true, "le filtre par statut fonctionne");
@@ -619,7 +619,7 @@ vrai(vc.includes("WhatsApp") && vc.includes("Téléphonie"), "le volet canaux an
 vrai(vc.includes("message.canal"), "et les précautions de schéma à prendre dès la V1");
 vrai(A.QueryLog.entrees[0].warn, "la trace insiste : ajouter la colonne en V4 coûte une migration");
 
-console.log("— arborescence Développement (D77) ——————————————");
+console.log("— arborescence Développement (D077) ——————————————");
 const tickets = A.Fixtures.valeurs.developpement;
 vrai(tickets.length === 34, tickets.length + " tickets sous Développement");
 vrai(/^RM\d+ · /.test(tickets[0].label), "un ticket est nommé RM<id> · titre");
@@ -687,7 +687,7 @@ const hf = p.doc.getElementById("detail").innerHTML;
 const nFeat = A.Views.Pages.FEATURES.reduce((s, [, l]) => s + l.length, 0);
 vrai(nFeat >= 40, nFeat + " fonctionnalités listées");
 vrai(hf.includes("V4"), "les jalons y figurent");
-vrai(hf.includes("Moteur de filtres"), "le moteur de filtres (D74) est listé");
+vrai(hf.includes("Moteur de filtres"), "le moteur de filtres (D074) est listé");
 vrai(hf.includes("DMARC"), "la délivrabilité DMARC est listée");
 vrai(hf.includes("expéditeur externe"), "l'affichage sûr est listé");
 A.Controllers.Pages.ouvrir("roadmap");

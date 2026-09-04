@@ -72,7 +72,7 @@
       });
     },
 
-    /* Les compteurs de toute l'arborescence : une requête, pas une par dossier (D78). */
+    /* Les compteurs de toute l'arborescence : une requête, pas une par dossier (D078). */
     logCompteurs() {
       ABX.log("Compteurs de non-lus de TOUTE l'arborescence",
 `-- une seule requête pour les ~300 branches, pas une par dossier

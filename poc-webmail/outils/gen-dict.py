@@ -111,7 +111,7 @@ for wf in WF:
 
 # ---- actions ----
 w("\n---\n\n## 16.5 — Actions\n")
-w("Chaque geste que l'interface ou l'API permet. *Portée* : ce que le geste modifie. *Trace* : écrit au journal (**D54**).\n")
+w("Chaque geste que l'interface ou l'API permet. *Portée* : ce que le geste modifie. *Trace* : écrit au journal (**D054**).\n")
 w(table([("Action", g("libelle")), ("Contexte", g("contexte")), ("Portée", g("portee")), ("Effet", g("effet")),
          ("Trace", g("trace")), ("POC", g("poc")), ("Décisions", lambda a: refs(a.get("decisions")))], ACT))
 
@@ -123,7 +123,7 @@ w(table([("Partielle", lambda t: "`%s`" % t["nom"]), ("Contexte", g("contexte"))
 
 # ---- composants ----
 w("\n\n---\n\n## 16.7 — Composants réutilisables\n")
-for fam, lab in (("noyau", "Noyau technique"), ("capacite", "Capacités enfichables (D94)"), ("embarquable", "Composants embarquables (D108)")):
+for fam, lab in (("noyau", "Noyau technique"), ("capacite", "Capacités enfichables (D094)"), ("embarquable", "Composants embarquables (D108)")):
     w("\n### %s\n" % lab)
     cols = [("Composant", g("nom")), ("Rôle", g("role"))]
     if fam != "embarquable": cols.append(("Contrat", g("contrat")))
@@ -145,7 +145,7 @@ w(table([("Référence", g("id")), ("Type", g("type")), ("Nom", g("nom")), ("Ce 
 
 # ---- routes ----
 w("\n\n---\n\n## 16.10 — Routes d'API\n")
-w("> Hypothèse REST (**Q07** non tranchée) : ce tableau décrit les **opérations et leur portée**, pas un style définitif. "
+w("> Hypothèse REST (**Q007** non tranchée) : ce tableau décrit les **opérations et leur portée**, pas un style définitif. "
   "Hors portée = 404, jamais 403 (**D108**).\n")
 w(table([("Méthode", g("methode")), ("Chemin", lambda r: "`%s`" % r["chemin"]), ("Rôle", g("role")), ("Portée", g("portee")),
          ("Entités", g("entites")), ("État", g("etat")), ("Décisions", lambda r: refs(r.get("decisions")))], ROU))

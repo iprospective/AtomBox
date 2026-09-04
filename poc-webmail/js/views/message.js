@@ -1,6 +1,6 @@
 /* VUE MESSAGE — l'onglet ouvert sur un message.
    La barre d'actions change selon l'état du message : un message à la corbeille
-   ne s'archive pas, un message sorti de la file se remet en file (Q09). */
+   ne s'archive pas, un message sorti de la file se remet en file (Q009). */
 (function (ABX) {
   "use strict";
   const R = ABX.Registry, F = ABX.Fmt, Fx = ABX.Fixtures, C = ABX.Corpus;
@@ -51,7 +51,7 @@
         ${R.render("erp.panel", { m })}
         ${R.render("attachment.list", { m })}
         <div class="box"><h4>Fil de discussion (${fil.length} messages)</h4>
-          <div class="dmeta">thread_id matérialisé — D55</div></div>
+          <div class="dmeta">thread_id matérialisé — D055</div></div>
         <div class="thread">${fil.map(x =>
           R.render("thread.item", { x, courant: x.id === m.id })).join("")}</div>`;
     },
@@ -99,7 +99,7 @@
     /* D137 — le bandeau dit CE QU'ON SAIT et QUI l'a dit, jamais « fiable » tout
        court : une confiance sans auteur ni date n'est pas vérifiable, et elle ne
        sait pas s'éteindre. Le geste de validation a une PORTÉE (D106) — valider
-       depuis une boîte partagée engage les autres, donc c'est tracé (D54). */
+       depuis une boîte partagée engage les autres, donc c'est tracé (D054). */
     fiabiliteHtml(m) {
       if (ABX.V0()) return "";
       if (m.sens === "out" || m.fiab === undefined || m.spoof) return "";
@@ -177,20 +177,20 @@
             <b>sosie</b> d'un domaine que vous connaissez.` : ""}
           <br>AtomBox <b>alerte</b>, il ne rejette pas — l'analyse d'usurpation est
           probabiliste, et un rejet silencieux coûte plus cher qu'une bannière de
-          trop (Q49).</div></div>`;
+          trop (Q049).</div></div>`;
     },
 
     /* Un transfert par référence n'est pas une copie : c'est un pointeur, et un
-       pointeur peut mourir (Q30). L'écran doit le dire, pas le cacher. */
+       pointeur peut mourir (Q030). L'écran doit le dire, pas le cacher. */
     lienHtml(m) {
       if (ABX.V0()) return "";          // V0 : le transfert est par copie, pas par référence
       if (!m.ref) return "";
       const src = C.par(m.ref);
       return `<div class="lien" style="margin:12px 16px">➦ <b>Message transféré par référence</b> —
         aucune copie n'a été faite : ce message pointe
-        « ${F.esc(src ? src.subject : "message supprimé")} » (D58/D67).
+        « ${F.esc(src ? src.subject : "message supprimé")} » (D058/D067).
         ${src ? `<button class="hbtn" id="suivre" style="margin-top:6px">Ouvrir l'original</button>`
-              : `<span class="tag">l'original n'existe plus — le lien est mort (Q30)</span>`}</div>`;
+              : `<span class="tag">l'original n'existe plus — le lien est mort (Q030)</span>`}</div>`;
     },
   };
 })(window.ABX = window.ABX || {});

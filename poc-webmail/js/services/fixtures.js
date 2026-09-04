@@ -1,4 +1,4 @@
-/* FIXTURES — la CARDINALITÉ est le sujet, pas le volume (D80).
+/* FIXTURES — la CARDINALITÉ est le sujet, pas le volume (D080).
    200 fournisseurs dans un panneau latéral : c'est cette échelle qui décide de
    la conception de l'écran, et elle ne se devine pas sur vingt dossiers. */
 (function (ABX) {
@@ -25,7 +25,7 @@
     "cascade de paramétrage","déchetterie","groupes internes","anti-usurpation",
     "SDK PHP","composant embarquable","export PDF","position de lecture"];
 
-  /* Les six familles de D76 : un AXE, ses VALEURS. */
+  /* Les six familles de D076 : un AXE, ses VALEURS. */
   const AXES = [
     { id:"fournisseur",  label:"Fournisseurs",    icon:"📦", n:200 },
     { id:"client",       label:"Clients",         icon:"🏢", n:52,  sub:"en cours" },
@@ -33,9 +33,9 @@
     { id:"collaborateur",label:"Collaborateurs",  icon:"👥", n:11 },
     { id:"prospect",     label:"Prospects",       icon:"🎯", n:8,  poids:[2, 8] },
     { id:"sav",          label:"SAV",             icon:"🛟", n:23,  ticket:true },
-    /* Un axe poussé par une AUTRE application que l'ERP (D19/D20) : Redmine tient
+    /* Un axe poussé par une AUTRE application que l'ERP (D019/D020) : Redmine tient
        les tickets, Dolibarr les clients. Deux applications, deux axes, deux ACL —
-       et la même arborescence engendrée (D77). */
+       et la même arborescence engendrée (D077). */
     { id:"developpement",label:"Développement",   icon:"🧩", n:34,  rm:true,
       app:"redmine-ipro" },
     /* Trois axes calés sur l'arborescence IMAP réelle (chapitre 14) : le nombre
@@ -57,7 +57,7 @@
     /* Un axe DÉRIVÉ (D133) : ses dossiers ne sont pas des tiers, ils sont
        CALCULÉS depuis le corpus — un par liste de diffusion rencontrée. Rien
        n'est fabriqué pour lui : les messages qu'il montre vivent déjà dans
-       l'axe de leur correspondant, et ils n'ont pas bougé (D77). */
+       l'axe de leur correspondant, et ils n'ont pas bougé (D077). */
     { id:"abonnement",   label:"Abonnements",     icon:"📰", n:0, derive:true },
   ];
 
@@ -88,7 +88,7 @@
      se retrouver avec « à faire » dans le même espace de noms que « Belair SAS »,
      et une application connectée capable de vider votre file de travail.
 
-     `lu_le` reste à part : c'est un FAIT daté (D41), pas un état — un message peut
+     `lu_le` reste à part : c'est un FAIT daté (D041), pas un état — un message peut
      être lu et à faire, non lu et déjà pris en charge par un collègue. */
   const STATUTS = [
     { id:"nouveau",  label:"Nouveau",    ic:"○", ordre:0 },
@@ -100,7 +100,7 @@
   const statut = id => STATUTS.find(s => s.id === id) || STATUTS[0];
 
   /* Dossiers spéciaux. « Traités » et « Archives » sont des VUES sur
-     motif_sortie, pas des dossiers : c'est D30 lu par D51. */
+     motif_sortie, pas des dossiers : c'est D030 lu par D051. */
   const SPECIAUX = [
     { id:"inbox",    label:"Boîte de réception", icon:"📥", poids:64 },
     { id:"sent",     label:"Envoyés",            icon:"📤", poids:22, sortant:true },
@@ -140,7 +140,7 @@
     "Bonjour,\n\nPourriez-vous nous confirmer les quantités avant expédition ?\n\nMerci d'avance,",
     "Bonjour,\n\nLe document est en pièce jointe. N'hésitez pas si vous avez des questions.\n\nBien à vous,"];
 
-  /* Le compte connecté et ses boîtes — l'identité d'envoi est celle d'une BOÎTE (Q26). */
+  /* Le compte connecté et ses boîtes — l'identité d'envoi est celle d'une BOÎTE (Q026). */
   const MOI = { nom:"Mathieu Moulin", boites: [
     { id:"b1", adresse:"mathieu@iprospective.eu",   label:"Perso" },
     { id:"b2", adresse:"contact@iprospective.eu",   label:"Boîte commune" },
@@ -151,9 +151,9 @@
   /* Administration : ce qu'un exploitant doit pouvoir régler sans base de données. */
   const DOMAINES = [
     { nom:"iprospective.eu", role:"pilote", boites:3, alias:7, mx:"mx1.iprospective.fr",
-      ingestion:"IMAP (lecture seule)", note:"domaine de test, D49" },
+      ingestion:"IMAP (lecture seule)", note:"domaine de test, D049" },
     { nom:"iprospective.fr", role:"recette", boites:9, alias:41, mx:"mx1.iprospective.fr",
-      ingestion:"IMAP (lecture seule)", note:"production intacte, D50" },
+      ingestion:"IMAP (lecture seule)", note:"production intacte, D050" },
   ];
   /* D128 (B1) — les domaines sur lesquels une usurpation par nom se pose : le nom
      d'un correspondant connu, une adresse qui ne lui appartient pas. Deux d'entre
