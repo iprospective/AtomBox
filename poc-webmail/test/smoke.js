@@ -65,6 +65,47 @@ vrai(hRefus.includes("550") && /il y a \d+ jours/.test(hRefus),
 vrai(A.Corpus.tous.every(m => m.repond !== "non" || m.nature !== "humain"),
      "on ne refuse jamais la réponse à un message écrit par une personne");
 
+console.log("— la page CDC organisée comme docs/ (plan, vrac, modèle) ————");
+{
+  const C = A.CDC;
+  vrai(Object.keys(C.plan || {}).length >= 15, Object.keys(C.plan).length + " chapitres avec objet et avancement — le plan du sommaire");
+  vrai((C.vrac || []).length >= 60 && C.vrac.every(n => n.id && n.verbatim), C.vrac.length + " notes de vrac, chacune avec son verbatim");
+  vrai(Object.keys(C.modele || {}).length >= 20, Object.keys(C.modele).length + " fichiers du modèle embarqués");
+  A.Store.ui.cdc = {};
+  const page = A.Views.Pages.render("cdc");
+  const pos = t => page.indexOf(t);
+  /* on ancre sur les TITRES de section (<h4>), pas sur des mots qui peuvent
+     apparaître plus tôt dans un texte d'intro */
+  const h4 = t => page.indexOf("<h4>" + t);
+  vrai(h4("Plan") > 0 && h4("90 — Registre") > h4("Plan") && h4("91 — Notes en vrac") > h4("90 — Registre")
+       && h4("99 — Questions ouvertes") > h4("91 — Notes en vrac") && h4("modele-cdc/") > h4("99 — Questions ouvertes"),
+       "la page suit l'ordre de docs/ : plan → 90 → 91 → 99 → modèle");
+  vrai(page.includes("N01") && page.includes("date de traitement"), "le vrac est affiché avec ses verbatims");
+  vrai(page.includes("audit livré") || page.includes("vivant"), "l'avancement de chaque chapitre est celui du sommaire");
+  A.Store.ui.cdc = { modele: "grille-360.md" };
+  vrai(A.Views.Pages.render("cdc").includes("feuille de passe"), "un fichier du modèle se lit dans la maquette");
+  A.Store.ui.cdc = {};
+}
+
+console.log("— tri des fonctionnalités par colonne ————————————————");
+{
+  const ui = A.Store.ui, ids = h => [...h.matchAll(/<td><b>(F\d{3})<\/b><\/td>/g)].map(m => m[1]);
+  ui.triFeat = "jalon"; ui.triFeatDesc = false;
+  const parJalon = ids(A.Views.Pages.render("features"));
+  const j = id => A.CDC.dict.fonctionnalites.find(f => f.id === id).jalon;
+  vrai(parJalon.length >= 100, parJalon.length + " lignes dans la table unique");
+  vrai(parJalon.slice(0, 10).every(id => j(id) === 0), "trié par jalon : la V0 vient en tête");
+  ui.triFeatDesc = true;
+  const jd = ids(A.Views.Pages.render("features"));
+  vrai(j(jd[0]) === null || j(jd[0]) >= 4, "inversé : les jalons les plus lointains (ou écartés) en tête");
+  ui.triFeat = "rang"; ui.triFeatDesc = false;
+  const parRang = ids(A.Views.Pages.render("features"));
+  vrai(parRang.indexOf("F114") < parRang.indexOf("F101") && parRang.indexOf("F101") < parRang.indexOf("F113"),
+       "trié par ordre de codage : base → ingestion → synchronisation");
+  ui.triFeat = "domaine"; ui.triFeatDesc = false;
+  vrai(A.Views.Pages.render("features").includes('class="trih on"'), "l'en-tête actif est marqué");
+}
+
 console.log("— la V0 : le client IMAP (D140) ——————————————————————");
 {
   const ui = A.Store.ui, v0 = A.CDC.dict.jalons[0];
@@ -638,7 +679,8 @@ vrai(hc.includes(derniere), "la dernière décision (" + derniere + ") est affic
 const ouverte = A.CDC.questions.find(q => q.urgence !== "tranchee");
 vrai(!!ouverte && hc.includes(ouverte.id),
      "une question encore ouverte (" + (ouverte && ouverte.id) + ") est affichée");
-vrai(!hc.includes(">Q44<"), "une question tranchée ne figure plus dans les ouvertes");
+/* Comme dans docs/ : une question tranchée RESTE, barrée, avec sa décision. */
+vrai(/<s>[^<]*<\/s>/.test(hc.slice(hc.indexOf("<h4>99"))), "une question tranchée reste, barrée, comme dans docs/");
 vrai(hc.includes(A.CDC.genere), "la page date son index");
 A.Controllers.Pages.ouvrir("features");
 const hf = p.doc.getElementById("detail").innerHTML;

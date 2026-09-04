@@ -7555,6 +7555,513 @@
     "Q54": "## Q54 — ⏸ en pause : le défi anti-robot\n\n> ⏸ **Mise en réserve, arbitrée.** Décision du 3 septembre 2026 : le mécanisme de défi\n> n'est **au périmètre d'aucun jalon**. La colonne `verifie_le` reste au modèle (**D137**),\n> rien n'est construit autour. Ce n'est pas une question en attente d'avis — c'est une\n> fonction volontairement écartée, avec une condition de reprise explicite.\n\n**Pourquoi elle est écartée** (détail dans **D137**) : envoyer un défi à un expéditeur non\nauthentifié produit le *backscatter* que **D119** refuse de recevoir ; 47 % du courrier est\nde la machine (**chapitre 15**) et ne répondra jamais ; et un défi automatique tombe sous\nles garde-fous de **D113**. Les conditions qui rendraient le mécanisme acceptable le\nréduisent à un cas si étroit qu'on ne sait pas s'il vaut son coût d'exploitation.\n\n**Ce qui la sortirait de la réserve — un chiffre, pas un avis.** Le nombre de messages\nréellement éligibles : dans la quarantaine (**D71**), ceux de nature `humain` (**D130**)\ndont le domaine est **aligné** et l'adresse inconnue. Ce comptage est possible **dès la V1,\nsans rien envoyer** — c'est un `SELECT`, pas un développement.\n\n| Ce que dirait la mesure | Ce qu'on en ferait |\n|---|---|\n| quelques messages par mois | la réponse devient **jamais** — et la question se ferme |\n| plusieurs dizaines par semaine | on reprend le sujet, avec les conditions de **D137** comme cadre |\n\n*À reprendre après l'étape 1 du pilote (**D52**), et pas avant : c'est là que le chiffre\nexistera.*",
     "Q55": "## Q55 — les poids et les seuils du score\n\n*Issue de **D139**.* Le catalogue de **D128** donne les règles et leur force *qualitative* —\nfort, moyen, pondérateur. Il ne donne ni les poids numériques, ni les seuils qui déclenchent\nl'alerte puis la quarantaine.\n\nCe n'est pas un oubli de conception : **ces valeurs ne se déduisent pas, elles se calibrent**.\nUn poids choisi au jugé produit soit une alerte permanente — et **D128** rappelle qu'une\nalerte qui se déclenche une fois sur deux n'est plus lue au bout d'une semaine —, soit un\nsilence total.\n\nCe qu'il faut pour les fixer :\n\n1. un corpus réel étiqueté — les messages du pilote (**D52**), avec le verdict humain a\n   posteriori sur ceux qui ont été signalés ;\n2. la mesure du **taux de déclenchement par règle** : une règle qui touche 40 % du courrier\n   n'est pas une règle, c'est un bruit de fond ;\n3. le **taux de faux positifs par famille**, seul chiffre qui autorise à monter un seuil.\n\n**Avis** : ne pas livrer de seuils « par défaut » sortis de nulle part. Livrer le moteur\n(**D127**) avec des poids **explicites et modifiables** (**D106**), une valeur de départ\nvolontairement **conservatrice** — beaucoup d'indices, peu d'alertes —, et l'instrument qui\npermet de les régler : le compteur de déclenchements par règle. C'est la même exigence que\npour **D74** (une règle qui n'attrape rien doit se voir) et que pour **Q54** (on reprend sur\nun chiffre).",
     "Q56": "## Q56 — la V0 et l'édition des règles Sieve\n\n*Issue de **D140**.* La V0 n'a pas de moteur de filtres (**D74** est V1) ; Sieve continue\nde trier côté serveur. Mais qui **édite** les règles pendant la V0 ?\n\n| Option | Pour | Contre |\n|---|---|---|\n| **Roundcube reste installé** pour l'éditeur managesieve | rien à construire ; l'éditeur existant est correct | deux webmails côte à côte pendant la V0, et l'un ne sert qu'à ça |\n| **la V0 embarque un éditeur managesieve** | un seul outil | c'est construire une interface pour un langage qu'on remplace en V1 — du jetable pur |\n| **un import Sieve → moteur AtomBox** dès la V1, et rien en V0 | aucun jetable | les règles ne bougent pas pendant la V0 — acceptable si elle dure un mois |\n\n**Avis** : la première, sans état d'âme. Un mois de Roundcube en parallèle pour éditer trois\nrègles coûte moins qu'un éditeur Sieve qu'on jettera — et l'import des règles existantes\nvers le moteur (**D74**) est de toute façon un besoin de la V1, que le [chapitre 14](cdc-rm2881-14-sieve-existant.md)\na documenté règle par règle."
+  },
+  "plan": {
+    "01": {
+      "objet": "ce qu'est le produit, ses composants, ses consommateurs",
+      "avancement": "cadré"
+    },
+    "02": {
+      "objet": "magasin d'octets, zstd, déduplication",
+      "avancement": "cadré"
+    },
+    "03": {
+      "objet": "entités, schéma PostgreSQL, DDL",
+      "avancement": "en cours"
+    },
+    "04": {
+      "objet": "segmentation, partitionnement, index",
+      "avancement": "D14 validée, D15 à arbitrer"
+    },
+    "05": {
+      "objet": "surface exposée au webmail et à l'ERP/CRM",
+      "avancement": "esquissé"
+    },
+    "06": {
+      "objet": "réception, envoi, messagerie interne, MTA",
+      "avancement": "cadré"
+    },
+    "07": {
+      "objet": "quels logiciels en bénéficieraient, et dans quel ordre",
+      "avancement": "inventaire fait, Q11 à arbitrer"
+    },
+    "08": {
+      "objet": "audit volumétrie / perfs / RAM sur 100 boîtes × 50 k",
+      "avancement": "chiffré, hypothèses à valider"
+    },
+    "09": {
+      "objet": "domaines, alias, portées, administration",
+      "avancement": "Q22 à trancher"
+    },
+    "10": {
+      "objet": "ce qui est V1, ce qui est V2, ce qu'on ne peut pas repousser",
+      "avancement": "cadré (D45)"
+    },
+    "11": {
+      "objet": "les 19 cas du pilote, rattachés aux décisions",
+      "avancement": "prêt à exécuter"
+    },
+    "12": {
+      "objet": "dossiers virtuels, arborescence engendrée, compteurs",
+      "avancement": "POC interface d'abord"
+    },
+    "13": {
+      "objet": "cycle de vie de l'envoi, DSN, DMARC, absence",
+      "avancement": "cadré (D99/D100)"
+    },
+    "14": {
+      "objet": "analyse du filtrage en production : 36 règles, 361 conditions",
+      "avancement": "audit livré"
+    },
+    "15": {
+      "objet": "53 476 messages réels : distribution, débit, cardinalité, réglages",
+      "avancement": "audit livré"
+    },
+    "16": {
+      "objet": "généré depuis dict/*.yml : entités, champs, relations, workflows, actions, templates, composants, protocoles, normes, routes, jalons, fonctionnalités",
+      "avancement": "vivant — la source du POC"
+    },
+    "17": {
+      "objet": "comment ce CDC s'est écrit : sept temps, grille 360°, cinq postures, recueil des utilisateurs — et le modèle de CDC réutilisable dans modele-cdc/",
+      "avancement": "consigné — source de RM2967"
+    },
+    "90": {
+      "objet": "toutes les propositions et leur arbitrage",
+      "avancement": "vivant"
+    },
+    "91": {
+      "objet": "boîte de réception : ce qui est jeté au fil de l'eau, avant tri",
+      "avancement": "vivant"
+    },
+    "99": {
+      "objet": "ce qui reste à trancher, et ce que ça bloque",
+      "avancement": "vivant"
+    }
+  },
+  "vrac": [
+    {
+      "id": "N01",
+      "verbatim": "« on peut se baser sur la date de traitement pour mon 3e cas »",
+      "etat": "✅ traitée",
+      "traite_par": "D14 · 04"
+    },
+    {
+      "id": "N02",
+      "verbatim": "« réfléchir à la différence entre archivé et traité »",
+      "etat": "✅ traitée",
+      "traite_par": "D15 · 04 · Q10"
+    },
+    {
+      "id": "N03",
+      "verbatim": "« faire un point sur les différents logiciels qui utilisent de la messagerie et bénéficieraient d'une solution de type AtomMailBox »",
+      "etat": "✅ traitée",
+      "traite_par": "07-intégrations · Q11"
+    },
+    {
+      "id": "N04",
+      "verbatim": "« il faut pouvoir ajouter des tags sur les emails avec un système d'index puissant/performant, pouvoir regrouper les emails par projet/client/fournisseur/… »",
+      "etat": "✅ traitée",
+      "traite_par": "D16 · 03-modèle · Q12"
+    },
+    {
+      "id": "N05",
+      "verbatim": "« ça me paraît pertinent que ça se fasse dans ce sens, de façon à offrir une forme d'interopérabilité entre les différentes solutions utilisant la messagerie » (arbitrage de Q12)",
+      "etat": "✅ traitée",
+      "traite_par": "D17 · 03-modèle · Q13"
+    },
+    {
+      "id": "N06",
+      "verbatim": "« oui des catégories de tags avec des ACL sur ces dernières j'imagine ? »",
+      "etat": "✅ traitée",
+      "traite_par": "D18 · 03-modèle · ferme Q13"
+    },
+    {
+      "id": "N07",
+      "verbatim": "« du coup il faudra une notion d'application connectée avec ses tags »",
+      "etat": "✅ traitée",
+      "traite_par": "D19 · 03-modèle · ouvre Q14"
+    },
+    {
+      "id": "N08",
+      "verbatim": "« une instance, on peut même imaginer avoir plusieurs instances Dolibarr connectées, mais je parlais d'application de façon abstraite, 4 Dolibarr = 4 applications différentes, qui partagent un fonctionnement »",
+      "etat": "✅ traitée",
+      "traite_par": "D20 · 03-modèle · requalifie Q14"
+    },
+    {
+      "id": "N09",
+      "verbatim": "« AtomMailBox dispose de \"plugins\" ou de \"conf\" pour tout un tas d'applications connues »",
+      "etat": "✅ traitée",
+      "traite_par": "D21 · 07-intégrations"
+    },
+    {
+      "id": "N10",
+      "verbatim": "« il faudra réfléchir à un nom ! Je ne veux pas que ça sonne trop comme protonmail alors que ça fait depuis genre 10-15 ans que j'ai trouvé ce nom »",
+      "etat": "🆕 à traiter",
+      "traite_par": "Q15 — analyse posée, décision à prendre à froid"
+    },
+    {
+      "id": "N11",
+      "verbatim": "« il faudra donc rendre cela simple côté base de données »",
+      "etat": "✅ traitée",
+      "traite_par": "D22 · 03-modèle"
+    },
+    {
+      "id": "N12",
+      "verbatim": "« je ne veux pas forcément réduire le nombre de tables, attention ! Je veux que ça fonctionne bien ! Que ce soit optimisé : rapide, léger »",
+      "etat": "✅ traitée",
+      "traite_par": "corrige D22"
+    },
+    {
+      "id": "N13",
+      "verbatim": "« je voudrais un audit sur la quantité de donnée, des index, sur la base de 100 boîtes email avec 50k email dans chacune (~100ko/email → 5Go/boîte), pluguées sur Dolibarr, un webmail, Nextcloud, etc. »",
+      "etat": "✅ traitée",
+      "traite_par": "D23 · 08-dimensionnement"
+    },
+    {
+      "id": "N14",
+      "verbatim": "« on va assez rapidement gérer le cas de la déduplication des pièces jointes dans les emails, que l'on extraira, et on proposera de la recompression lorsque c'est utile, par exemple des photos énormes pas ou mal optimisées »",
+      "etat": "✅ traitée",
+      "traite_par": "D24 · 02-stockage · ouvre Q16"
+    },
+    {
+      "id": "N15",
+      "verbatim": "« oui extraction réversible, on garde DKIM vérifiable, et quoi qu'il en soit pour ce dernier, on stockera en base le résultat dkim/spf à l'ingestion pour le fiabiliser »",
+      "etat": "✅ traitée",
+      "traite_par": "D25 · D26 · 06-flux-mail · ouvre Q17"
+    },
+    {
+      "id": "N16",
+      "verbatim": "« on va conserver les headers dans un champ text […] juste un champ booléen supplémentaire pour l'alignement global, ainsi qu'un champ pour la note spamassassin. oui garde la divergence, c'est un signal »",
+      "etat": "✅ traitée",
+      "traite_par": "D27 · D28 · 06-flux-mail · 08"
+    },
+    {
+      "id": "N17",
+      "verbatim": "« quels autres champs me conseilles-tu pour un email ? ou table associée ? »",
+      "etat": "✅ traitée",
+      "traite_par": "C09 · 03-modèle — revue à arbitrer"
+    },
+    {
+      "id": "N18",
+      "verbatim": "« valide tout ça, ajoute-les au modèle. Destinataires aussi sur message non ? […] From / To / Subject / spam score, is_spam, spf/dkim valid / Date sent / Date received / Date Traité / … Quoi d'autre ? »",
+      "etat": "✅ traitée",
+      "traite_par": "D29 · 03-modèle — *relance sur D15*"
+    },
+    {
+      "id": "N19",
+      "verbatim": "« ok pour motif_sortie. is_spam correspondra à ce que tu dis ok. au lieu de snippet, carrément un extrait text brut de l'email complet indexé fulltext serait pertinent ? ok pour tout en fait. Est-ce que nb_pj serait utile aussi ? les pj seront en many2many avec le poids et mime sur chacune d'elle »",
+      "etat": "✅ traitée",
+      "traite_par": "D30 · D31 · D32 · ferme Q10"
+    },
+    {
+      "id": "N20",
+      "verbatim": "« ok pour snippet mais en faire un résumé alors avec des mots-clés plutôt ? plein texte en RAM sur la zone active, sur disque pour le reste, c'est possible ? Ok pour le nom de pj sur la table de liaison. idem mime. ok pour le reste »",
+      "etat": "✅ traitée",
+      "traite_par": "D33 · D34 · ferme Q04"
+    },
+    {
+      "id": "N21",
+      "verbatim": "« Q02 : identité, avec plusieurs adresses possibles »",
+      "etat": "✅ traitée",
+      "traite_par": "D35 · 03-modèle · ouvre Q18, Q19"
+    },
+    {
+      "id": "N22",
+      "verbatim": "« Q03 : seulement ceux qui ont un rattachement »",
+      "etat": "✅ traitée",
+      "traite_par": "D36 · 03-modèle · ouvre Q20, Q21"
+    },
+    {
+      "id": "N23",
+      "verbatim": "« q20 : oui et non… pas de boîte mais un accès API avec plusieurs boîtes (ou nom de domaine complet ?) ; q21 : visible par un compte de domaine ou un compte admin ; un compte est rattaché à une/plusieurs adresses destinataire, un/plusieurs domaines ; timestamp de lecture ; admin comme postfixadmin, même format de base ? ; un alias aura sa propre boîte ; les identifiants d'API ne sont pas des boîtes ; suivi du rattachement à un compte utilisateur après désinscription — pas convaincu de la bonne façon de le modéliser »",
+      "etat": "✅ traitée",
+      "traite_par": "D37→D41 · 09-comptes · ouvre Q22, Q23"
+    },
+    {
+      "id": "N24",
+      "verbatim": "« AtomBox est plus qu'un archiveur, il pourrait tenir le rôle de dovecot […] en l'état il va se connecter sur les comptes imap et tout aspirer […] on pourrait presque délivrer les emails directement dans atombox via un socket depuis postfix. À terme les emails ne seront plus accessibles en imap classique (sauf à créer un module dovecot pour le stockage atom) »",
+      "etat": "✅ traitée",
+      "traite_par": "D42 · 06-flux-mail · 01-périmètre · ouvre Q24"
+    },
+    {
+      "id": "N25",
+      "verbatim": "« le module dovecot serait intéressant ceci dit. À noter »",
+      "etat": "✅ traitée",
+      "traite_par": "Q24 — piste privilégiée + prérequis UID/UIDVALIDITY dans 03-modèle"
+    },
+    {
+      "id": "N26",
+      "verbatim": "« ok pour uid/uid_validity, ajoute-les au modèle. Concernant les 2 rôles de dovecot c'est exactement ce que je pensais, c'est pourquoi je parlais de livrer directement dans atombox plutôt que réécrire dovecot (et plus particulièrement la partie difficile : le serveur imap) »",
+      "etat": "✅ traitée",
+      "traite_par": "D43 · 03-modèle — schéma cible remis à jour (19 tables)"
+    },
+    {
+      "id": "N27",
+      "verbatim": "« du coup si on peut faire un LMTP ça évitera de mettre dans dovecot pour récupérer dans atombox en imap, et ensuite on verra pour le module fs dovecot »",
+      "etat": "✅ traitée",
+      "traite_par": "D44 · 06-flux-mail · précise Q24"
+    },
+    {
+      "id": "N28",
+      "verbatim": "« tout ça dans une v2 je pense » (volet livraison : LMTP, double livraison, module Dovecot)",
+      "etat": "✅ traitée",
+      "traite_par": "D45 · 10-phasage"
+    },
+    {
+      "id": "N29",
+      "verbatim": "« tout ça = lmtp et module dovecot. Dans un premier temps le démon atombox se connectera en imap aux comptes qu'il administre (tous) pour ingérer les messages »",
+      "etat": "✅ traitée",
+      "traite_par": "D46 · 06-flux-mail · 10-phasage"
+    },
+    {
+      "id": "N30",
+      "verbatim": "« j'aimerais aussi une gestion de dossiers \"classiques\" pour chaque boite email, qui permettra de servir en IMAP plus tard […] créer les dossiers classiques par défaut (INBOX, Sent, Drafts, Junk, Trash) et les protéger contre la suppression […] un système d'alias, pour gérer/renvoyer correctement les noms de dossier par défaut outlook et apple »",
+      "etat": "✅ traitée",
+      "traite_par": "D47 · 09-comptes · ouvre Q25"
+    },
+    {
+      "id": "N31",
+      "verbatim": "« chez un client (matnat) […] récupération asynchrone toutes les 5mn sur 30 boites […] par une tâche cron avec un script imapsync. ce serait possible de conserver un daemon pendant les heures de bureau, qui récupère tout en temps réel sur l'ensemble des dossiers ? car le imapsync est très lent, côté serveur des scripts sieve livrent le courrier dans des dossiers spécifiques suivant les boites »",
+      "etat": "✅ traitée",
+      "traite_par": "D48 · 06-flux-mail · 10-phasage"
+    },
+    {
+      "id": "N32",
+      "verbatim": "« pardon non pas Matnat comme pilote. iprospective.eu comme pilote c'est un domaine que je n'utilise pas on pourra créer des boîtes »",
+      "etat": "✅ traitée",
+      "traite_par": "D49 · corrige D48 · 10-phasage"
+    },
+    {
+      "id": "N33",
+      "verbatim": "« on démarre sur iprospective.fr en pilote, mais en lecture seule IMAP, sans toucher au LMTP actuel, je veux juste ingérer les emails dans un premier temps. J'ai plusieurs boites email historiques dedans, énormément d'alias »",
+      "etat": "✅ traitée",
+      "traite_par": "D50 · 10-phasage"
+    },
+    {
+      "id": "N34",
+      "verbatim": "« pour D30/Q25 : effectivement trash, junk, drafts et inbox ne sont pas des dossiers… mais je veux que l'utilisateur puisse faire des dossiers comme dans un webmail classique »",
+      "etat": "✅ traitée",
+      "traite_par": "D51 · 09-comptes · ferme Q25"
+    },
+    {
+      "id": "N35",
+      "verbatim": "« on va commencer sur iprospective.eu pour tester, on cadrera dessus, et une fois prêts un test sur iprospective.fr en recette (sans modif prod) »",
+      "etat": "✅ traitée",
+      "traite_par": "D52 — réhabilite D49, requalifie D50 · 10-phasage"
+    },
+    {
+      "id": "N36",
+      "verbatim": "« oui on va créer des alias, des boites perso, communes, pour tester l'ensemble »",
+      "etat": "✅ traitée",
+      "traite_par": "D53 · 11-jeu-essai"
+    },
+    {
+      "id": "N37",
+      "verbatim": "« lorsqu'il perd cet accès, il perd la visibilité de ses archives […] si carole a répondu avec l'adresse orders@ elle ne verra plus sa réponse […] si elle a répondu avec carole@ elle verra encore sa réponse, mais pas l'email source, pas le fil complet du coup ? »",
+      "etat": "✅ traitée",
+      "traite_par": "09-comptes · ouvre Q26 · renforce Q22"
+    },
+    {
+      "id": "N38",
+      "verbatim": "« Excellent Q26 […] il faudra indexer proprement les fils de discussion aussi ! OK pour la gestion cloisonnée […] Q22 : je ne veux pas de copie, mais […] rattacher un compte utilisateur humain […] statuts de lecture, log de modifs […] on peut même envisager des acls complètes sur les boîtes et les emails (accès lecture seule) »",
+      "etat": "✅ traitée",
+      "traite_par": "D54 · D55 · ferme Q22 · ouvre Q27"
+    },
+    {
+      "id": "N39",
+      "verbatim": "« oui partitionnement par date du journal d'action, au moins -1an, -5ans et le reste »",
+      "etat": "✅ traitée",
+      "traite_par": "D56 · 09-comptes · ouvre Q28"
+    },
+    {
+      "id": "N40",
+      "verbatim": "« ok pour séparer l'accès persistant pour le user de la trace. acl modifiable, révocable, par email. On doit pouvoir partager un email, et cela rejoint une question : transférer un email sans le recopier. un transfert pourrait être un message avec un \"lien\" vers l'email auquel on a accès »",
+      "etat": "✅ traitée",
+      "traite_par": "D57 · D58 · ferme Q27 · ouvre Q29, Q30"
+    },
+    {
+      "id": "N41",
+      "verbatim": "« \"a lu\" est aussi une trace metier. C'est un debut de workflow de traitement »",
+      "etat": "✅ traitée",
+      "traite_par": "corrige D56/Q28 — la ligne de partage devient workflow / audit technique"
+    },
+    {
+      "id": "N42",
+      "verbatim": "« je ne veux pas purger les lectures »",
+      "etat": "✅ traitée",
+      "traite_par": "D59 · ferme Q28"
+    },
+    {
+      "id": "N43",
+      "verbatim": "« Q29 : pour les ACL je dirai oui par défaut, carol conserve l'accès […] Alice a le droit de partager mais pas forcément de retirer son partage, c'est un accès à plus haut niveau […] si les gens passent leur temps à supprimer des partages […] ils vont faire du copier/coller et on ne s'en servira plus, donc le un-share doit être un cas isolé. Et celui qui peut unshare doit avoir un warning en cas de repartage »",
+      "etat": "✅ traitée",
+      "traite_par": "D60 · 09-comptes · ferme Q29 · renforce Q30"
+    },
+    {
+      "id": "N44",
+      "verbatim": "« Q19 : oui identité interne, par exemple \"mathieu.m\", \"fred\", \"yann\", \"noe\". Q18 ok. Q14 : pourquoi dans toutes les tables ? […] on va partir sur mono mais je veux une analyse qui permet de structurer les données afin de pouvoir basculer en multi sans tout refaire »",
+      "etat": "✅ traitée",
+      "traite_par": "D61 · D62 · ferme Q14, Q18, Q19"
+    },
+    {
+      "id": "N45",
+      "verbatim": "« Q07 : SSO possible en tout cas ! possibilité de créer des tokens. auth par token ou credentials classiques qui crée un token temporaire »",
+      "etat": "✅ traitée",
+      "traite_par": "D63 · 05-api"
+    },
+    {
+      "id": "N46",
+      "verbatim": "« Q01 : on prend l'email on supprime les headers de routage, le delivered-to, on ne conserve que ce qui a été envoyé par le sender, on fait le hash des pièces jointes qu'on sauve/déduplique, on obtient un hash qu'on va comparer à ce qui existe »",
+      "etat": "✅ traitée",
+      "traite_par": "D64 · 02-stockage · ferme Q01"
+    },
+    {
+      "id": "N47",
+      "verbatim": "« c'est une idée, un exemple de process » (à propos du critère d'identité)",
+      "etat": "✅ traitée",
+      "traite_par": "D64 requalifiée : principe acquis, process à éprouver au pilote"
+    },
+    {
+      "id": "N48",
+      "verbatim": "« j'ai même envie de dire que le \"to\" et le \"from\" et le \"subject\" sont à exclure, dans une certaine mesure, car on peut recevoir plusieurs emails identiques provenant de sources différentes, comme des notifications, abonnements, forwards »",
+      "etat": "✅ traitée",
+      "traite_par": "D65 — exclusion écartée, objectif atteint autrement (blob_corps) · 02-stockage"
+    },
+    {
+      "id": "N49",
+      "verbatim": "« ou bien on encapsule un email dans un autre dans ce cas »",
+      "etat": "✅ traitée",
+      "traite_par": "D66 · 02-stockage · cas 18-19 du jeu d'essai"
+    },
+    {
+      "id": "N50",
+      "verbatim": "« en réécrivant certains en-têtes. genre via un champ email_source_id » / « ou bien pas un champ mais un tag dans le contenu (à évaluer, ça me paraît moins bien) »",
+      "etat": "✅ traitée",
+      "traite_par": "D67 — marqueur dans le contenu écarté (casse D25) ; relation typée message_lien plutôt qu'un champ 1-1"
+    },
+    {
+      "id": "N51",
+      "verbatim": "« Q23 : on administre domaines, boites, alias. Mais pas besoin pour le pilote »",
+      "etat": "✅ traitée",
+      "traite_par": "D68 · ferme Q23"
+    },
+    {
+      "id": "N52",
+      "verbatim": "« reconstruction à l'octet : je suis pour le mettre de côté pour le choix de la stack […] au pire on fera un wrapper […] à rediscuter »",
+      "etat": "✅ traitée",
+      "traite_par": "D25 requalifiée : objectif, pas exigence ni critère de stack"
+    },
+    {
+      "id": "N53",
+      "verbatim": "« les pièces jointes doivent être enregistrées de façon optimale, base64 décodées déjà, pas de recompression si jpg, zstd si utile, recompression d'image […] quitte à détruire l'original »",
+      "etat": "✅ traitée",
+      "traite_par": "D69 · 08 révisé (−33 %)"
+    },
+    {
+      "id": "N54",
+      "verbatim": "« aucune obligation d'utiliser PHP, il faut miser sur la performance du daemon, pooling, etc. »",
+      "etat": "✅ traitée",
+      "traite_par": "10-phasage § stack"
+    },
+    {
+      "id": "N55",
+      "verbatim": "« on s'autorisera à recompresser certains fichiers sur proposition à (ou demande de) l'utilisateur »",
+      "etat": "✅ traitée",
+      "traite_par": "D70 · 02-stockage"
+    },
+    {
+      "id": "N56",
+      "verbatim": "« notion globale de file d'attente de spam, qui ne peut être libérée que par l'admin […] si on a un trop gros spam, il y reste bloqué »",
+      "etat": "✅ traitée",
+      "traite_par": "D71"
+    },
+    {
+      "id": "N57",
+      "verbatim": "« notion de rôles admin par utilisateur »",
+      "etat": "✅ traitée",
+      "traite_par": "D72"
+    },
+    {
+      "id": "N58",
+      "verbatim": "« système de plugins avec hooks un peu partout »",
+      "etat": "✅ traitée",
+      "traite_par": "D73"
+    },
+    {
+      "id": "N59",
+      "verbatim": "« flux / process à définir » · « API à définir rapidement » · « versions avec fonctionnalités à définir »",
+      "etat": "🆕 chantiers déclarés",
+      "traite_par": "D73 §chantiers · Q07/Q08 passées en haute"
+    },
+    {
+      "id": "N60",
+      "verbatim": "« de quelles connexions imap tu parles (dans quel sens surtout) et explique en quoi on doit implémenter EXAMINE »",
+      "etat": "✅ traitée",
+      "traite_par": "clarifié : connexions sortantes (démon client) ; EXAMINE s'utilise, ne s'implémente pas — cf. 06-flux-mail"
+    },
+    {
+      "id": "N61",
+      "verbatim": "« à terme ce sera plus simple, il n'y aura qu'une connexion IDLE par boîte, on gérera les filtres sieve directement comme des filtres atombox (il faudra créer un système d'ailleurs, à noter) »",
+      "etat": "✅ traitée",
+      "traite_par": "D74 · 06-flux-mail"
+    },
+    {
+      "id": "N62",
+      "verbatim": "« c'est pour la v1 cela » (les filtres AtomBox)",
+      "etat": "✅ traitée",
+      "traite_par": "D74 requalifiée · 10-phasage : moteur de filtres au périmètre V1"
+    },
+    {
+      "id": "N63",
+      "verbatim": "« beaucoup de filtres n'auront plus lieu d'être, puisque nativement on saura gérer l'affichage de l'ensemble des emails des fournisseurs, clients, partenaires, dans des dossiers virtuels (tags) »",
+      "etat": "✅ traitée",
+      "traite_par": "D75 — trois notions de dossier distinguées"
+    },
+    {
+      "id": "N64",
+      "verbatim": "« ou bien pas forcément des tags, mais des dossiers correspondant à des filtres »",
+      "etat": "✅ traitée",
+      "traite_par": "D75 généralisée : dossier virtuel = filtre sauvegardé ; un seul langage pour recherche / dossier virtuel / filtre"
+    },
+    {
+      "id": "N65",
+      "verbatim": "use-cases de navigation à optimiser (filtrer/ordonner par dossier, recherche récursive, Fournisseurs/Clients/Partenaires/Collaborateurs/SAV/Notifications/Réseaux sociaux, catégorisation de contacts) + « comment tu vois la façon de gérer cela ? » + « premier POC juste pour l'interface du webmail »",
+      "etat": "✅ traitée",
+      "traite_par": "12-navigation · D76→D79"
+    },
+    {
+      "id": "N66",
+      "verbatim": "« pour ce premier poc, statique juste besoin de fausses données »",
+      "etat": "✅ traitée",
+      "traite_par": "D80 · 12-navigation — cardinalité réaliste exigée"
+    }
+  ],
+  "modele": {
+    "00-sommaire.md": "# CDC <projet> — sommaire et méthode de travail\n\n> **Statut** : rédaction en cours, en binôme. Document vivant.\n> Ticket porteur : **RMXXXX**. Cadrage projet : [`overview`](../project/overview.md).\n\n## Comment ce CDC est écrit\n\n<Le demandeur> **pose les propositions** et **arbitre** ; l'agent **conseille**, signale les\nconséquences et les pièges, puis **consigne**. Rien n'entre dans le CDC sans passer par le\nregistre : une proposition non tracée est une proposition qu'on croira avoir traitée.\n\n| État | Sens |\n|---|---|\n| ✅ **validé** | arbitré par le demandeur — le reste du CDC doit s'y conformer |\n| ❌ **invalidé** | écarté — gardé au registre **avec son motif**, pour ne pas le reproposer |\n| 🟡 **proposé** | conseil rendu, en attente d'arbitrage — ne pas construire dessus |\n| 🕐 **en attente** | posé, pas encore instruit |\n| ⏸ **en réserve** | **arbitré, et volontairement écarté**, avec une **condition de reprise** nommée — la différence avec 🕐 est que la décision *a* été prise |\n\nConvention : `D` = décision (proposée par le demandeur, sauf mention), `C` = conseil rendu par\nl'agent, `Q` = question ouverte, `N` = note du vrac, `U` = retour d'utilisateur.\n\n## Le protocole\n\nSept temps — cadrer, regarder l'existant, balayer la surface, conseiller, arbitrer,\nexpliquer, vérifier — dont les quatre derniers tournent en boucle par lot. Détail dans\n`grille-360.md` et dans le chapitre 17 du CDC AtomBox, dont ce modèle est issu.\n\n**Le cycle d'un lot** : éditer → régénérer (index, dictionnaire) → tester → commit → push sur\nla branche d'intégration → MR → merge → déployer. Un arbitrage non livré est un arbitrage\nqu'on croira livré.\n\n## Pourquoi plusieurs fichiers, et pourquoi plats\n\n`pm-wiki-sync` énumère `docs/*.md` en **non récursif** : le découpage se fait par fichiers\nplats numérotés. Les sous-dossiers (`dict/`) sont des sources, pas des pages.\n\n## Plan\n\n| # | Chapitre | Objet | Avancement |\n|---|---|---|---|\n| 00 | ce fichier | méthode, états, plan | — |\n| 01 | Périmètre | le problème, le non négociable, les suppositions | 🕐 |\n| 02 → 1N | *thématiques* | un par sujet | 🕐 |\n| 1N | Audit de l'existant | configurations, données, solutions comparables | 🕐 |\n| 1N | Comment ce projet meurt | risques et parades structurelles | 🕐 |\n| 1N | Dictionnaire des données | **généré** depuis `dict/*.yml` | 🕐 |\n| 90 | Registre des décisions | source de vérité des arbitrages | — |\n| 91 | Vrac | notes verbatim et retours, tracés jusqu'à résolution | — |\n| 92 | Glossaire | les mots, une fois | — |\n| 99 | Questions ouvertes | ce qui n'est pas tranché, ce que ça bloque | — |\n",
+    "01-perimetre.md": "# 01 — Périmètre\n\n## Le problème, en une page\n\n<Reformulation par l'agent de ce que le demandeur a dit. Pas une liste de fonctionnalités :\nle problème que le produit résout, pour qui, et ce qui se passe aujourd'hui sans lui.>\n\n## Ce qui est non négociable\n\n| Contrainte | Pourquoi | Source |\n|---|---|---|\n| | | N01 |\n\n## Ce que l'agent croit comprendre\n\n<Les points sur lesquels l'agent est sûr de sa lecture. Le demandeur corrige.>\n\n## Ce que l'agent suppose — à confirmer\n\nChaque supposition est **marquée** : elle devient une question (`Q`) si elle n'est pas\nconfirmée au premier lot, et une décision (`D`) si elle l'est.\n\n| # | Supposition | Si elle est fausse | État |\n|---|---|---|---|\n| S01 | | | 🕐 |\n\n## Ce qui est hors périmètre, et pourquoi\n\n<Dire ce qu'on ne fait **pas** est ce qui empêche de le refaire dans six mois. Chaque\nexclusion a un motif ; les exclusions sans motif sont des oublis.>\n\n## Solutions en place et solutions comparables\n\n<Ce que les utilisateurs utilisent aujourd'hui, et ce que font les produits équivalents. Renvoi\nvers le chapitre d'audit quand il existe.>\n",
+    "0N-chapitre.md": "# 0N — <Sujet>\n\n> Décisions portées ici : **Dxx**, **Dyy**. Questions ouvertes : **Qzz**.\n> Voir le [registre](90-decisions.md).\n\n## Ce qu'il faut cesser de croire\n\n<Les idées reçues sur ce sujet, et pourquoi elles sont fausses. Un chapitre qui commence par\nlà évite de reconstruire l'erreur commune.>\n\n## <Section thématique>\n\n<Le raisonnement, le tableau des options quand il y en a, la décision, ses conséquences.>\n\n| Option | Pour | Contre |\n|---|---|---|\n| | | |\n\n> **Le point à retenir** — une phrase, en citation, que le lecteur pressé peut emporter.\n\n## Ce que ça change au modèle\n\n<Renvoi vers les entités et champs du dictionnaire touchés par ce chapitre. Le dictionnaire\nfait autorité sur *quoi* ; ce chapitre sur *pourquoi*.>\n\n## Ce qui est V0 / V1 / suivant\n\n| Élément | Jalon | Décision |\n|---|---|---|\n| | | |\n\n## Ce que ce chapitre ne tranche pas\n\n<Les questions qu'il ouvre, avec leur numéro dans `99-questions-ouvertes.md`.>\n",
+    "1N-audit-existant.md": "# 1N — Audit de l'existant\n\nMesures prises le <date> sur <quoi — une configuration, une base, un usage réel>. **Rien de\nnominatif** n'est consigné : les correspondants, clients, utilisateurs sont comptés, jamais\nnommés.\n\nCe chapitre n'est pas un audit de configuration : c'est une **source d'exigences**. Ce que\nl'existant fait mal en dit autant que ce qu'il fait bien.\n\n## Ce qu'on mesure\n\n| Mesure | Valeur |\n|---|---|\n| | |\n\n<Toujours : le nombre, le volume, la médiane ET la moyenne (elles divergent souvent d'un\nfacteur 10), la concentration (quel 1 % porte quelle part), la cardinalité, le débit et son\npic, l'heure réelle de pointe.>\n\n## Ce que l'existant ne peut pas signaler\n\n<Les défauts silencieux : la règle qui n'a jamais rien attrapé, le doublon, la condition\nmorte. Aucun n'est une faute de l'auteur — ce sont les défauts de l'outil.>\n\n## Le point de sécurité\n\n<Ce que l'existant rend usurpable, et comment le nouveau modèle y répond.>\n\n## Ce que l'existant dit vraiment\n\n<La structure implicite : la hiérarchie de dossiers qui est une taxonomie, le préfixe qui\nforce un ordre, l'ordre des règles qui encode une priorité. Ce sont les **décisions implicites**\n— à rendre explicites.>\n\n## La transposition, élément par élément\n\n| Ce que fait l'existant | Ce qui le remplace | Gain |\n|---|---|---|\n| | | |\n\n## Ce qui ne se transpose pas, et qu'il faut écrire\n\n<Les besoins de l'existant qui n'ont **aucun équivalent** dans le CDC. Ce sont des exigences\nnouvelles.>\n\n## Ce que cet audit ne prouve pas\n\n<Une seule source, un seul usage : dire ce qui reste à mesurer avant d'y appuyer un chiffrage.>\n\n## Méthode\n\n<Comment on a mesuré sans lire les contenus : index, comptages côté serveur, agrégats. Le\ncoût sur la production. Ce qui rend l'audit reproductible chez un autre client.>\n",
+    "1N-comment-ce-projet-meurt.md": "# 1N — Comment ce projet meurt\n\nLe 360° parcourt les fonctionnalités. Ce chapitre fait l'inverse : il liste les façons dont le\nprojet peut échouer, et remonte aux décisions qui l'empêchent. **Chaque risque a une parade\nstructurelle, ou une question ouverte.** Un risque sans parade ni question est un risque\nqu'on a décidé d'accepter — et il faut le dire.\n\n| # | Comment ce projet meurt | La parade structurelle | Décision / question |\n|---|---|---|---|\n| M01 | la version minimale devient le produit | | |\n| M02 | une migration massive parce qu'on a séparé trop tard | | |\n| M03 | l'alerte qui crie trop et qu'on n'écoute plus | | |\n| M04 | le demandeur d'exception qui fait sauter une protection | | |\n| M05 | le nouvel outil coûte plus d'entretien que l'ancien | | |\n| M06 | une question ouverte trop longtemps a contraint tout le reste | | |\n| M07 | personne ne se souvient pourquoi on a décidé ça | | |\n| M08 | | | |\n\n## Les risques acceptés\n\n| # | Risque | Pourquoi on l'accepte | Signal qui ferait changer d'avis |\n|---|---|---|---|\n| | | | |\n",
+    "90-decisions.md": "# Registre des décisions — CDC <projet> (RMXXXX)\n\nToutes les propositions posées, le conseil rendu sur chacune, et leur arbitrage. Les décisions\n**invalidées ou amendées** restent ici avec leur motif : c'est ce qui évite de les reproposer\ndans six mois.\n\nConvention : `D` = décision (proposée par le demandeur, sauf mention), `C` = conseil rendu par\nl'agent. Voir la méthode dans le [sommaire](00-sommaire.md).\n\n## Vue d'ensemble\n\n> Cette table est **la source de l'index** : une décision rédigée en section mais absente ici\n> est invisible du POC, du dictionnaire et de tout ce qui lit l'index. Le générateur avertit.\n\n| # | Objet | État |\n|---|---|---|\n| D01 | | 🕐 |\n\n## Conseils en attente d'arbitrage\n\n| # | Conseil | Où | État |\n|---|---|---|---|\n| C01 | | | 🕐 |\n\n---\n\n## D01 — <titre en une ligne> 🕐\n\n*Tranche **Qxx**. Répond à **Nxx**, **Uxx**.*\n\n**Proposition** : « <verbatim du demandeur> ».\n\n<Le conseil rendu : le raisonnement, un chiffre si possible, les options en tableau.>\n\n| Option | Pour | Contre |\n|---|---|---|\n| | | |\n\n**Retenu** : <quoi, et pourquoi>.\n\n<Les conséquences : ce que ça change au modèle, aux autres décisions, au phasage.>\n\n**Objection du contradicteur** : <une objection sérieuse, obligatoire> — *levée / maintenue /\na amendé la décision*.\n\n> <Le point à retenir, en une phrase.>\n",
+    "91-vrac.md": "# Vrac — notes verbatim et retours d'utilisateurs (RMXXXX)\n\nTout ce que le demandeur a dit, et tout ce que les utilisateurs ont remonté, **tel quel** —\npuis **tracé jusqu'à sa résolution**. Le harnais vérifie qu'aucune entrée n'est en suspens\ndepuis plus de N lots : c'est le contrôle de couverture le plus honnête qui soit — *a-t-on\nrépondu à tout ce qui a été dit ?*\n\nÉtats : ✅ traitée (→ D/Q) · ❌ écartée (avec motif) · 🕐 en suspens.\n\n## Notes du demandeur\n\n| # | Verbatim | État | Traitée par |\n|---|---|---|---|\n| N01 | « » | 🕐 | |\n\n## Retours d'utilisateurs\n\nLa **source** est un rôle, jamais un nom. La **nature** est l'une de trois, et elles restent\ndistinctes : **fait** (observé : configuration, volume, geste répété), **irritant** (ce qui\ncoûte du temps ou fait peur), **idée** (recueillie en dernier, jamais en premier).\n\n| # | Source (rôle) | Canal | Nature | Verbatim / observation | État | Traité par |\n|---|---|---|---|---|---|---|\n| U01 | | observation / entretien / maquette | fait / irritant / idée | | 🕐 | |\n\n## Couverture\n\n| | Notes | Retours |\n|---|---|---|\n| traités → décision | | |\n| traités → question | | |\n| écartés avec motif | | |\n| **en suspens** | | |\n",
+    "92-glossaire.md": "# Glossaire — CDC <projet>\n\nLes mots du produit, définis **une fois**. Quand le mot du schéma diffère du mot du produit,\nles deux sont donnés — un CDC de cent décisions sans glossaire finit par employer trois mots\npour la même chose.\n\n| Mot du produit | Mot du schéma | Définition | Décision |\n|---|---|---|---|\n| | | | |\n\n## Mots à ne pas employer, et pourquoi\n\n| Mot | Pourquoi on l'évite | Dire plutôt |\n|---|---|---|\n| | | |\n",
+    "99-questions-ouvertes.md": "# Questions ouvertes — CDC <projet> (RMXXXX)\n\nCe qui n'est pas tranché, **ce que ça bloque**, et l'avis de l'agent quand il en a un. Une\nquestion fermée **reste ici**, barrée, avec le lien vers la décision — elle ne disparaît pas.\n\n> **La dette de questions a un coût.** Une question ouverte longtemps contraint silencieusement\n> tout ce qui se décide autour. La colonne *décisions sous hypothèse* compte celles qui ont été\n> prises en supposant une réponse ; au-delà de trois, la question devient bloquante de fait.\n\n| # | Question | Bloque | Urgence | Sous hypothèse |\n|---|---|---|---|---|\n| Q01 | | | haute / moyenne / basse | 0 |\n\n---\n\n## Q01 — <titre>\n\n*Issue de **Dxx** / **Nxx** / de la grille 360, axe <…>.*\n\n<Le problème, en quelques lignes.>\n\n| Option | Pour | Contre |\n|---|---|---|\n| | | |\n\n**Avis** : <l'option recommandée, et pourquoi — sur un chiffre si possible>.\n\n**Ce qui la trancherait** : <une mesure, un retour d'utilisateur, un jalon — pas une intuition>.\n",
+    "README.md": "# Modèle de CDC — gabarits réutilisables\n\nCe dossier est un **modèle**, à copier dans `docs/` d'un nouveau projet et à adapter. Il est\nissu du CDC AtomBox (RM2881) et de sa méthode ([chapitre 17](../cdc-rm2881-17-methode.md)) ;\nsa migration dans les gabarits du système PM est l'objet de **RM2967**.\n\nIl n'est **pas** synchronisé au wiki (sous-dossier : `pm-wiki-sync` n'énumère que `docs/*.md`)\n— c'est voulu, ce sont des sources.\n\n## Contenu\n\n| Fichier | Rôle |\n|---|---|\n| `00-sommaire.md` | méthode de travail, états, plan — à remplir en premier |\n| `01-perimetre.md` | le problème, le non négociable, **les suppositions marquées** |\n| `0N-chapitre.md` | gabarit d'un chapitre thématique |\n| `1N-audit-existant.md` | gabarit d'un audit — configurations, données, solutions comparables |\n| `1N-comment-ce-projet-meurt.md` | les risques et leurs parades structurelles |\n| `90-decisions.md` | le registre : proposition, conseil, arbitrage, état |\n| `91-vrac.md` | notes verbatim et retours d'utilisateurs, tracés jusqu'à résolution |\n| `92-glossaire.md` | les mots du produit, et le mot du schéma quand il diffère |\n| `99-questions-ouvertes.md` | ce qui n'est pas tranché, ce que ça bloque, l'avis |\n| `grille-360.md` | la grille d'axes × les cinq postures — à dérouler au temps 3 |\n| `recueil-utilisateurs.md` | trame d'entretien, canaux, circuit vrac → décision |\n| `dict/*.yml` | les treize tables du dictionnaire, vides, avec leurs conventions |\n\n## Remplacements à faire\n\n`RMXXXX` → le ticket porteur ; `<projet>` → le nom du projet ; les dates.\n\n## Ce qui ne change pas d'un projet à l'autre\n\n- les **états** (✅ ❌ 🟡 🕐 ⏸) et leur sens ;\n- la règle **conseiller avant de consigner** ;\n- **une seule source par donnée** — le dictionnaire est la source, le chapitre est généré ;\n- les **types logiques** dans `dict/champs.yml`, jamais SQL tant que le SGBD n'est pas statué ;\n- le **cycle d'un lot** : éditer → régénérer → tester → livrer.\n\n## Ce qui s'adapte\n\n- les chapitres thématiques (02 → 13 ici ; un projet sans messagerie n'a pas de chapitre\n  « émission ») ;\n- les axes de la grille 360 — en garder la liste **fermée**, mais la réviser par registre\n  (un axe qui ne trouve rien sur trois projets se retire) ;\n- les tables du dictionnaire — un projet sans API n'a pas de `routes.yml`, mais garde le\n  fichier vide pour que le harnais le voie ;\n- le POC : une maquette d'interface n'a de sens que pour un produit à interface. Un service\n  ou une bibliothèque remplacent le POC par un **prototype de contrat** (schéma, API, jeu\n  d'essai) — le principe reste : *il lit le CDC, il ne le recopie pas*.\n",
+    "grille-360.md": "# Grille 360° — axes × postures\n\nÀ dérouler au **temps 3** (balayer la surface), puis à chaque jalon. Pour chaque sujet du\nprojet, chaque cellule produit soit une question (`Q`), soit un **« sans objet — parce que »**.\nLe « sans objet » est une réponse : c'est lui qui distingue une surface couverte d'une surface\noubliée.\n\nLa liste des axes est **fermée** — c'est ce qui rend la passe systématique. Elle se révise par\nregistre : un axe qui n'a rien trouvé sur trois projets se retire, avec motif.\n\n## Les axes\n\n| Axe | Questions génératrices |\n|---|---|\n| **Données** | quoi, propriétaire, durée de vie, fait ou dérivé, volume réel, cardinalité, ce qui change dans le temps (dater, ne pas écraser) |\n| **Acteurs et portées** | qui voit, qui écrit, qui administre ; ce qu'un administrateur *ne doit pas* pouvoir ; collectif vs personnel |\n| **Flux** | entrant, sortant, interne ; ce qui se corrèle ; ce qui revient ; ce qui se perd |\n| **États et workflows** | les états, les transitions, qui les provoque, le retour arrière, la suppression (détacher ≠ effacer) |\n| **Sécurité** | ce qui est usurpable, prouvé vs déclaré, ce qui doit *refuser* de s'afficher, ce qu'on émet vers l'extérieur sans le vouloir |\n| **Conformité** | RGPD, secret, ce que la loi suppose déjà, la rétention et son ordre de priorité |\n| **Performance** | médiane vs moyenne, concentration, chemin chaud, l'heure réelle du pic, ce qui se partitionne |\n| **Interopérabilité** | protocoles et normes, une par une : *ce que ça engage* ; ce que font les outils en place ; ce qu'on remplace et qu'il faut savoir lire |\n| **Exploitation** | processus permanents, fenêtres de maintenance, ce qui se supervise, ce qui échoue bruyamment plutôt que deux fois |\n| **Extensibilité** | ce qu'on ne construit pas mais ne s'interdit pas ; les portes à ne pas fermer ; le coût de l'attente |\n| **Ergonomie** | l'action principale par contexte ; le silence comme fonctionnalité ; ce qui doit s'expliquer en une ligne |\n| **Économie** | ce qui disparaît de l'existant ; ce qui vaut son coût d'entretien ; le critère de reprise d'une fonction en réserve |\n| **Phasage** | la V0 minimale et ce qu'elle *ne doit pas devenir* ; le critère de passage ; ce que chaque jalon accepte de perdre |\n\n## Les postures\n\nUne grille dit **où** regarder ; une posture dit **comment**. Sur chaque sujet, tour à tour :\n\n| Posture | La question qu'elle pose |\n|---|---|\n| **L'attaquant** | que ferais-je pour abuser de ça ? |\n| **L'exploitant à 3 h du matin** | que se passe-t-il quand ça tombe, se remplit, se sature ? |\n| **Le nouveau venu** | quelqu'un arrivé hier ouvre l'outil : qu'est-ce qu'il ne comprend pas ? |\n| **L'archéologue dans six mois** | pourquoi a-t-on décidé ça, et est-ce encore vrai ? |\n| **Le concurrent** | qu'est-ce qu'aucun autre produit ne peut dire ? |\n\n## La feuille de passe\n\nUne par sujet. Se remplit vite ; c'est le « sans objet » qui prend du temps, et c'est normal.\n\n| Sujet : <…> | Attaquant | Exploitant | Nouveau venu | Archéologue | Concurrent |\n|---|---|---|---|---|---|\n| Données | | | | | |\n| Acteurs et portées | | | | | |\n| Flux | | | | | |\n| États et workflows | | | | | |\n| Sécurité | | | | | |\n| Conformité | | | | | |\n| Performance | | | | | |\n| Interopérabilité | | | | | |\n| Exploitation | | | | | |\n| Extensibilité | | | | | |\n| Ergonomie | | | | | |\n| Économie | | | | | |\n| Phasage | | | | | |\n\n## Compter les trouvailles\n\n| Passe | Date | Sujets | Questions nouvelles | Décisions amendées | Axes muets |\n|---|---|---|---|---|---|\n| | | | | | |\n\nUn axe muet trois passes de suite est un candidat au retrait. Une passe qui ne trouve rien est\nune passe mal faite, ou une surface couverte — et il faut savoir laquelle.\n",
+    "recueil-utilisateurs.md": "# Recueillir les besoins et les idées des utilisateurs\n\nUn CDC écrit par un binôme n'a pas été écrit par ses utilisateurs. Ce document dit comment on\nles fait entrer — sans les trois pièges classiques.\n\n## Trois pièges, trois parades\n\n| Piège | Ce qui se passe | Parade |\n|---|---|---|\n| **le questionnaire** | on obtient des réponses aux questions posées — jamais ce qu'on n'a pas pensé à demander | observer *ce qu'ils font*, pas ce qu'ils disent |\n| **la liste de souhaits** | chacun demande la fonction qui lui manque ce matin ; un catalogue sans priorité | remonter du souhait au **problème** : « je voudrais X » → « qu'est-ce qui vous arrive sans X ? » |\n| **l'utilisateur expert** | il décrit ses contournements comme des besoins | le contournement est un **symptôme** — chercher ce qu'il contourne |\n\n## Trois natures, gardées distinctes\n\n| Nature | Ce que c'est | Quand on le recueille |\n|---|---|---|\n| **fait** | observé : configuration, volume, geste répété, règle en place | d'abord — c'est ce qui ment le moins |\n| **irritant** | ce qui coûte du temps, ce qu'on fait à la main, ce qui fait peur | ensuite |\n| **idée** | ce que l'utilisateur voudrait | **en dernier** — sinon elles contaminent le reste |\n\n## Trois canaux, du moins cher au plus riche\n\n### 1. L'observation silencieuse\n\nConfigurations, arborescences, volumes, règles de tri, raccourcis — **sans lire les contenus**\n(index, comptages côté serveur, agrégats). Reproductible en quelques secondes, sans déranger\npersonne. Produit un chapitre d'audit (`1N-audit-existant.md`).\n\n### 2. L'entretien guidé — trente minutes, une trame\n\n1. **« Racontez-moi hier matin. »** — un récit d'une séquence réelle, pas une opinion. On note\n   les gestes, les outils ouverts, les allers-retours.\n2. **« Qu'est-ce qui vous a fait perdre du temps cette semaine ? »**\n3. **« Que faites-vous à la main que vous ne devriez pas avoir à faire ? »**\n4. **« Qu'est-ce qui vous a fait peur, ou que vous n'osez pas toucher ? »**\n5. **« Si vous aviez une baguette magique — une seule chose. »** — les idées, en dernier.\n\nOn ne montre **pas** la maquette pendant l'entretien : elle oriente les réponses.\n\n### 3. La maquette instrumentée\n\nSur la maquette en ligne, un bouton **« ça, je ne comprends pas » / « ça me manque »** sur\nn'importe quel élément. Il capture le **contexte** (page, élément, geste précédent) et un mot\nde l'utilisateur. Des retours **situés**, pas abstraits — et les décisions qui ne s'expliquent\npas dans l'usage, celles que l'aide n'avait pas attrapées.\n\nMettre la maquette devant des personnes **qui ne sont pas le demandeur**, avant la première\nversion : c'est la première donnée utilisateur du projet, et le premier test de la méthode.\n\n## Le circuit\n\n```\nretour (rôle, canal, nature) ──> 91-vrac (Uxx, 🕐)\n                                    │\n                    ┌───────────────┼────────────────┐\n                    ▼               ▼                ▼\n               question Qxx    décision Dxx     écarté, motif\n                    └───────────────┴────────────────┘\n                                    ▼\n                          couverture : traités / écartés / en suspens\n```\n\nLe harnais vérifie qu'aucun retour n'est **en suspens** depuis plus de N lots. Une décision\nqui cite « répond à quatre retours d'utilisateurs » a une force qu'un avis d'agent n'a pas.\n",
+    "dict/actions.yml": "# ACTIONS — chaque geste que l'interface (ou l'API) permet. Inventorié depuis le POC, complété par le CDC.\n# contexte : liste | message | dossier | arborescence | composition | administration | quarantaine\n# portee : ce que le geste modifie — rattachement (par compte ou boîte) | comm (partagé) | boite | compte | adresse | envoi\n# trace : oui = écrit au journal (D54)\n# poc : l'attribut ou la méthode qui le porte dans la maquette, ou non\n\n[]\n",
+    "dict/champs.yml": "# CHAMPS — par entité. Types LOGIQUES, jamais SQL (le SGBD n'est pas définitivement statué).\n#   id          identifiant technique            ref        référence vers une autre entité\n#   court       texte court (une ligne)          long       texte long\n#   horodatage  date et heure                    date       date seule\n#   enum        valeur d'une énumération         bool       vrai/faux\n#   entier      nombre entier                    decimal    nombre décimal\n#   empreinte   hachage de contenu               jeton      secret opaque\n#   json        structure libre                  binaire    octets\n# nature : fait (immuable une fois posé) | figé (calculé à l'ingestion, jamais recalculé) | recalculable | dérivé (cache)\n# obligatoire : oui | non | condition\n\n# (structure : dictionnaire — clé = entité / énumération / famille)\n{}\n",
+    "dict/composants.yml": "# COMPOSANTS RÉUTILISABLES — trois familles :\n#   noyau     : les briques techniques du POC qui deviendront celles du produit (rôle, contrat)\n#   capacite  : ce qui est ENFICHABLE (D94) — natif, connecteur, ou absent\n#   embarquable : les composants d'interface insérables dans une application tierce (D108)\n\n# (structure : dictionnaire — clé = entité / énumération / famille)\n{}\n",
+    "dict/entites.yml": "# ENTITÉS — ce qui existe dans le modèle, et pourquoi.\n# Le dictionnaire fait autorité sur QUOI existe ; le registre des décisions (90) sur POURQUOI.\n# etat : ✅ décidée | 🟡 proposée | ⏸ en réserve | 🕐 en attente\n# domaine : communication | stockage | identite | portee | classement | emission | analyse | interne | exploitation\n# Types logiques des champs (voir champs.yml) — JAMAIS de types SQL : le SGBD n'est pas définitivement statué.\n\n[]\n",
+    "dict/enumerations.yml": "# ÉNUMÉRATIONS — les valeurs fermées du modèle. Une énumération a un rôle ; chaque valeur aussi.\n\n# (structure : dictionnaire — clé = entité / énumération / famille)\n{}\n",
+    "dict/fonctionnalites.yml": "# FONCTIONNALITÉS — une ligne par fonctionnalité du produit.\n# etat : maquetté (visible dans le POC) | décidé (tranché au CDC) | à trancher (question ouverte) | à venir | en pause\n# jalon : 0 = V0, 1..5 ; absent (null) = écarté volontairement — on ne SUPPRIME jamais une F…, on l'écarte\n# depend_de : les fonctionnalités qui doivent EXISTER avant celle-ci — [] = racine, null = pas encore renseigné.\n#   Identifiants F001… STABLES, jamais réattribués. Le tri topologique de ce graphe donne L'ORDRE DE CODAGE.\n#   Le harnais casse sur un cycle, un id inconnu, ou une dépendance vers un jalon ultérieur — donc :\n#   - DÉPLACER une F… vers un jalon plus tard fait apparaître tout ce qui en dépend et doit bouger avec elle ;\n#   - ÉCARTER une F… (jalon null) est une suppression EN CASCADE : le harnais nomme ses dépendantes encore à jalon\n#     et refuse tant qu'elles ne sont pas écartées, déplacées ou découplées. C'est le warning et la confirmation.\n#   La feuille de route est DÉRIVÉE de ce fichier (par jalon, dans l'ordre topologique) : deux vues, une donnée.\n\n[]\n",
+    "dict/jalons.yml": "# JALONS — source de la roadmap (CDC chapitre 10, POC page Roadmap). Tenu à la main.\n# Un jalon = un objectif, une note (ce qu'il accepte de perdre / son critère), un contenu.\n# Convention des fonctionnalités : jalon 0 = V0 ; jalon absent (null) = écarté volontairement.\n\n[]\n",
+    "dict/normes.yml": "# NORMES — ce qu'AtomBox doit respecter, et ce que ça engage concrètement. Une norme par ligne, avec le point précis qui nous concerne.\n# type : rfc | reglementaire | jurisprudence | referentiel\n\n[]\n",
+    "dict/protocoles.yml": "# PROTOCOLES — ce qu'AtomBox parle, avec qui, à quel jalon, et dans quel sens.\n# sens : entrant | sortant | les deux\n\n[]\n",
+    "dict/relations.yml": "# RELATIONS — de → vers, cardinalité, rôle, et si le lien est DATÉ.\n# cardinalite : 1-1 | 1-n | n-n | 1-0..1\n# datee : oui = le lien porte une période (début/fin) et ne s'écrase jamais\n\n[]\n",
+    "dict/routes.yml": "# ROUTES — la surface d'API. HYPOTHÈSE REST (Q07 non tranchée) : ce fichier décrit les opérations et leur portée,\n# pas un style définitif. Le POC trace les trois premières ; les autres découlent des décisions.\n# portee : ce que le jeton doit autoriser — hors portée = 404, jamais 403 (D108)\n# etat : maquettée (tracée par le POC) | décidée | hypothèse\n\n[]\n",
+    "dict/templates.yml": "# TEMPLATES — les vues partielles du registre (R.define / R.defineFor / R.render), inventoriées depuis le POC.\n# Une partielle est SURCHARGEABLE par variante (nom@variante) sans toucher au code qui l'appelle ;\n# la variante est déduite du dossier, sinon de l'axe, sinon du sens (views/list.js : variante()).\n# contexte : liste | message | arborescence | admin | composition\n# Blocs du message ouvert qui ne sont pas encore des partielles du registre (méthodes de Views.Message) — à migrer :\n\n[]\n",
+    "dict/workflows.yml": "# WORKFLOWS — les cycles de vie. Chaque transition : de → vers, le geste qui la provoque, qui peut le faire, l'effet.\n\n[]\n"
   }
 };
 })(window.ABX = window.ABX || {});

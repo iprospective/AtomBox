@@ -149,26 +149,49 @@
   const ETATS = { "maquetté":"ok", "décidé":"wait", "à trancher":"due", "à venir":"",
                   "en pause":"pause" };
 
+  /* Une seule table, TRIABLE par colonne — le regroupement par domaine n'est
+     qu'un tri parmi d'autres. L'ordre de codage (rang topologique) en est un
+     aussi : c'est lui qui rend la liste utile au moment de coder. */
+  const COLS_F = [["rang","Ordre"], ["id","#"], ["libelle","Fonctionnalité"], ["domaine","Domaine"],
+                  ["jalon","Jalon"], ["etat","État"], ["depend_de","Dépend de"], ["refs","Réf."]];
+  const ORDRE_ETAT = { "maquetté":0, "décidé":1, "à trancher":2, "à venir":3, "en pause":4 };
   function features() {
-    const n = FEATURES.reduce((s, [, l]) => s + l.length, 0);
-    return `<div class="box"><h4>${n} fonctionnalités, par domaine</h4>
-      <div class="hint"><span class="st ok">maquetté</span> visible dans ce POC ·
-        <span class="st wait">décidé</span> tranché au CDC, pas encore maquetté ·
+    const ui = ABX.Store.ui, tri = ui.triFeat || "domaine", desc = !!ui.triFeatDesc;
+    const feats = (ABX.CDC.dict.fonctionnalites || []).map(f => ({ ...f, rang: RANG[f.id] || null,
+      refs: (f.decisions || []).concat(f.questions || []).join(", ") || "—" }));
+    const val = f => {
+      if (tri === "jalon") return f.jalon === null || f.jalon === undefined ? 99 : f.jalon;
+      if (tri === "etat") return ORDRE_ETAT[f.etat] ?? 9;
+      if (tri === "rang") return f.rang || 1e6;
+      if (tri === "depend_de") return (f.depend_de || []).length;
+      return String(f[tri] || "");
+    };
+    feats.sort((a, b) => { const x = val(a), y = val(b);
+      const c = typeof x === "number" ? x - y : x.localeCompare(y);
+      return (desc ? -c : c) || (a.id < b.id ? -1 : 1); });
+    const jal = v => v === null || v === undefined
+      ? `<span class="jalon aucun" title="Aucun jalon : écarté volontairement">—</span>`
+      : `<span class="jalon${v > 1 ? " v" + v : v === 0 ? " v0" : ""}">V${v}</span>`;
+    return `<div class="box"><h4>${feats.length} fonctionnalités — triées par ${F.esc((COLS_F.find(c => c[0] === tri) || [])[1] || tri)}${desc ? " ↓" : " ↑"}</h4>
+      <div class="hint">Cliquez un en-tête pour trier ; un second clic inverse. La même liste que la feuille de route, organisée autrement.
+        <span class="st ok">maquetté</span> visible dans ce POC ·
+        <span class="st wait">décidé</span> tranché au CDC ·
         <span class="st due">à trancher</span> question ouverte ·
         <span class="st">à venir</span> jalon ultérieur ·
-        <span class="st pause">en pause</span> écarté volontairement, à reprendre sur un chiffre ·
-        <span class="jalon v0">V0</span> le client IMAP, sans base ni moteur (D140)</div></div>
-    ${FEATURES.map(([dom, liste]) => `<div class="box"><h4>${F.esc(dom)}</h4>
-      <table class="erpl"><tr><th>#</th><th>Fonctionnalité</th><th>Jalon</th><th>État</th><th>Réf.</th></tr>
-      ${liste.map(([lib, v, etat, ref]) => `<tr>
-        <td><b>${F.esc(FEAT_ID[lib] || "")}</b></td>
-        <td>${F.esc(lib)}</td>
-        <td>${v === null || v === undefined
-               ? `<span class="jalon aucun" title="Aucun jalon : écarté volontairement">—</span>`
-               : `<span class="jalon${v > 1 ? " v" + v : v === 0 ? " v0" : ""}">V${v}</span>`}</td>
-        <td><span class="st ${ETATS[etat]}">${etat}</span></td>
-        <td><span class="hash">${F.esc(ref)}</span></td></tr>`).join("")}
-      </table></div>`).join("")}`;
+        <span class="st pause">en pause</span> écarté volontairement ·
+        <span class="jalon v0">V0</span> la V1 réduite à l'essentiel (D140b)</div></div>
+    <div class="box"><table class="erpl">
+      <tr>${COLS_F.map(([k, l]) => `<th class="trih${k === tri ? " on" : ""}" data-trif="${k}">${l}${k === tri ? (desc ? " ↓" : " ↑") : ""}</th>`).join("")}</tr>
+      ${feats.map(f => `<tr>
+        <td>${f.rang || "—"}</td>
+        <td><b>${F.esc(f.id)}</b></td>
+        <td>${F.esc(f.libelle)}</td>
+        <td class="hint">${F.esc(f.domaine)}</td>
+        <td>${jal(f.jalon)}</td>
+        <td><span class="st ${ETATS[f.etat] || ""}">${F.esc(f.etat)}</span></td>
+        <td class="hash">${f.depend_de === null || f.depend_de === undefined ? "<i>à renseigner</i>" : (f.depend_de.length ? f.depend_de.join(", ") : "racine")}</td>
+        <td><span class="hash">${F.esc(f.refs)}</span></td></tr>`).join("")}
+      </table></div>`;
   }
 
   /* ---- CDC (index généré) ----------------------------------------------- */
@@ -176,42 +199,71 @@
      Les chapitres, chaque décision, chaque question et chaque conseil sont
      dans l'index (ABX.CDC.textes / sections), rendus en markdown minimal.
      Ce que l'on lit ici EST le CDC — la maquette n'en résume plus rien. */
+  /* ---- CDC : la même organisation que docs/ ------------------------------
+     La page s'ouvre comme le sommaire s'ouvre : le PLAN (objet + avancement par
+     chapitre), puis les fichiers de pilotage — registre, questions, vrac tracé,
+     conseils — puis le modèle réutilisable. Tout le texte est là ; rien n'est
+     résumé. Cliquer un chapitre ou un identifiant ouvre sa lecture en tête. */
   function cdc() {
     const C = ABX.CDC, M = ABX.Markdown, ui = ABX.Store.ui.cdc || {};
     const lien = id => `<a href="#" class="cdc-lien" data-sec="${F.esc(id)}"><b>${F.esc(id)}</b></a>`;
     const parUrg = u => C.questions.filter(q => q.urgence === u);
+    const plan = C.plan || {}, vrac = C.vrac || [], modele = C.modele || {};
     let lecture = "";
     if (ui.sec && C.sections[ui.sec])
       lecture = `<div class="box lecture"><div class="hint"><a href="#" class="cdc-lien" data-sec="">‹ fermer</a>
         · section <b>${F.esc(ui.sec)}</b> du registre</div>${M.rendre(C.sections[ui.sec])}</div>`;
     else if (ui.chap && C.textes[ui.chap])
       lecture = `<div class="box lecture"><div class="hint"><a href="#" class="cdc-lien" data-chap="">‹ fermer</a>
-        · chapitre <b>${F.esc(ui.chap)}</b></div>${M.rendre(C.textes[ui.chap])}</div>`;
+        · chapitre <b>${F.esc(ui.chap)}</b> — tel qu'il est dans <span class="hash">docs/</span></div>${M.rendre(C.textes[ui.chap])}</div>`;
+    else if (ui.modele && modele[ui.modele])
+      lecture = `<div class="box lecture"><div class="hint"><a href="#" class="cdc-lien" data-modele="">‹ fermer</a>
+        · modèle <span class="hash">modele-cdc/${F.esc(ui.modele)}</span></div>${
+        ui.modele.endsWith(".yml") ? `<pre class="md-code">${F.esc(modele[ui.modele])}</pre>` : M.rendre(modele[ui.modele])}</div>`;
+    const etatDec = d => ({ valide:"✅ validé", propose:"🟡 proposé", amendee:"❌ amendée" }[d.etat] || d.etat);
+    const clsDec = d => d.etat === "valide" ? "ok" : d.etat === "propose" ? "wait" : d.etat === "amendee" ? "due" : "";
+    const notes = vrac.filter(n => !/tranch|✅|❌/.test(n.etat));
     return `
-    <div class="box"><h4>Le cahier des charges — ${C.chapitres.length} chapitres, ${C.decisions.length} décisions,
-        ${C.questions.length} questions, ${(C.conseils || []).length} conseils</h4>
-      <div class="hint">Généré le ${F.esc(C.genere)} depuis <span class="hash">${F.esc(C.depot)}</span> — ticket
-        ${F.esc(C.ticket)}. Tout le texte est ici : cliquez un chapitre, une décision, une question.</div>
-      <div class="chips" style="margin-top:8px">${C.chapitres.map(c =>
-        `<span class="chip cdc-lien${ui.chap === c.n && !ui.sec ? " on" : ""}" data-chap="${F.esc(c.n)}">${F.esc(c.n)} · ${F.esc(c.titre)}</span>`).join("")}</div></div>
+    <div class="box"><h4>CDC AtomBox — sommaire</h4>
+      <div class="hint">Généré le ${F.esc(C.genere)} depuis <span class="hash">${F.esc(C.depot)}</span>, ticket ${F.esc(C.ticket)}.
+        La même chose que <span class="hash">docs/</span>, organisée de la même façon : le plan, puis les fichiers de pilotage.
+        ${C.chapitres.length} chapitres · ${C.decisions.length} décisions · ${C.questions.length} questions ·
+        ${(C.conseils || []).length} conseils · ${vrac.length} notes de vrac.</div></div>
     ${lecture}
-    <div class="box"><h4>Questions ouvertes — ce qui reste à trancher</h4>
+    <div class="box"><h4>Plan</h4>
+      <table class="erpl"><tr><th>#</th><th>Chapitre</th><th>Objet</th><th>Avancement</th></tr>
+      ${C.chapitres.map(c => `<tr><td><b>${F.esc(c.n)}</b></td>
+        <td><a href="#" class="cdc-lien${ui.chap === c.n && !ui.sec ? " on" : ""}" data-chap="${F.esc(c.n)}">${F.esc(c.titre)}</a></td>
+        <td class="hint">${F.esc((plan[c.n] || {}).objet || "")}</td>
+        <td>${F.esc((plan[c.n] || {}).avancement || "")}</td></tr>`).join("")}</table></div>
+    <div class="box"><h4>90 — Registre des décisions</h4>
+      <div class="hint">Toutes les propositions et leur arbitrage. Les amendées restent, avec leur motif.</div>
+      <table class="erpl"><tr><th>#</th><th>Objet</th><th>État</th></tr>
+      ${C.decisions.map(d => `<tr><td>${lien(d.id)}</td><td>${F.esc(d.objet)}</td>
+        <td><span class="st ${clsDec(d)}">${etatDec(d)}</span></td></tr>`).join("")}</table>
+      <div class="hint" style="margin-top:8px"><b>Conseils rendus</b></div>
+      <table class="erpl"><tr><th>#</th><th>Conseil</th><th>État</th></tr>
+      ${(C.conseils || []).map(c => `<tr><td>${lien(c.id)}</td><td>${F.esc(c.objet)}</td><td>${F.esc(c.etat)}</td></tr>`).join("")}</table></div>
+    <div class="box"><h4>91 — Notes en vrac, tracées jusqu'à résolution</h4>
+      <div class="hint">Ce que le demandeur a dit, tel quel, et ce qui en a été fait. ${vrac.length} notes,
+        ${vrac.filter(n => n.etat.includes("✅")).length} traitées, ${notes.length} en suspens ou autre.</div>
+      <table class="erpl"><tr><th>#</th><th>Verbatim</th><th>État</th><th>Traitée par</th></tr>
+      ${vrac.map(n => `<tr><td><b>${F.esc(n.id)}</b></td><td>${F.esc(n.verbatim)}</td><td>${F.esc(n.etat)}</td>
+        <td class="hash">${M.inline(n.traite_par)}</td></tr>`).join("")}</table></div>
+    <div class="box"><h4>99 — Questions ouvertes</h4>
+      <div class="hint">Ce qui n'est pas tranché, ce que ça bloque, l'urgence. Les tranchées restent, barrées, avec leur décision.</div>
       <table class="erpl"><tr><th>#</th><th>Question</th><th>Bloque</th><th>Urgence</th></tr>
       ${["haute","moyenne","basse"].map(u => parUrg(u).map(q => `<tr>
         <td>${lien(q.id)}</td><td>${F.esc(q.objet)}</td>
         <td><span class="hash">${F.esc(q.bloque)}</span></td>
         <td><span class="st ${u === "haute" ? "due" : u === "moyenne" ? "wait" : ""}">${u}</span></td>
-        </tr>`).join("")).join("")}</table>
-      <div class="hint">${parUrg("tranchee").length} autres questions ont été tranchées — elles restent lisibles
-        depuis le registre, et depuis leur identifiant partout où il apparaît.</div></div>
-    <div class="box"><h4>Registre des décisions</h4>
-      <table class="erpl"><tr><th>#</th><th>Objet</th><th>État</th></tr>
-      ${C.decisions.map(d => `<tr><td>${lien(d.id)}</td><td>${F.esc(d.objet)}</td>
-        <td><span class="st ${d.etat === "valide" ? "ok" : d.etat === "propose" ? "wait" : d.etat === "amendee" ? "due" : ""}">${
-          { valide:"✅ validé", propose:"🟡 proposé", amendee:"❌ amendée" }[d.etat] || d.etat}</span></td></tr>`).join("")}</table></div>
-    <div class="box"><h4>Conseils rendus</h4>
-      <table class="erpl"><tr><th>#</th><th>Conseil</th><th>État</th></tr>
-      ${(C.conseils || []).map(c => `<tr><td>${lien(c.id)}</td><td>${F.esc(c.objet)}</td><td>${F.esc(c.etat)}</td></tr>`).join("")}</table></div>`;
+        </tr>`).join("")).join("")}
+      ${parUrg("tranchee").map(q => `<tr class="hint"><td>${lien(q.id)}</td><td><s>${F.esc(q.objet)}</s></td>
+        <td class="hash">${M.inline(q.bloque)}</td><td><span class="st ok">tranchée</span></td></tr>`).join("")}</table></div>
+    <div class="box"><h4>modele-cdc/ — le modèle réutilisable</h4>
+      <div class="hint">Les gabarits issus de ce CDC, à copier dans un nouveau projet (RM2967). ${Object.keys(modele).length} fichiers.</div>
+      <div class="chips" style="margin-top:8px">${Object.keys(modele).map(f =>
+        `<span class="chip cdc-lien${ui.modele === f ? " on" : ""}" data-modele="${F.esc(f)}">${F.esc(f)}</span>`).join("")}</div></div>`;
   }
 
   /* ---- DICTIONNAIRE DES DONNÉES : les treize tables, en entier ----------

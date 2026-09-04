@@ -86,6 +86,31 @@ dico = { k: yml(k) for k in ("entites", "champs", "relations", "enumerations", "
                               "actions", "templates", "composants", "protocoles", "normes",
                               "routes", "fonctionnalites", "jalons") }
 
+# ---- le PLAN du sommaire : objet et avancement par chapitre, tels que docs/ les tient ----
+plan = {}
+for cel in lignes("cdc-rm2881-00-sommaire.md", r"^\d{2}$"):
+    if len(cel) >= 4:
+        plan[propre(cel[0])] = { "objet": propre(cel[2]), "avancement": propre(cel[3]) }
+
+# ---- le VRAC : chaque note du demandeur, tracée jusqu'à sa résolution ----
+vrac = []
+for cel in lignes("cdc-rm2881-91-vrac.md", r"^N\d+"):
+    vrac.append({ "id": propre(cel[0]), "verbatim": propre(cel[1]),
+                  "etat": propre(cel[2]) if len(cel) > 2 else "",
+                  "traite_par": propre(cel[3]) if len(cel) > 3 else "" })
+
+# ---- le MODÈLE de CDC (docs/modele-cdc/) : les gabarits, pour les lire dans la maquette ----
+modele = {}
+_md = os.path.join(CDC, "modele-cdc")
+if os.path.isdir(_md):
+    for f in sorted(os.listdir(_md)):
+        if f.endswith(".md"):
+            modele[f] = io.open(os.path.join(_md, f), encoding="utf-8").read()
+    _mdd = os.path.join(_md, "dict")
+    if os.path.isdir(_mdd):
+        for f in sorted(os.listdir(_mdd)):
+            modele["dict/" + f] = io.open(os.path.join(_mdd, f), encoding="utf-8").read()
+
 # ---- le TEXTE complet : chaque chapitre, et chaque décision/question/conseil découpé ----
 # La maquette montre tout le CDC, pas seulement les tableaux de synthèse. C'est lourd
 # (~650 Ko de markdown) mais c'est du texte, et c'est ce qui rend la page « CDC » vraie.
@@ -124,10 +149,11 @@ js = """/* INDEX DU CDC — FICHIER GÉNÉRÉ, ne pas éditer à la main.
                     "depot": "iprospective/tools/atombox-webmail-core",
                     "chapitres": chapitres, "decisions": decisions, "questions": questions,
                     "conseils": conseils, "dict": dico,
-                    "textes": textes, "sections": sections },
+                    "textes": textes, "sections": sections,
+                    "plan": plan, "vrac": vrac, "modele": modele },
                   ensure_ascii=False, indent=2))
 
 io.open(os.path.abspath(SORTIE), "w", encoding="utf-8").write(js)
-print("%s : %d décisions, %d questions, %d chapitres, %d fonctionnalités, %d entités, %d sections de texte, %d Ko"
+print("%s : %d décisions, %d questions, %d chapitres, %d fonctionnalités, %d entités, %d sections, %d notes de vrac, %d fichiers du modèle, %d Ko"
       % (os.path.relpath(SORTIE), len(decisions), len(questions), len(chapitres),
-         len(dico["fonctionnalites"]), len(dico["entites"]), len(sections), len(js) // 1024))
+         len(dico["fonctionnalites"]), len(dico["entites"]), len(sections), len(vrac), len(modele), len(js) // 1024))
