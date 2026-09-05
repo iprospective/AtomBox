@@ -11,7 +11,7 @@ def test_toutes_les_colonnes_sont_migrees():
     ajouts = "\n".join(open(f, encoding="utf-8").read() for f in sorted(glob.glob(os.path.join(VERS, "0*.py"))))
     manquent = []
     for table, t in manifest["tables"].items():
-        m = re.search(r'CREATE TABLE "%s" \((.*?)\n\);' % table, fige, re.S)
+        m = re.search(r'CREATE TABLE "%s" \((.*?)\n\)' % table, fige + "\n" + ajouts, re.S)
         colonnes_figees = set(re.findall(r'^\s*"(\w+)" ', m.group(1), re.M)) if m else set()
         for c in t["colonnes"]:
             if c["nom"] not in colonnes_figees and not re.search(r'ALTER TABLE "%s" ADD COLUMN "%s"' % (table, c["nom"]), ajouts) \
