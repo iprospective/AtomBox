@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Déploie le POC sur dev.iprospective.net → https://atombox.dev.iprospective.fr/
 #
-# Rejouable : régénère l'index du CDC, reconstruit la page autonome, joue les
-# tests, puis remplace le contenu servi. Le vhost, lui, n'est créé qu'une fois
+# Rejouable : régénère l'index du CDC (générateur commun, à la racine du dépôt — D156),
+# reconstruit la page autonome, joue les tests, puis remplace le contenu servi. Le vhost, lui, n'est créé qu'une fois
 # (voir outils/vhost-atombox.conf).
 #
-#   bash outils/deploy.sh
+#   bash webmail/outils/deploy.sh    (depuis la racine du dépôt, ou n'importe où)
 set -euo pipefail
 
 RACINE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,7 +17,7 @@ cd "$RACINE"
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-/run/user/$(id -u)/ssh-agent.sock}"
 
 echo "→ index du CDC"
-python3 outils/gen-cdc-index.py
+python3 "$RACINE/../outils/gen-cdc-index.py"
 
 echo "→ page autonome"
 python3 outils/bundle.py
