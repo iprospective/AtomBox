@@ -20,7 +20,7 @@
       if (q === "all" || q === "nav")    ABX.Controllers.Nav.peindre();
       if (q === "all" || q === "list")   attente = ABX.Controllers.List.charger();
       if (q === "all" || q === "detail") App.peindreDetail();
-      if (q === "all" || q === "q")      App.peindreQ();
+      if ((q === "all" || q === "q") && ABX.Views.QueryLog) App.peindreQ();
       return attente;
     },
 

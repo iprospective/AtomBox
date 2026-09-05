@@ -13,11 +13,17 @@ function scriptsDeIndex() {
 }
 
 /* Démarre une « page » : nouveau contexte, même stockage si on veut simuler
-   un rechargement. Renvoie le contexte pour piloter l'application. */
-function demarrer(stockage) {
+   un rechargement. Renvoie le contexte pour piloter l'application.
+   opts.session : "poc" (défaut — la maquette), "api" (le produit, sans réseau ici),
+   ou null (aucune session : l'écran de connexion). Une session déjà présente dans
+   le stockage n'est jamais écrasée — c'est ce que fait un rechargement. */
+function demarrer(stockage, opts) {
   const fichiers = scriptsDeIndex();
   const doc = creerDocument();
   const ls = stockage || creerStockage();
+  const o = Object.assign({ session: "poc" }, opts || {});
+  if (ls.getItem("abx.session") === null && o.session)
+    ls.setItem("abx.session", JSON.stringify(o.session === "poc" ? { mode: "poc", jeton: "poc", compte: "poc" } : { mode: "api", jeton: "t", compte: "x" }));
   const sandbox = {
     console, document: doc, localStorage: ls,
     matchMedia: () => ({ matches: false }),
@@ -31,12 +37,15 @@ function demarrer(stockage) {
   };
   sandbox.window = sandbox;
   const ctx = vm.createContext(sandbox);
-  for (const f of fichiers) {
-    const code = fs.readFileSync(path.join(RACINE, f), "utf8");
-    try { vm.runInContext(code, ctx, { filename: f }); }
-    catch (e) { throw new Error("échec au chargement de " + f + " : " + e.message); }
-  }
-  return { ABX: sandbox.ABX, doc, ls, fichiers };
+  const charges = [];
+  const executer = f => { const code = fs.readFileSync(path.join(RACINE, f), "utf8");
+    try { vm.runInContext(code, ctx, { filename: f }); charges.push(f); }
+    catch (e) { throw new Error("échec au chargement de " + f + " : " + e.message); } };
+  /* document.write pendant l'analyse (le chargeur, D157) : synchrone, dans l'ordre —
+     le harnais exécute chaque <script src> écrit, comme le navigateur */
+  doc.write = html => { for (const m of html.matchAll(/src="([^"?]+)/g)) executer(m[1]); };
+  for (const f of fichiers) executer(f);
+  return { ABX: sandbox.ABX, doc, ls, fichiers: charges };
 }
 
 /* L'amorçage est ASYNCHRONE (D141 : les référentiels et la liste arrivent par
