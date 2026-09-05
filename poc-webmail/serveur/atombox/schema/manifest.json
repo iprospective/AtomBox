@@ -1,5 +1,5 @@
 {
- "genere": "2026-09-05T15:45:04",
+ "genere": "2026-09-06T00:25:21",
  "tables": {
   "comm": {
    "cle": [
@@ -770,6 +770,11 @@
      "nom": "nom",
      "type": "text",
      "obligatoire": true
+    },
+    {
+     "nom": "mot_de_passe_empreinte",
+     "type": "text",
+     "obligatoire": false
     },
     {
      "nom": "correspondant_id",
@@ -1875,10 +1880,57 @@
     "D102",
     "D106"
    ]
+  },
+  "session": {
+   "cle": [
+    "session_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "session_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "compte_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "jeton_empreinte",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "cree_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "expire_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "revoque_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "agent",
+     "type": "text",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D063",
+    "D150",
+    "D157"
+   ]
   }
  },
- "fks": 67,
- "index": 56,
- "contraintes": 6,
+ "fks": 68,
+ "index": 57,
+ "contraintes": 7,
  "rapport": []
 }

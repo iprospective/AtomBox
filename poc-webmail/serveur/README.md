@@ -8,7 +8,8 @@ Python 3.12, `asyncio`, PostgreSQL ≥ 14 (**D154**). Découpé par fonctionnali
 | `atombox/magasin/` | F002 | le magasin d'octets `ab/cd/<id>`, zstd (D145) |
 | `atombox/ingestion/` | F001, F113 | le démon IMAP : IDLE, PEEK, reprise par UID ; synchronisation des états |
 | `atombox/filtres/` | F016 | le moteur de filtres |
-| `atombox/api/` | — | l'API REST, une route par ligne de `routes.yml` |
+| `atombox/api/` | — | le routage (routes = contrôleurs + actions), la sécurité, l'application FastAPI, le contrat Pydantic engendré |
+| `atombox/controleurs/` | F124… | une classe par ressource, une méthode `@action(méthode, chemin)` par route de `routes.yml` — le contrat est vérifié au démarrage |
 | `atombox/etat/` | F122 | la page d'état et les métriques |
 
 ```
@@ -22,10 +23,11 @@ DATABASE_URL=postgresql://…/atombox .venv/bin/alembic upgrade head
 
 Le schéma n'est **jamais** édité à la main : on corrige le dictionnaire, on régénère, on migre.
 
-## La base et les migrations
+## La base, l'ORM et les migrations (D158)
 
-- **driver** : `psycopg` 3 — SQL direct, pas d'ORM : le schéma vient du dictionnaire, les
-  requêtes sont écrites contre lui ;
+- **ORM** : SQLAlchemy 2 sur `psycopg` 3 — les modèles sont **engendrés** du dictionnaire
+  (`outils/gen-modeles.py` → `atombox/schema/modeles.py`), comme le DDL ; **aucune chaîne SQL**
+  hors de `schema/` (un test le refuse) ; synchrone pour le démon, asynchrone pour l'API ;
 - **migrations** : **Alembic**, la file est `atombox/schema/migrations/versions/` — `0001` applique
   la copie figée `0001_schema.sql`, chaque changement du dictionnaire ajoute une révision
   (`0002_reprise_par_uid.py`…) qui mène au `schema.sql` courant ; `tests/test_migrations.py`

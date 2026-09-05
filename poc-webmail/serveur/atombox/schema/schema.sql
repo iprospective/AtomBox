@@ -1,6 +1,6 @@
--- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-05T15:45:04 depuis le dictionnaire des données.
+-- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-06T00:25:21 depuis le dictionnaire des données.
 -- NE PAS ÉDITER : la source est .mmi-pm/docs/dict/*.yml (F114, D154). PostgreSQL ≥ 14 (D027).
--- 32 tables, 67 clés étrangères, 56 index, 6 unicités. Identifiants : uuid v7 engendrés par
+-- 33 tables, 68 clés étrangères, 57 index, 7 unicités. Identifiants : uuid v7 engendrés par
 -- l'application (D145). Le tronc comm n'est PAS partitionné en V0 : la partition par canal (D138)
 -- se pose quand un second canal existe — l'uuid rend la clé indépendante de la partition.
 
@@ -202,6 +202,7 @@ CREATE TABLE "compte" (
   "compte_id" uuid NOT NULL,
   "login" text NOT NULL,
   "nom" text NOT NULL,
+  "mot_de_passe_empreinte" text,
   "correspondant_id" uuid,
   "actif" boolean NOT NULL,
   "cree_le" timestamptz NOT NULL,
@@ -479,6 +480,18 @@ CREATE TABLE "modele" (
   CONSTRAINT "ck_modele_portee" CHECK ("portee" IN ('instance', 'domaine', 'compte', 'boite'))
 );
 
+-- session — Une session ouverte par un compte (POST /session) : un jeton opaque haché, une expiration, une révocation. C'e
+CREATE TABLE "session" (
+  "session_id" uuid NOT NULL,
+  "compte_id" uuid NOT NULL,
+  "jeton_empreinte" text NOT NULL,
+  "cree_le" timestamptz NOT NULL,
+  "expire_le" timestamptz NOT NULL,
+  "revoque_le" timestamptz,
+  "agent" text,
+  CONSTRAINT "pk_session" PRIMARY KEY ("session_id")
+);
+
 -- clés étrangères, après toutes les tables : l'ordre de création n'importe plus
 ALTER TABLE "comm" ADD CONSTRAINT "fk_comm_thread_id" FOREIGN KEY ("thread_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "comm_email" ADD CONSTRAINT "fk_comm_email_comm_id" FOREIGN KEY ("comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
@@ -547,6 +560,7 @@ ALTER TABLE "modele" ADD CONSTRAINT "fk_modele_domaine_id" FOREIGN KEY ("domaine
 ALTER TABLE "modele" ADD CONSTRAINT "fk_modele_application_id" FOREIGN KEY ("application_id") REFERENCES "application" ("application_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "modele" ADD CONSTRAINT "fk_modele_identite_id" FOREIGN KEY ("identite_id") REFERENCES "identite" ("identite_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "modele" ADD CONSTRAINT "fk_modele_cree_par" FOREIGN KEY ("cree_par") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "session" ADD CONSTRAINT "fk_session_compte_id" FOREIGN KEY ("compte_id") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
 
 -- unicités
 ALTER TABLE "adresse" ADD CONSTRAINT "uq_adresse_adresse_complete" UNIQUE ("adresse_complete");
@@ -555,6 +569,7 @@ ALTER TABLE "compte" ADD CONSTRAINT "uq_compte_login" UNIQUE ("login");
 ALTER TABLE "tag" ADD CONSTRAINT "uq_tag_axe_id_valeur" UNIQUE ("axe_id", "valeur");
 ALTER TABLE "dossier" ADD CONSTRAINT "uq_dossier_boite_id_alias_imap" UNIQUE ("boite_id", "alias_imap");
 ALTER TABLE "dmarc_rapport" ADD CONSTRAINT "uq_dmarc_rapport_emetteur_report_id" UNIQUE ("emetteur", "report_id");
+ALTER TABLE "session" ADD CONSTRAINT "uq_session_jeton_empreinte" UNIQUE ("jeton_empreinte");
 
 -- index des références
 CREATE INDEX "ix_comm_thread_id" ON "comm" ("thread_id");
@@ -613,5 +628,6 @@ CREATE INDEX "ix_modele_domaine_id" ON "modele" ("domaine_id");
 CREATE INDEX "ix_modele_application_id" ON "modele" ("application_id");
 CREATE INDEX "ix_modele_identite_id" ON "modele" ("identite_id");
 CREATE INDEX "ix_modele_cree_par" ON "modele" ("cree_par");
+CREATE INDEX "ix_session_compte_id" ON "session" ("compte_id");
 
 COMMIT;
