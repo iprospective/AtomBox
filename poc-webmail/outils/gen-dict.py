@@ -8,8 +8,17 @@ pm-wiki-sync. Le retaper à la main garantirait qu'il diverge :
 """
 import io, os, sys, yaml, datetime
 
-CDC = os.environ.get("CDC_DIR",
-    "/zfs/workspaces/iprospective/dev/atombox-webmail/.mmi-pm/docs")
+def trouver_cdc():
+    """Le CDC vit dans le dépôt PM, atteint par le lien .mmi-pm du workspace : on remonte
+    depuis ce fichier jusqu'à le trouver — jamais un chemin en dur (D156, portabilité)."""
+    d = os.path.dirname(os.path.abspath(__file__))
+    while d != os.path.dirname(d):
+        c = os.path.join(d, ".mmi-pm", "docs")
+        if os.path.isdir(c): return c
+        d = os.path.dirname(d)
+    sys.exit("gen : aucun .mmi-pm/docs au-dessus de " + __file__ + " — passer CDC_DIR")
+
+CDC = os.environ.get("CDC_DIR") or trouver_cdc()
 DICT = os.path.join(CDC, "dict")
 SORTIE = os.path.join(CDC, "cdc-rm2881-16-dictionnaire.md")
 

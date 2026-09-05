@@ -355,7 +355,7 @@ minimal — il ne rend rien, il vérifie que le câblage tient.
 ## Outillage et déploiement
 
 ```
-python3 outils/gen-cdc-index.py   # régénère js/services/cdc-index.js depuis le CDC
+python3 ../outils/gen-cdc-index.py   # régénère js/services/cdc-index.js depuis le CDC (générateur commun, racine du dépôt)
 python3 outils/bundle.py          # produit dist/index.html, page autonome de ~240 Ko
 bash    outils/deploy.sh          # les trois ci-dessus + tests + mise en ligne
 ```

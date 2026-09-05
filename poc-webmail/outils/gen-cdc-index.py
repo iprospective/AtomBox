@@ -5,13 +5,23 @@ Le POC affiche le registre des décisions ; le retaper à la main garantirait
 qu'il diverge. Ce script lit les tableaux de synthèse des fichiers 90 et 99 du
 CDC et en produit un module JS. À relancer après chaque décision consignée :
 
-    python3 outils/gen-cdc-index.py
+    python3 outils/gen-cdc-index.py          (depuis la racine du dépôt — écrit webmail/js/services/cdc-index.js)
 """
 import io, os, re, sys, json, datetime
 
-CDC = os.environ.get("CDC_DIR",
-    "/zfs/workspaces/iprospective/dev/atombox-webmail/.mmi-pm/docs")
-SORTIE = os.path.join(os.path.dirname(__file__), "..", "js", "services", "cdc-index.js")
+def trouver_cdc():
+    """Le CDC vit dans le dépôt PM, atteint par le lien .mmi-pm du workspace : on remonte
+    depuis ce fichier jusqu'à le trouver — jamais un chemin en dur (D156, portabilité)."""
+    d = os.path.dirname(os.path.abspath(__file__))
+    while d != os.path.dirname(d):
+        c = os.path.join(d, ".mmi-pm", "docs")
+        if os.path.isdir(c): return c
+        d = os.path.dirname(d)
+    sys.exit("gen : aucun .mmi-pm/docs au-dessus de " + __file__ + " — passer CDC_DIR")
+
+CDC = os.environ.get("CDC_DIR") or trouver_cdc()
+DEPOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+SORTIE = os.path.join(DEPOT, "webmail", "js", "services", "cdc-index.js")
 
 def propre(t):
     t = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", t)       # liens markdown
