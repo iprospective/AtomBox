@@ -32,6 +32,13 @@
 
     /* l'arborescence de l'utilisateur : les compteurs (D078), ses dossiers virtuels
        personnels (D143) et ses épingles (D144) — une seule réponse */
+    /* la session (D157) : le serveur simulé ne connaît que poc/poc — ce que le vrai
+       serveur fera avec un mot de passe ou un SSO (D063, D150) */
+    ["POST", /^\/session$/, (_, __, c) => { c = c || {};
+      if (c.utilisateur !== "poc" || c.mot_de_passe !== "poc") throw new Error("POST /session → 401 : identifiants refusés");
+      return { jeton: "poc", compte: ABX.Fixtures.MOI }; }],
+    ["DELETE", /^\/session$/, () => ok({ fermee: true })],
+
     ["GET", /^\/arborescence$/, () => ({ compteurs: C.recompte(),
       /* des COPIES : le vrai serveur sérialise, le cache du client ne doit pas partager
          le tableau du store — sinon un push s'y verrait deux fois */

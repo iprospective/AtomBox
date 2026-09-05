@@ -55,6 +55,10 @@
        par les vues). Ce ne sont PAS des fixtures : c'est ce que le produit sert. */
     referentiels: () => appelle("referentiels", []),
 
+    /* ---- la session (D063, D157) : POST /session rend un jeton ; DELETE le révoque */
+    connecter:   (utilisateur, mot_de_passe) => appelle("connecter", [utilisateur, mot_de_passe]),
+    deconnecter: () => appelle("deconnecter", []),
+
     /* ---- écriture : ce qui touche le RATTACHEMENT (D036) ------------------- */
     /* PATCH /messages/{id}/rattachement */
     patcher:    (id, patch) => appelle("patcher", [id, patch]),

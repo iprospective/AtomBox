@@ -65,6 +65,7 @@ function creerDocument() {
   };
   const doc = {
     _els: racine, _statiques: STATIQUES,
+    body: mkEl("body", {}),
     getElementById(id) { return racine[id] = racine[id] || mkEl("div", { id }); },
     querySelectorAll(sel) { return STATIQUES[sel] || []; },
     querySelector(sel) { return (STATIQUES[sel] || [])[0] || null; },

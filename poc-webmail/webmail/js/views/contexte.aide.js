@@ -44,6 +44,8 @@
     affichée en premier, le nom déclaré ensuite — le nom, lui, n'est pas vérifié.</div>`);
 
   ABX.ContexteAide = { points: R.pointsDuMode("aide") };
+  A("connexion", () => `<div class="hint">Vos identifiants AtomBox — ceux de votre compte, pas ceux
+    d'une boîte. Si votre organisation utilise une connexion unique, c'est elle qui s'ouvre.</div>`);
   A("nav.virtuel", () => `<div class="hint">Un dossier virtuel est un filtre : un message y
     apparaît s'il porte <b>tous</b> les tags choisis. Une valeur laissée vide prend toute la
     famille. Le supprimer n'efface aucun message.</div>`);

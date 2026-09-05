@@ -385,3 +385,13 @@ sans le filtre de dossiers et le repli par axe — c'est ce que ce palier rend �
 Rien sur la **performance** : tout est instantané sur des fixtures, et les requêtes du
 journal ne sont jamais exécutées. Une UI validée ici peut s'effondrer à 5 M messages — cela
 se vérifiera au POC suivant, sur corpus injecté (chapitre 08).
+
+## La maquette est une session (D157)
+
+Il n'y a qu'un `index.html`, et c'est le produit. Sur l'écran de connexion, **`poc` / `poc`**
+ouvre la session simulée : le chargeur (`js/core/chargeur.js`) écrit alors les fichiers du POC à
+leur place, en trois points, et la barre du POC apparaît. Tout autre couple part au serveur.
+« Quitter » ferme la session et recharge la page, sans rien du POC.
+
+- `dist/index.html` (autonome) : tout inline, `poc/poc` y marche hors ligne ;
+- `dist/prod.html` (produit) : rien du POC, `poc/poc` y est refusé.

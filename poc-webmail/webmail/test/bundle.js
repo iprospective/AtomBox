@@ -20,6 +20,8 @@ eq(html.includes("css/app.css"), false, "aucune feuille de style externe");
 vrai(html.includes("<style>"), "la feuille est inlinée");
 vrai(html.includes("engendrée par outils/bundle.py"), "le fichier se déclare engendré");
 vrai(html.length > 150000, "taille : " + Math.round(html.length / 1024) + " Ko");
+vrai(html.includes("window.ABX_INLINE = true"), "la page autonome dit au chargeur que tout est inline (D157)");
+vrai(html.includes("js/poc/pocbar.js =====") && html.includes("js/services/serveur.poc.js ====="), "elle embarque le POC : poc/poc y marche hors ligne");
 
 console.log("— il tourne ——————————————————————————————————");
 /* Le bundle ne contient qu'UN bloc script, mais son contenu peut citer la
@@ -27,6 +29,8 @@ console.log("— il tourne —————————————————�
    <script> au DERNIER </script>, pas au premier venu. */
 const js = html.slice(html.indexOf("<script>") + 8, html.lastIndexOf("</script>"));
 const doc = creerDocument(), ls = creerStockage();
+/* la maquette est une session (D157) : la page autonome s'ouvre avec poc/poc, tout est inline */
+ls.setItem("abx.session", JSON.stringify({ mode: "poc", jeton: "poc", compte: "poc" }));
 const sandbox = { console: { log(){}, warn(){}, error(){} }, document: doc, localStorage: ls,
   matchMedia: () => ({ matches:false }), addEventListener: () => {},
   alert: () => {}, confirm: () => true, location: { reload(){} },
@@ -50,6 +54,7 @@ eq(B.CDC.decisions.length, src.CDC.decisions.length, "même index du CDC");
 vrai(doc.getElementById("nav").innerHTML.includes("Fournisseurs"), "l'arborescence est peinte");
 vrai(doc.getElementById("list").innerHTML.includes("msg"), "la liste aussi");
 vrai(doc.getElementById("qpanel").innerHTML.includes("casc"), "et la trace");
+vrai(B.PocBar && B.PocBar.chargee && B.Session.simulee(), "la barre du POC est là, la session est simulée");
 
 bilan();
 })();

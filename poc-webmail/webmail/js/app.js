@@ -8,10 +8,14 @@
   "use strict";
   const D = ABX.Dom, St = ABX.Store, C = ABX.Corpus, App = ABX.Controllers.App;
 
+  /* ---- la session d'abord (D157) : sans session, l'écran de connexion et RIEN d'autre.
+     Le chargeur a déjà choisi le monde au chargement (simulé si poc/poc). */
+  if (!ABX.Session.lire()) { ABX.Controllers.Connexion.peindre(); ABX.pret = Promise.resolve(false); return; }
+  document.body.dataset.etat = "ouvert";
+
   /* ---- réactions du bus ---------------------------------------------------
      Les services ne peignent rien ; ils émettent, et la conséquence est ici. */
   ABX.Bus.on("corpus:changed",   () => App.peindre("all"));
-  ABX.Bus.on("querylog:changed", () => App.peindre("q"));
 
   /* ---- en-tête ------------------------------------------------------------ */
   D.byId("btheme").onclick = () => {
@@ -20,25 +24,12 @@
       || (matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light");
     r.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
   };
-  D.byId("bq").onclick   = () => App.setQ(!App.qOuvert());
   D.byId("bnew").onclick = () => ABX.Controllers.Compose.demarrer("new", null);
   D.byId("badmin").onclick = () => ABX.Controllers.Admin.ouvrir(St.ui.adminVolet);
   D.byId("bpj").onclick = () => ABX.Controllers.Admin.ouvrirPJ();
-  document.querySelectorAll(".pocnav [data-page]").forEach(b =>
-    b.onclick = () => ABX.Controllers.Pages.ouvrir(b.dataset.page));
-  /* La V0 (D140) : un interrupteur. Tout ce qui demande une base rend vide, rien
-     n'est réécrit — on repeint, c'est tout. */
-  const bv0 = D.byId("pocv0");
-  if (bv0) {
-    const etat = () => bv0.classList.toggle("on", ABX.V0());
-    etat();
-    bv0.onclick = () => { St.ui.jalon = ABX.V0() ? null : 0; St.save(); etat(); App.peindre(); };
-  }
-  D.byId("breset").onclick = () => {
-    if (!confirm("Oublier l'état local (lectures, archivages, corbeille, brouillons, onglets) "
-               + "et repartir des fixtures ?")) return;
-    St.oublier(); location.reload();
-  };
+  /* se déconnecter : la session est fermée, la page rechargée — le chargeur ne
+     chargera plus rien du POC si c'en était une (D157) */
+  D.byId("bsortir").onclick = () => { ABX.Session.fermer(); location.reload(); };
   D.byId("bnav").onclick = () => App.MOBILE() ? App.setVue("nav")
     : (D.byId("main").classList.contains("navopen") ? App.fermerNav() : App.ouvrirNav());
   D.byId("scrim").onclick = () => { App.fermerNav(); App.setQ(false); };
@@ -71,8 +62,6 @@
      ces trois lignes n'ont pas d'objet — Corpus n'est pas chargé — et l'API
      réelle répond aux mêmes appels. */
   const gen = C ? (C.engendre(), C.applique(), C.recompte(), C) && { n: C.tous.length, ms: 0 } : { n: 0, ms: 0 };
-  /* le journal des requêtes OBSERVE la couche d'accès ; il n'est appelé à la main nulle part */
-  if (ABX.QueryLog && ABX.Api.on) ABX.Api.on(a => { if (a.ms > 0) ABX.QueryLog.mesure && ABX.QueryLog.mesure(a); });
 
   /* Les onglets sont restaurés TELS QUELS (D141) : au démarrage le cache de la
      couche d'accès est vide — un onglet de message ira chercher son message

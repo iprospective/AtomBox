@@ -20,8 +20,10 @@
   function req(methode, chemin, corps) {
     if (ABX.ServeurSimule)
       return Promise.resolve().then(() => ABX.ServeurSimule.traiter(methode, chemin, corps));
+    const jeton = ABX.Session && ABX.Session.jeton();
     return fetch(BASE + chemin, { method: methode,
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      headers: Object.assign({ "Content-Type": "application/json", "Accept": "application/json" },
+        jeton && jeton !== "poc" ? { "Authorization": "Bearer " + jeton } : {}),
       body: corps === undefined ? undefined : JSON.stringify(corps) })
       .then(r => { if (r.status === 404) return null;
         if (!r.ok) throw new Error(methode + " " + chemin + " → " + r.status); return r.json(); });
@@ -48,6 +50,10 @@
     piecesJointes: () => req("GET", "/pieces-jointes").then(r => (r && r.pieces_jointes) || []),
     referentiels: () => req("GET", "/referentiels")
         .then(r => r || { moi: { nom: "", boites: [] }, speciaux: [], util: [], axes: [], valeurs: {}, statuts: [], vues: [] }),
+
+    /* ---- la session ---------------------------------------------------------- */
+    connecter: (utilisateur, mot_de_passe) => req("POST", "/session", { utilisateur, mot_de_passe }),
+    deconnecter: () => req("DELETE", "/session"),
 
     /* ---- écriture : réponses {ok, modifies, …} ------------------------------ */
     patcher: (id, patch) => req("PATCH", "/messages/" + encodeURIComponent(id) + "/rattachement", patch)
