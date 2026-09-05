@@ -1,6 +1,6 @@
--- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-05T15:45:04 depuis le dictionnaire des données.
+-- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-05T15:39:41 depuis le dictionnaire des données.
 -- NE PAS ÉDITER : la source est .mmi-pm/docs/dict/*.yml (F114, D154). PostgreSQL ≥ 14 (D027).
--- 32 tables, 67 clés étrangères, 56 index, 6 unicités. Identifiants : uuid v7 engendrés par
+-- 32 tables, 67 clés étrangères, 56 index, 5 unicités. Identifiants : uuid v7 engendrés par
 -- l'application (D145). Le tronc comm n'est PAS partitionné en V0 : la partition par canal (D138)
 -- se pose quand un second canal existe — l'uuid rend la clé indépendante de la partition.
 
@@ -327,8 +327,6 @@ CREATE TABLE "dossier" (
   "alias_imap" text,
   "protege" boolean NOT NULL,
   "ordre" bigint,
-  "uid_validity" bigint,
-  "uid_suivant" bigint,
   CONSTRAINT "pk_dossier" PRIMARY KEY ("dossier_id")
 );
 
@@ -553,7 +551,6 @@ ALTER TABLE "adresse" ADD CONSTRAINT "uq_adresse_adresse_complete" UNIQUE ("adre
 ALTER TABLE "domaine" ADD CONSTRAINT "uq_domaine_nom_ascii" UNIQUE ("nom_ascii");
 ALTER TABLE "compte" ADD CONSTRAINT "uq_compte_login" UNIQUE ("login");
 ALTER TABLE "tag" ADD CONSTRAINT "uq_tag_axe_id_valeur" UNIQUE ("axe_id", "valeur");
-ALTER TABLE "dossier" ADD CONSTRAINT "uq_dossier_boite_id_alias_imap" UNIQUE ("boite_id", "alias_imap");
 ALTER TABLE "dmarc_rapport" ADD CONSTRAINT "uq_dmarc_rapport_emetteur_report_id" UNIQUE ("emetteur", "report_id");
 
 -- index des références

@@ -1,0 +1,13 @@
+From: Lettre <newsletter@lettre.example>
+To: contact@exemple.fr
+Subject: Les =?utf-8?q?nouveaut=C3=A9s?= de septembre
+Date: Fri, 04 Sep 2026 06:00:00 +0200
+Message-ID: <n9@lettre.example>
+List-Id: Lettre <lettre.example>
+List-Unsubscribe: <mailto:stop@lettre.example>
+Precedence: bulk
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+MIME-Version: 1.0
+
+<html><body><p>Bonjour ! <b>Nouveautés</b>.</p></body></html>

@@ -21,3 +21,22 @@ DATABASE_URL=postgresql://…/atombox .venv/bin/alembic upgrade head
 ```
 
 Le schéma n'est **jamais** édité à la main : on corrige le dictionnaire, on régénère, on migre.
+
+## La base et les migrations
+
+- **driver** : `psycopg` 3 — SQL direct, pas d'ORM : le schéma vient du dictionnaire, les
+  requêtes sont écrites contre lui ;
+- **migrations** : **Alembic**, la file est `atombox/schema/migrations/versions/` — `0001` applique
+  la copie figée `0001_schema.sql`, chaque changement du dictionnaire ajoute une révision
+  (`0002_reprise_par_uid.py`…) qui mène au `schema.sql` courant ; `tests/test_migrations.py`
+  vérifie par lecture que la file couvre chaque colonne, et avec une base qu'elle s'applique ;
+- **identifiants** : UUID v7 engendrés par l'application (`atombox/uuid7.py`, D145).
+
+## F001, F002 — l'ingestion et le magasin
+
+`atombox/magasin/` : `ab/cd/<id>`, zstd conditionnel, jamais réécrit. `atombox/ingestion/` :
+`analyse.py` (le MIME par `email`), `identite.py` (D064), `ingestion.py` (une transaction par
+message, déduplication, rattachements, pièces, fil), `imap.py` (PEEK, reprise par UID, IDLE),
+`demon.py` (une tâche par boîte). Tests sans base : analyse, identité, magasin, migrations ;
+avec `DATABASE_URL` : ingestion complète dans une base jetable. La relève IMAP et le démon se
+valident sur le pilote (D052), pas dans le harnais.

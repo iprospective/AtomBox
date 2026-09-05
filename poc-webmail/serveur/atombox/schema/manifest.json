@@ -1,5 +1,5 @@
 {
- "genere": "2026-09-05T15:39:41",
+ "genere": "2026-09-05T15:45:04",
  "tables": {
   "comm": {
    "cle": [
@@ -1273,6 +1273,16 @@
      "nom": "ordre",
      "type": "bigint",
      "obligatoire": false
+    },
+    {
+     "nom": "uid_validity",
+     "type": "bigint",
+     "obligatoire": false
+    },
+    {
+     "nom": "uid_suivant",
+     "type": "bigint",
+     "obligatoire": false
     }
    ],
    "decisions": [
@@ -1869,6 +1879,6 @@
  },
  "fks": 67,
  "index": 56,
- "contraintes": 5,
+ "contraintes": 6,
  "rapport": []
 }

@@ -1,5 +1,8 @@
 """V0 — le schéma complet, engendré depuis le dictionnaire (F114, D138 : les tables de la V1 existent, vides)
 
+La FILE des migrations : chaque changement du dictionnaire régénère schema.sql (l'état voulu) ET
+ajoute ici une révision qui y mène depuis la précédente. 0001 applique une copie figée.
+
 Revision ID: 0001
 Revises:
 """
@@ -12,7 +15,7 @@ branch_labels = None
 depends_on = None
 
 ICI = os.path.dirname(os.path.abspath(__file__))
-SCHEMA = os.path.join(ICI, "..", "..", "schema.sql")
+SCHEMA = os.path.join(ICI, "0001_schema.sql")   # la copie FIGÉE du schéma à cette révision — schema.sql, lui, avance
 
 def upgrade():
     sql = open(SCHEMA, encoding="utf-8").read()
