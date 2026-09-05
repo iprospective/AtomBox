@@ -1,0 +1,23 @@
+[project]
+name = "atombox"
+version = "0.0.1"
+description = "AtomBox — le serveur : schéma, magasin d'octets, ingestion IMAP, moteur de filtres, API (D154)"
+requires-python = ">=3.12"
+dependencies = [
+  "psycopg[binary]>=3.2",
+  "alembic>=1.13",
+  "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pglast>=6"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["atombox*"]
