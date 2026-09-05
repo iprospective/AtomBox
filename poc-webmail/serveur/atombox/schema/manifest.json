@@ -1,0 +1,1874 @@
+{
+ "genere": "2026-09-05T15:39:41",
+ "tables": {
+  "comm": {
+   "cle": [
+    "comm_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "type",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "date_recue",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "date_declaree",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "date_ingestion",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "sens",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "sujet",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "sujet_normalise",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "thread_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "nature",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "from_adresse",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "from_nom",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "taille",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "nb_pieces_jointes",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "langue",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "est_chiffre",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "est_signe",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "snippet",
+     "type": "text",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D138",
+    "D098",
+    "D013",
+    "D022",
+    "D130"
+   ]
+  },
+  "comm_email": {
+   "cle": [
+    "comm_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "message_id",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "in_reply_to",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "references",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "return_path",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "list_id",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "list_unsubscribe",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "headers",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "verdict_spf",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "verdict_dkim",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "verdict_dmarc",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "arc_valide",
+     "type": "boolean",
+     "obligatoire": false
+    },
+    {
+     "nom": "blob_ref",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "empreinte",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "structure_mime",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
+     "nom": "uid",
+     "type": "bigint",
+     "obligatoire": false
+    },
+    {
+     "nom": "uid_validity",
+     "type": "bigint",
+     "obligatoire": false
+    },
+    {
+     "nom": "queue_id",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "reponse_possible",
+     "type": "text",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D138",
+    "D026",
+    "D027",
+    "D043",
+    "D064",
+    "D119"
+   ]
+  },
+  "comm_interne": {
+   "cle": [
+    "comm_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "de_compte_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "a_compte_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "corps",
+     "type": "text",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D012",
+    "D123",
+    "D138"
+   ]
+  },
+  "comm_groupe": {
+   "cle": [
+    "comm_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "auteur_compte_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "corps",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "modifie_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "supprime_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D122",
+    "D123",
+    "D124",
+    "D138"
+   ]
+  },
+  "participant": {
+   "cle": [
+    "comm_id",
+    "ordre"
+   ],
+   "colonnes": [
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "role",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "adresse_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "nom_affiche",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "ordre",
+     "type": "bigint",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D035",
+    "D126"
+   ]
+  },
+  "piece_jointe": {
+   "cle": [
+    "piece_jointe_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "piece_jointe_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "blob_ref",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "type_detecte",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "taille_octets",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "blob_origine",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "recompresse_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "nb_references",
+     "type": "bigint",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D011",
+    "D024",
+    "D025"
+   ]
+  },
+  "comm_piece_jointe": {
+   "cle": [
+    "comm_id",
+    "piece_jointe_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "piece_jointe_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "ordre",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "nom_declare",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "type_declare",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "transfer_encoding",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "disposition",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "content_id",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "parametres",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
+     "nom": "renomme_en",
+     "type": "text",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D024",
+    "D025",
+    "D026"
+   ]
+  },
+  "blob": {
+   "cle": [
+    "empreinte"
+   ],
+   "colonnes": [
+    {
+     "nom": "empreinte",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "taille_octets",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "taille_stockee",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "compression",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "cree_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "nb_references",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "dernier_acces",
+     "type": "timestamptz",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D005",
+    "D007",
+    "D010",
+    "D064",
+    "D069",
+    "D070",
+    "D087"
+   ]
+  },
+  "correspondant": {
+   "cle": [
+    "correspondant_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "correspondant_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "nom_canonique",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "type",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "cree_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "organisation_id",
+     "type": "uuid",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D035",
+    "D061",
+    "D126"
+   ]
+  },
+  "adresse": {
+   "cle": [
+    "adresse_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "adresse_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "local",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "local_cmp",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "local_base",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "domaine_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "adresse_complete",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "correspondant_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "lie_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "delie_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "verifie_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "verifie_methode",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "valide_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "valide_par",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "valide_portee",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "fiabilite",
+     "type": "bigint",
+     "obligatoire": false
+    },
+    {
+     "nom": "fiabilite_calculee_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D035",
+    "D136",
+    "D137",
+    "D131"
+   ]
+  },
+  "domaine": {
+   "cle": [
+    "domaine_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "domaine_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "nom_ascii",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "nom_unicode",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "parent_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "heberge_par_nous",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "politique_dmarc",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "politique_lue_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "sosie_de",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "enregistre_le",
+     "type": "date",
+     "obligatoire": false
+    },
+    {
+     "nom": "plateforme",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "valide_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "valide_par",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "valide_portee",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "fiabilite",
+     "type": "bigint",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D136",
+    "D137",
+    "D128"
+   ]
+  },
+  "identite": {
+   "cle": [
+    "identite_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "identite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "nom_affiche",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "adresse_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "reply_to",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "signature",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "au_nom_de",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "par_defaut",
+     "type": "boolean",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D102",
+    "D116"
+   ]
+  },
+  "compte": {
+   "cle": [
+    "compte_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "compte_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "login",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "nom",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "correspondant_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "actif",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "cree_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "desactive_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "preferences",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
+     "nom": "langue",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "fuseau",
+     "type": "text",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D061",
+    "D063",
+    "D135"
+   ]
+  },
+  "boite": {
+   "cle": [
+    "boite_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "adresse_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "domaine_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "type",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "absence",
+     "type": "jsonb",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D038",
+    "D039",
+    "D115",
+    "D124",
+    "D134"
+   ]
+  },
+  "rattachement": {
+   "cle": [
+    "comm_id",
+    "boite_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "compte_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "correspondant_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "lu_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "repondu_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "transfere_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "drapeau",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "statut",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "sorti_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "motif_sortie",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "supprime_par",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "restaurable_jusqu_au",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "dossier_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "dossier_origine_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "personnel",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "reveil_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "echeance_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "gele",
+     "type": "boolean",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D036",
+    "D041",
+    "D014",
+    "D015",
+    "D030",
+    "D093",
+    "D118",
+    "D134"
+   ]
+  },
+  "acces": {
+   "cle": [
+    "compte_id",
+    "boite_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "compte_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "role",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "debut",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "fin",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "accorde_par",
+     "type": "uuid",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D054",
+    "D057",
+    "D060",
+    "D072",
+    "D124"
+   ]
+  },
+  "lecture_groupe": {
+   "cle": [
+    "compte_id",
+    "boite_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "compte_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "dernier_message_lu",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "vu_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D124"
+   ]
+  },
+  "application": {
+   "cle": [
+    "application_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "application_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "type_connecteur",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "nom",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "jeton_empreinte",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "portee",
+     "type": "jsonb",
+     "obligatoire": true
+    },
+    {
+     "nom": "axes",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
+     "nom": "debit_max",
+     "type": "bigint",
+     "obligatoire": false
+    },
+    {
+     "nom": "actif",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "cree_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "dernier_appel",
+     "type": "timestamptz",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D019",
+    "D020",
+    "D021",
+    "D037",
+    "D063"
+   ]
+  },
+  "axe": {
+   "cle": [
+    "axe_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "axe_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "nom",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "application_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "acl",
+     "type": "jsonb",
+     "obligatoire": true
+    },
+    {
+     "nom": "derive",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "ordre",
+     "type": "bigint",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D016",
+    "D018",
+    "D019",
+    "D133",
+    "D077"
+   ]
+  },
+  "tag": {
+   "cle": [
+    "tag_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "tag_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "axe_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "valeur",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "libelle",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "ref_externe",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
+     "nom": "actif",
+     "type": "boolean",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D016",
+    "D017",
+    "D021"
+   ]
+  },
+  "comm_tag": {
+   "cle": [
+    "comm_id",
+    "tag_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "tag_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "source",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "application_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "pose_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "sorti_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D017",
+    "D019",
+    "D074"
+   ]
+  },
+  "dossier": {
+   "cle": [
+    "dossier_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "dossier_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "parent_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "nom",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "alias_imap",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "protege",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "ordre",
+     "type": "bigint",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D051",
+    "D075"
+   ]
+  },
+  "filtre": {
+   "cle": [
+    "filtre_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "filtre_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "portee_type",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "portee_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "nom",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "ordre",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "predicat",
+     "type": "jsonb",
+     "obligatoire": true
+    },
+    {
+     "nom": "action",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
+     "nom": "actif",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "retroactif",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "fenetre_debut",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "fenetre_fin",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "nb_declenchements",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "dernier_declenchement",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "cree_par",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "importe_de",
+     "type": "text",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D074",
+    "D075",
+    "D113",
+    "D106",
+    "D143"
+   ]
+  },
+  "envoi": {
+   "cle": [
+    "envoi_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "envoi_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "identite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "programme_pour",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "remis_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "queue_id",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "retour_enveloppe",
+     "type": "text",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D099",
+    "D114",
+    "D119",
+    "D120"
+   ]
+  },
+  "envoi_destinataire": {
+   "cle": [
+    "envoi_id",
+    "adresse_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "envoi_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "adresse_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "etat",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "dsn_comm_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "code",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "mis_a_jour_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D099",
+    "D119",
+    "D131"
+   ]
+  },
+  "dmarc_rapport": {
+   "cle": [
+    "dmarc_rapport_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "dmarc_rapport_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "domaine_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "emetteur",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "report_id",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "debut",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "fin",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "recu_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D100",
+    "D115"
+   ]
+  },
+  "dmarc_ligne": {
+   "cle": [
+    "dmarc_ligne_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "dmarc_ligne_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "dmarc_rapport_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "ip_source",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "nombre",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "disposition",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "resultat_spf",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "resultat_dkim",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "aligne_spf",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "aligne_dkim",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "en_tete_from",
+     "type": "text",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D100"
+   ]
+  },
+  "analyse": {
+   "cle": [
+    "comm_id",
+    "regle"
+   ],
+   "colonnes": [
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "regle",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "poids",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "details",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
+     "nom": "calcule_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "fige",
+     "type": "boolean",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D127",
+    "D128",
+    "D129",
+    "D139"
+   ]
+  },
+  "note": {
+   "cle": [
+    "note_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "note_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "thread_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "auteur_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "corps",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "cree_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "modifie_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "epinglee",
+     "type": "boolean",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D101",
+    "D155"
+   ]
+  },
+  "parametre": {
+   "cle": [
+    "portee_type",
+    "portee_id",
+    "cle"
+   ],
+   "colonnes": [
+    {
+     "nom": "portee_type",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "portee_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "cle",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "valeur",
+     "type": "jsonb",
+     "obligatoire": true
+    },
+    {
+     "nom": "verrouille",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "modifie_par",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "modifie_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D106",
+    "D117"
+   ]
+  },
+  "journal": {
+   "cle": [
+    "journal_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "journal_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "quand",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "qui",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "action",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "cible_type",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "cible_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "details",
+     "type": "jsonb",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D054",
+    "D056",
+    "D059",
+    "D134",
+    "D132",
+    "D137"
+   ]
+  },
+  "modele": {
+   "cle": [
+    "modele_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "modele_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "libelle",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "categorie",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "portee",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "domaine_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "application_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "sujet",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "corps",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "variables",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
+     "nom": "pieces_jointes",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
+     "nom": "identite_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "langue",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "cree_par",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "cree_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "maj_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "nb_utilisations",
+     "type": "bigint",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D153",
+    "D102",
+    "D106"
+   ]
+  }
+ },
+ "fks": 67,
+ "index": 56,
+ "contraintes": 5,
+ "rapport": []
+}
