@@ -30,7 +30,23 @@
   }
   const q = o => Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== "")
     .map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
-  const garde = m => { if (m) cache.messages[m.id] = m; return m; };
+  /* Le contrat sert des dates ISO 8601 (C009) ; les vues comparent des nombres.
+     La normalisation se fait ICI, à la réception, une fois pour toutes. Les pièces
+     jointes arrivent dans la forme documentée par la trace d'API ({pj_id, nom, octets,
+     mime_detecte, sha256, partage_par}) ; les vues du module pieces-jointes lisent encore
+     la forme interne du POC ({nom, b:{…}}) — l'adaptateur ci-dessous est LA dette qui
+     reste sur ce module (D141), et elle est d'un seul endroit. */
+  const ICONES = { "application/pdf": "📄", "image/": "🖼", "application/zip": "🗜", "text/": "📝" };
+  const icone = mime => (Object.entries(ICONES).find(([k]) => (mime || "").startsWith(k)) || [0, "📎"])[1];
+  const normaliser = m => {
+    if (typeof m.date_recue === "string") m.date_recue = Date.parse(m.date_recue);
+    if (typeof m.sorti_le === "string") m.sorti_le = Date.parse(m.sorti_le);
+    if (Array.isArray(m.pieces_jointes)) m.pieces_jointes = m.pieces_jointes.map(p => p.b ? p : {
+      nom: p.nom, declare: p.mime_declare, ordre: p.ordre,
+      b: { pj_id: p.pj_id, mime: p.mime_detecte, ko: Math.round((p.octets || 0) / 1024), sha: (p.sha256 || "").slice(0, 12), refs: p.partage_par || 1, ic: icone(p.mime_detecte) } });
+    return m;
+  };
+  const garde = m => { if (m) cache.messages[m.id] = normaliser(m); return m; };
 
   const ImplHttp = {
     /* ---- lecture --------------------------------------------------------- */
