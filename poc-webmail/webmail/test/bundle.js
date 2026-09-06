@@ -21,7 +21,7 @@ vrai(html.includes("<style>"), "la feuille est inlinée");
 vrai(html.includes("engendrée par outils/bundle.py"), "le fichier se déclare engendré");
 vrai(html.length > 150000, "taille : " + Math.round(html.length / 1024) + " Ko");
 vrai(html.includes("window.ABX_INLINE = true"), "la page autonome dit au chargeur que tout est inline (D157)");
-vrai(html.includes("js/poc/pocbar.js =====") && html.includes("js/services/serveur.poc.js ====="), "elle embarque le POC : poc/poc y marche hors ligne");
+vrai(html.includes("src/poc/pocbar.js =====") && html.includes("src/poc/serveur.poc.js ====="), "elle embarque le POC : poc/poc y marche hors ligne");
 
 console.log("— il tourne ——————————————————————————————————");
 /* Le bundle ne contient qu'UN bloc script, mais son contenu peut citer la

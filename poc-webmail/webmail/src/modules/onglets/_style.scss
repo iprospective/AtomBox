@@ -1,0 +1,15 @@
+// MODULE onglets — son style, à côté de sa vue et de son contrôleur. Compilé dans css/app.css.
+
+/* ---- onglets : une 2e ligne d'en-tete, toujours visible ---- */
+.tabs{display:flex;background:var(--panel2);border-bottom:1px solid var(--line);
+  overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
+.tabs:empty{display:none}
+.tab{display:flex;align-items:center;gap:6px;padding:6px 9px;flex:none;max-width:240px;
+  border-right:1px solid var(--line);cursor:pointer;white-space:nowrap;color:var(--muted)}
+.tab:hover{background:var(--panel)}
+.tab.on{background:var(--panel);color:var(--fg);box-shadow:inset 0 -2px 0 var(--accent)}
+.tab.prov .tl{font-style:italic}
+.tab .tl{overflow:hidden;text-overflow:ellipsis}
+.tab .dot{color:var(--warn);font-size:9px}
+.tab .tx{opacity:.45;padding:0 3px;border-radius:3px;font-size:11px}
+.tab .tx:hover{opacity:1;background:var(--line);color:var(--danger)}

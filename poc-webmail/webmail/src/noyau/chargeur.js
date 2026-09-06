@@ -17,11 +17,11 @@
    produit (prod.html) n'embarque rien du POC : ABX_SANS_POC refuse poc/poc. */
 (function (ABX) {
   "use strict";
-  const TETE    = ["js/core/prng.js", "js/core/markdown.js", "js/services/query-log.js", "js/services/cdc-index.js"];
-  const DONNEES = ["js/services/fixtures.js", "js/services/corpus.js"];
-  const FIN     = ["js/views/contexte.cdc.js", "js/views/query-log.js", "js/views/pages.js",
-                   "js/services/api-trace.js", "js/services/serveur.poc.js",
-                   "js/controllers/pages.js", "js/poc/pocbar.js"];
+  const TETE    = ["src/poc/prng.js", "src/poc/markdown.js", "src/poc/journal-requetes.service.js", "src/poc/cdc-index.js"];
+  const DONNEES = ["src/poc/fixtures.js", "src/poc/corpus.js"];
+  const FIN     = ["src/poc/contexte.cdc.js", "src/poc/journal-requetes.vue.js", "src/poc/pages.vue.js",
+                   "src/poc/api-trace.js", "src/poc/serveur.poc.js",
+                   "src/poc/pages.controleur.js", "src/poc/pocbar.js"];
   const Chargeur = {
     TETE, DONNEES, FIN,
     tout: () => TETE.concat(DONNEES, FIN),

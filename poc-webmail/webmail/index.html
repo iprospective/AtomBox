@@ -29,7 +29,7 @@
 </div>
 
 <!-- UN SEUL INDEX (D157). Ce que la page déclare est LE PRODUIT (D141). La maquette
-     est une session : poc/poc — et c'est le chargeur (js/core/chargeur.js) qui
+     est une session : poc/poc — et c'est le chargeur (src/noyau/chargeur.js) qui
      écrit alors les fichiers du POC à leur place, en trois points marqués ci-dessous.
 
      Scripts CLASSIQUES, pas des modules ES : les imports ES sont bloqués par
@@ -37,50 +37,50 @@
      serveur. L'ordre ci-dessous est donc la déclaration des dépendances. -->
 
 <!-- noyau : aucune dépendance métier -->
-<script src="js/core/format.js"></script>
-<script src="js/core/dom.js"></script>
-<script src="js/core/bus.js"></script>
-<script src="js/core/registry.js"></script>
-<script src="js/core/store.js"></script>
-<script src="js/core/session.js"></script>
-<script src="js/core/chargeur.js"></script>            <!-- ① POC : générateur, markdown, journal, index du CDC -->
+<script src="src/noyau/format.js"></script>
+<script src="src/noyau/dom.js"></script>
+<script src="src/noyau/bus.js"></script>
+<script src="src/noyau/registre.js"></script>
+<script src="src/noyau/store.js"></script>
+<script src="src/noyau/session.js"></script>
+<script src="src/noyau/chargeur.js"></script>            <!-- ① POC : générateur, markdown, journal, index du CDC -->
 
 <!-- services : l'état et les règles, sans aucune connaissance du DOM -->
-<script src="js/services/attachments.js"></script>
-<script src="js/services/erp.js"></script>
-<script src="js/services/providers.js"></script>
-<script src="js/core/chargeur.donnees.js"></script>    <!-- ② POC : fixtures, corpus -->
-<script src="js/services/api.js"></script>
-<script src="js/services/ref.js"></script>
-<script src="js/services/api.http.js"></script>
-<script src="js/services/messages.js"></script>
-<script src="js/services/compose.js"></script>
+<script src="src/modules/pieces-jointes/service.js"></script>
+<script src="src/modules/integration/erp.js"></script>
+<script src="src/modules/integration/fournisseurs.js"></script>
+<script src="src/noyau/chargeur.donnees.js"></script>    <!-- ② POC : fixtures, corpus -->
+<script src="src/noyau/api.js"></script>
+<script src="src/noyau/ref.js"></script>
+<script src="src/noyau/api.http.js"></script>
+<script src="src/modules/message/service.js"></script>
+<script src="src/modules/composition/service.js"></script>
 
 <!-- vues : des fonctions (contexte) -> HTML, sans effet de bord -->
-<script src="js/views/partials.js"></script>
-<script src="js/views/partials-overrides.js"></script>
-<script src="js/views/contexte.aide.js"></script>
-<script src="js/views/nav.js"></script>
-<script src="js/views/list.js"></script>
-<script src="js/views/message.js"></script>
-<script src="js/views/compose.js"></script>
-<script src="js/views/tabs.js"></script>
-<script src="js/views/admin.js"></script>
-<script src="js/views/attachments.js"></script>
-<script src="js/views/connexion.js"></script>
+<script src="src/modules/partials/partials.js"></script>
+<script src="src/modules/partials/variantes.js"></script>
+<script src="src/modules/contexte/aide.js"></script>
+<script src="src/modules/arborescence/vue.js"></script>
+<script src="src/modules/liste/vue.js"></script>
+<script src="src/modules/message/vue.js"></script>
+<script src="src/modules/composition/vue.js"></script>
+<script src="src/modules/onglets/vue.js"></script>
+<script src="src/modules/administration/vue.js"></script>
+<script src="src/modules/pieces-jointes/vue.js"></script>
+<script src="src/modules/connexion/vue.js"></script>
 
-<script src="js/services/capabilities.js"></script>
+<script src="src/modules/integration/capacites.js"></script>
 
 <!-- contrôleurs : peignent les vues et câblent les événements -->
-<script src="js/controllers/app.js"></script>
-<script src="js/controllers/nav.js"></script>
-<script src="js/controllers/list.js"></script>
-<script src="js/controllers/tabs.js"></script>
-<script src="js/controllers/message.js"></script>
-<script src="js/controllers/compose.js"></script>
-<script src="js/controllers/admin.js"></script>
-<script src="js/controllers/connexion.js"></script>
-<script src="js/core/chargeur.fin.js"></script>        <!-- ③ POC : surcouche CDC, pages, traces, serveur simulé, barre du POC -->
+<script src="src/noyau/application.js"></script>
+<script src="src/modules/arborescence/controleur.js"></script>
+<script src="src/modules/liste/controleur.js"></script>
+<script src="src/modules/onglets/controleur.js"></script>
+<script src="src/modules/message/controleur.js"></script>
+<script src="src/modules/composition/controleur.js"></script>
+<script src="src/modules/administration/controleur.js"></script>
+<script src="src/modules/connexion/controleur.js"></script>
+<script src="src/noyau/chargeur.fin.js"></script>        <!-- ③ POC : surcouche CDC, pages, traces, serveur simulé, barre du POC -->
 
-<script src="js/app.js"></script>
+<script src="src/noyau/amorcage.js"></script>
 </body></html>

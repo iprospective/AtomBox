@@ -35,7 +35,7 @@ et un ⚠ quand elle est coûteuse, fragile ou non tranchée.
 | `route` `ctrl` `svc` `acl` | ce qu'il faudra écrire : la route, le contrôleur, le service, la vérification de portée |
 | `sql` `blob` `event` | les requêtes, la lecture du magasin d'octets, les événements sortants |
 
-**C'est ce fichier qui sert de support de CDC** : `js/services/api-trace.js` décrit la
+**C'est ce fichier qui sert de support de CDC** : `src/poc/api-trace.js` décrit la
 surface d'API par les gestes qui l'appellent. Écrire le serveur, ce sera écrire ce qui y est
 décrit ; tout champ absent du JSON est une colonne dont personne n'a encore eu besoin.
 
@@ -78,13 +78,13 @@ js/services/   query-log     la trace : un geste = une suite d'étapes typées
                compose       préparer, fabriquer, envoyer
 js/views/      partials + partials-overrides, nav, list, message, compose, tabs, query-log
 js/controllers/ app, nav, list, tabs, message, compose
-js/app.js      amorçage — le seul fichier qui a le droit de tout connaître
+src/noyau/amorcage.js      amorçage — le seul fichier qui a le droit de tout connaître
 test/          fake-dom, run (harnais), smoke (parcours), metrics
 ```
 
 **Les vues sont des fonctions `(contexte) → HTML`**, sans effet de bord ; les contrôleurs
 peignent et câblent ; les services ne connaissent ni le DOM ni les vues — ils émettent sur
-le bus, et `js/app.js` décide de la conséquence à l'écran.
+le bus, et `src/noyau/amorcage.js` décide de la conséquence à l'écran.
 
 ### Vues partielles surchargeables
 
@@ -355,12 +355,12 @@ minimal — il ne rend rien, il vérifie que le câblage tient.
 ## Outillage et déploiement
 
 ```
-python3 ../outils/gen-cdc-index.py   # régénère js/services/cdc-index.js depuis le CDC (générateur commun, racine du dépôt)
+python3 ../outils/gen-cdc-index.py   # régénère src/poc/cdc-index.js depuis le CDC (générateur commun, racine du dépôt)
 python3 outils/bundle.py          # produit dist/index.html, page autonome de ~240 Ko
 bash    outils/deploy.sh          # les trois ci-dessus + tests + mise en ligne
 ```
 
-`js/services/cdc-index.js` est **généré** : le retaper garantirait qu'il diverge du CDC.
+`src/poc/cdc-index.js` est **généré** : le retaper garantirait qu'il diverge du CDC.
 À régénérer après chaque décision consignée.
 
 Le déploiement remplace le contenu de `/home/siteadm/atombox/public/dev` sur
@@ -389,9 +389,35 @@ se vérifiera au POC suivant, sur corpus injecté (chapitre 08).
 ## La maquette est une session (D157)
 
 Il n'y a qu'un `index.html`, et c'est le produit. Sur l'écran de connexion, **`poc` / `poc`**
-ouvre la session simulée : le chargeur (`js/core/chargeur.js`) écrit alors les fichiers du POC à
+ouvre la session simulée : le chargeur (`src/noyau/chargeur.js`) écrit alors les fichiers du POC à
 leur place, en trois points, et la barre du POC apparaît. Tout autre couple part au serveur.
 « Quitter » ferme la session et recharge la page, sans rien du POC.
 
 - `dist/index.html` (autonome) : tout inline, `poc/poc` y marche hors ligne ;
 - `dist/prod.html` (produit) : rien du POC, `poc/poc` y est refusé.
+
+
+## La structure : par module (D160), et le style en SCSS compilé en un seul fichier
+
+```
+src/noyau/            format, dom, bus, registre, store, session, chargeur, api, ref, api.http, application, amorcage ; _base.scss
+src/modules/<nom>/    vue.js, controleur.js, service.js selon le module, et son _style.scss
+                      arborescence, liste, message, composition, onglets, pieces-jointes, administration,
+                      connexion, integration, contexte, partials
+src/poc/              ce que seule la session poc/poc charge (D157) : fixtures, corpus, serveur simulé, pages, journal
+                      des requêtes, barre du POC, surcouche CDC ; _style.scss
+src/app.scss          importe le noyau, chaque module, le POC — dans l'ordre de la cascade
+css/app.css           COMPILÉ (npm run css) — committé pour que la page s'ouvre sans rien ; test/style.js
+                      vérifie qu'il est à jour
+```
+
+```
+npm install                # une fois : sass
+npm run css                # src/app.scss → css/app.css        (npm run css:watch pendant le développement)
+npm run build              # css + les deux bundles
+npm test                   # smoke, bundle, prod, style
+```
+
+Le style d'un module vit à côté de sa vue et de son contrôleur ; un module s'ajoute avec ses
+trois fichiers et une ligne dans `app.scss` et dans `index.html` (ou dans une liste du chargeur
+s'il est propre au POC).

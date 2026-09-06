@@ -1,437 +1,1865 @@
-:root{
-  --bg:#f6f7f9; --panel:#fff; --panel2:#fafbfc; --line:#e3e6ea; --fg:#1b1f24; --muted:#6b7580;
-  --accent:#2f6fed; --accent-soft:#e8f0fe; --warn:#b45309; --ok:#0f7b4f; --danger:#c0392b;
+@charset "UTF-8";
+:root {
+  --bg:#f6f7f9;
+  --panel:#fff;
+  --panel2:#fafbfc;
+  --line:#e3e6ea;
+  --fg:#1b1f24;
+  --muted:#6b7580;
+  --accent:#2f6fed;
+  --accent-soft:#e8f0fe;
+  --warn:#b45309;
+  --ok:#0f7b4f;
+  --danger:#c0392b;
   --shadow:rgba(20,25,35,.08);
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
-  --bg:#14171c; --panel:#1b1f25; --panel2:#20252c; --line:#2b323b; --fg:#e6e9ed; --muted:#8b95a1;
-  --accent:#5b8dff; --accent-soft:#1e2a44; --warn:#d99a3a; --ok:#3fbb85; --danger:#e06c5b;
-  --shadow:rgba(0,0,0,.35);
-}}
-:root[data-theme=dark]{
-  --bg:#14171c; --panel:#1b1f25; --panel2:#20252c; --line:#2b323b; --fg:#e6e9ed; --muted:#8b95a1;
-  --accent:#5b8dff; --accent-soft:#1e2a44; --warn:#d99a3a; --ok:#3fbb85; --danger:#e06c5b;
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) {
+    --bg:#14171c;
+    --panel:#1b1f25;
+    --panel2:#20252c;
+    --line:#2b323b;
+    --fg:#e6e9ed;
+    --muted:#8b95a1;
+    --accent:#5b8dff;
+    --accent-soft:#1e2a44;
+    --warn:#d99a3a;
+    --ok:#3fbb85;
+    --danger:#e06c5b;
+    --shadow:rgba(0,0,0,.35);
+  }
+}
+:root[data-theme=dark] {
+  --bg:#14171c;
+  --panel:#1b1f25;
+  --panel2:#20252c;
+  --line:#2b323b;
+  --fg:#e6e9ed;
+  --muted:#8b95a1;
+  --accent:#5b8dff;
+  --accent-soft:#1e2a44;
+  --warn:#d99a3a;
+  --ok:#3fbb85;
+  --danger:#e06c5b;
   --shadow:rgba(0,0,0,.35);
 }
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);
-  font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-button,input,select{font:inherit;color:inherit}
-.app{display:grid;grid-template-rows:auto auto 1fr;height:100vh}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+button, input, select {
+  font: inherit;
+  color: inherit;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  height: 100vh;
+}
 
 /* ---- header ---- */
-header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--panel);
-  border-bottom:1px solid var(--line)}
-.logo{font-weight:700;letter-spacing:-.3px}
-.logo span{color:var(--accent)}
-.hsearch{flex:1;max-width:520px;position:relative}
-.hsearch input{width:100%;padding:7px 11px 7px 30px;border:1px solid var(--line);border-radius:7px;
-  background:var(--panel2)}
-.hsearch::before{content:"⌕";position:absolute;left:10px;top:5px;color:var(--muted);font-size:15px}
-.hspacer{flex:1}
-.hbtn{background:none;border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer}
-.hbtn:hover{background:var(--accent-soft);border-color:var(--accent)}
-.hbtn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
-.hbtn.prim{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-.hbtn.prim:hover{filter:brightness(1.08)}
-.hbtn.dgr:hover{border-color:var(--danger);color:var(--danger);background:transparent}
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
 
-/* ---- onglets : une 2e ligne d'en-tete, toujours visible ---- */
-.tabs{display:flex;background:var(--panel2);border-bottom:1px solid var(--line);
-  overflow-x:auto;overflow-y:hidden;scrollbar-width:thin}
-.tabs:empty{display:none}
-.tab{display:flex;align-items:center;gap:6px;padding:6px 9px;flex:none;max-width:240px;
-  border-right:1px solid var(--line);cursor:pointer;white-space:nowrap;color:var(--muted)}
-.tab:hover{background:var(--panel)}
-.tab.on{background:var(--panel);color:var(--fg);box-shadow:inset 0 -2px 0 var(--accent)}
-.tab.prov .tl{font-style:italic}
-.tab .tl{overflow:hidden;text-overflow:ellipsis}
-.tab .dot{color:var(--warn);font-size:9px}
-.tab .tx{opacity:.45;padding:0 3px;border-radius:3px;font-size:11px}
-.tab .tx:hover{opacity:1;background:var(--line);color:var(--danger)}
+.logo {
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
 
-/* ---- composition ---- */
-.compo{padding:12px 16px;max-width:880px}
-.frow{display:flex;gap:8px;align-items:center;margin-bottom:7px}
-.frow>label{width:56px;flex:none;color:var(--muted);font-size:12px}
-.frow input,.frow select{flex:1;min-width:0;padding:6px 9px;border:1px solid var(--line);
-  border-radius:6px;background:var(--panel2)}
-.compo textarea{width:100%;min-height:200px;padding:9px 11px;border:1px solid var(--line);
-  border-radius:8px;background:var(--panel2);font:inherit;resize:vertical}
-.cbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
-.chk{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);cursor:pointer}
-.hint{color:var(--muted);font-size:11.5px;margin-top:7px}
-.lien{border:1px dashed var(--accent);border-radius:8px;padding:9px 11px;background:var(--accent-soft);
-  margin:8px 0}
+.logo span {
+  color: var(--accent);
+}
 
-/* ---- actions au survol dans la liste ---- */
-.msg{position:relative}
-.mact{position:absolute;right:8px;top:26px;display:none;gap:3px}
-.msg:hover .mact{display:flex}
-.mact button{border:1px solid var(--line);background:var(--panel);border-radius:5px;
-  padding:2px 6px;cursor:pointer;font-size:11px;line-height:1.35}
-.mact button:hover{border-color:var(--accent);color:var(--accent)}
+.hsearch {
+  flex: 1;
+  max-width: 520px;
+  position: relative;
+}
 
+.hsearch input {
+  width: 100%;
+  padding: 7px 11px 7px 30px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel2);
+}
+
+.hsearch::before {
+  content: "⌕";
+  position: absolute;
+  left: 10px;
+  top: 5px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.hspacer {
+  flex: 1;
+}
+
+.hbtn {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.hbtn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.hbtn.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.hbtn.prim {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.hbtn.prim:hover {
+  filter: brightness(1.08);
+}
+
+.hbtn.dgr:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: transparent;
+}
 
 /* ---- layout 3+1 colonnes ---- */
-.main{display:grid;grid-template-columns:262px 380px 1fr;min-height:0}
-.main.qopen{grid-template-columns:262px 340px 1fr 340px}
-.col{min-height:0;overflow:auto;background:var(--panel);border-right:1px solid var(--line)}
-.col:last-child{border-right:0}
+.main {
+  display: grid;
+  grid-template-columns: 262px 380px 1fr;
+  min-height: 0;
+}
+
+.main.qopen {
+  grid-template-columns: 262px 340px 1fr 340px;
+}
+
+.col {
+  min-height: 0;
+  overflow: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+}
+
+.col:last-child {
+  border-right: 0;
+}
+
 /* sans .qopen, le 4e enfant partirait sur une ligne implicite de la grille */
-.main:not(.qopen) #qpanel{display:none}
-
-/* ---- arborescence ---- */
-.navsearch{position:sticky;top:0;background:var(--panel);padding:8px;border-bottom:1px solid var(--line);z-index:2}
-.navsearch input{width:100%;padding:5px 26px 5px 9px;border:1px solid var(--line);border-radius:6px;
-  background:var(--panel2)}
-.navx{position:absolute;right:13px;top:50%;transform:translateY(-50%);border:0;background:none;
-  color:var(--muted);cursor:pointer;font-size:13px;line-height:1;padding:3px 4px;border-radius:4px}
-.navx:hover{background:var(--line);color:var(--fg)}
-.grp{padding:9px 10px 3px;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-.node{display:flex;align-items:center;gap:7px;padding:4px 10px;cursor:pointer;user-select:none}
-.node:hover{background:var(--panel2)}
-.node.sel{background:var(--accent-soft);color:var(--accent);font-weight:600}
-.node .tw{width:12px;color:var(--muted);font-size:10px;flex:none;text-align:center}
-.node .ic{width:16px;flex:none;text-align:center}
-.node .lb{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.node .ct{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
-.node .ct b{color:var(--accent);font-weight:700}
-.node .ct .sep{margin:0 1px;opacity:.6}
-.node.child{padding-left:34px}
-.node.child2{padding-left:52px}
-.more{padding:3px 10px 3px 34px;color:var(--accent);cursor:pointer;font-size:11.5px}
-.more:hover{text-decoration:underline}
-
-/* ---- liste ---- */
-.lbar{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:7px 9px;z-index:2}
-.lbar .t{font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px}
-.lbar .t small{font-weight:400;color:var(--muted)}
-.chips{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
-.chip{border:1px solid var(--line);background:var(--panel2);border-radius:20px;padding:2px 9px;
-  font-size:11.5px;cursor:pointer;white-space:nowrap}
-.chip:hover{border-color:var(--accent)}
-.chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
-.sortsel{margin-left:auto;border:1px solid var(--line);border-radius:6px;padding:2px 6px;background:var(--panel2);font-size:11.5px}
-.msg{padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer}
-.msg:hover{background:var(--panel2)}
-.msg.sel{background:var(--accent-soft)}
-.msg.unread .from,.msg.unread .subj{font-weight:700}
-.msg .r1{display:flex;gap:8px;align-items:baseline}
-.msg .from{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.msg .dt{color:var(--muted);font-size:11px;white-space:nowrap}
-.msg .subj{margin:1px 0}
-.msg .snip{color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.msg .meta{margin-top:3px;display:flex;gap:4px;flex-wrap:wrap;align-items:center}
-.tag{font-size:10.5px;border-radius:4px;padding:1px 6px;border:1px solid var(--line);background:var(--panel2);color:var(--muted)}
-.tag.ax{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
-.pj{font-size:11px;color:var(--muted)}
-.empty{padding:26px 14px;color:var(--muted);text-align:center}
-
-/* ---- détail ---- */
-.dhead{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:12px 16px;z-index:2}
-.dsubj{font-size:16px;font-weight:650;margin-bottom:6px}
-.dmeta{color:var(--muted);font-size:12px}
-.dacts{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap}
-.thread{padding:12px 16px}
-.tm{border:1px solid var(--line);border-radius:8px;margin-bottom:9px;background:var(--panel2)}
-.tm .h{padding:8px 11px;display:flex;gap:8px;align-items:baseline;border-bottom:1px solid var(--line)}
-.tm .h b{flex:1}
-.tm .b{padding:10px 11px;white-space:pre-wrap}
-.tm.cur{border-color:var(--accent)}
-.kv{display:flex;gap:8px;padding:2px 0;font-size:12px}
-.kv .k{width:104px;color:var(--muted);flex:none}
-.kv .v{flex:1;min-width:0}
-.box{margin:12px 16px;border:1px solid var(--line);border-radius:8px;padding:11px}
-.box h4{margin:0 0 7px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-
-/* ---- panneau requêtes ---- */
-.q{background:var(--panel2)}
-.qh{position:sticky;top:0;background:var(--panel2);border-bottom:1px solid var(--line);padding:9px 11px;
-  display:flex;align-items:center;gap:8px;z-index:2}
-.qh b{flex:1}
-.qi{border-bottom:1px solid var(--line);padding:8px 11px}
-.qi .lbl{font-size:11px;color:var(--muted);margin-bottom:3px}
-.qi code{display:block;white-space:pre-wrap;font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
-  background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 8px}
-.qi .idx{margin-top:4px;font-size:11px;color:var(--ok)}
-.qi .idx.w{color:var(--warn)}
-.note{padding:10px 11px;color:var(--muted);font-size:11.5px;border-bottom:1px solid var(--line)}
-
-/* ---- pièces jointes ---- */
-.pjl{display:flex;flex-direction:column;gap:6px}
-.pjc{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-radius:7px;
-  padding:7px 9px;background:var(--panel);cursor:pointer}
-.pjc:hover{border-color:var(--accent)}
-.pjc .pic{font-size:17px;line-height:1.25;flex:none}
-.pjc .pn{flex:1;min-width:0}
-.pjc .pn b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pjc .ps{display:block;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pjc .bd{display:block;margin-top:2px}
-.hash{font:10.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
-.badge{display:inline-block;font-size:10.5px;border-radius:4px;padding:1px 6px;margin:2px 3px 0 0;
-  border:1px solid var(--line);background:var(--panel2);color:var(--muted)}
-.badge.ok{border-color:var(--ok);color:var(--ok)}
-.badge.w{border-color:var(--warn);color:var(--warn)}
-
-/* ---- intégration ERP ---- */
-.box.erp{border-color:var(--accent)}
-.box.erp h4{color:var(--accent)}
-.erpl{width:100%;border-collapse:collapse;font-size:12px;margin-top:7px}
-.erpl td{padding:3px 8px 3px 0;border-bottom:1px solid var(--line)}
-.erpl tr:last-child td{border-bottom:0}
-.erpl td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
-.st{font-size:10.5px;border-radius:4px;padding:1px 6px;border:1px solid var(--line);white-space:nowrap}
-.st.ok{border-color:var(--ok);color:var(--ok)}
-.st.due{border-color:var(--danger);color:var(--danger)}
-.st.wait{border-color:var(--warn);color:var(--warn)}
-.qi.api code{border-left:3px solid var(--accent)}
+.main:not(.qopen) #qpanel {
+  display: none;
+}
 
 /* ---- responsive ------------------------------------------------------------
    4 paliers : desktop large (4 colonnes) → desktop (3 + requêtes en tiroir)
    → tablette (2 + nav en tiroir) → mobile (1 colonne, navigation par vues).   */
-.backbar{display:none;align-items:center;gap:8px;padding:7px 10px;
-  border-bottom:1px solid var(--line);background:var(--panel2);position:sticky;top:0;z-index:3}
-.backbar button{background:none;border:1px solid var(--line);border-radius:6px;padding:4px 9px;cursor:pointer}
-.scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40}
-.scrim.on{display:block}
-
-@media (max-width:1240px){
-  .main.qopen{grid-template-columns:250px 350px 1fr}
-  #qpanel{position:fixed;top:0;right:0;bottom:0;width:min(430px,92vw);z-index:50;
-    border-left:1px solid var(--line);box-shadow:-8px 0 24px var(--shadow)}
-  .main:not(.qopen) #qpanel{display:none}
-}
-@media (max-width:980px){
-  .main,.main.qopen{grid-template-columns:1fr 1.35fr}
-  #nav{position:fixed;top:0;left:0;bottom:0;width:min(300px,86vw);z-index:45;
-    box-shadow:8px 0 24px var(--shadow);transform:translateX(-102%);transition:transform .18s}
-  .main.navopen #nav{transform:none}
-  #bnav{display:inline-block}
-}
-@media (max-width:760px){
-  header{padding:7px 10px;gap:8px}
-  .hsearch{max-width:none}
-  .logo{font-size:12px}
-  .main,.main.qopen{grid-template-columns:1fr}
-  #list,#detail{display:none}
-  .main[data-vue=liste]  #list  {display:block}
-  .main[data-vue=detail] #detail{display:block}
-  .main[data-vue=detail] .backbar{display:flex}
-  #qpanel{width:100vw}
-  .dsubj{font-size:15px}
-  .thread{padding:10px}
-  .box{margin:10px}
-}
-@media (max-width:760px){
-  .tab{max-width:150px}
-  .compo{padding:10px}
-  .frow>label{width:44px}
-}
-@media (max-width:480px){
-  #qn{display:none}
-  #bnew{font-size:0;padding:6px 9px}
-  #bnew::before{content:"✚";font-size:13px}
-  .hbtn{padding:6px 8px}
-  .msg .snip{display:none}
+.backbar {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel2);
+  position: sticky;
+  top: 0;
+  z-index: 3;
 }
 
-/* ---- cascade : la succession d'un geste, du clic au rendu ---- */
-.qi.w{background:linear-gradient(90deg,rgba(180,83,9,.07),transparent 60%)}
-.qi .nsteps{float:right;font-size:10px;color:var(--muted);font-weight:400}
-.casc{list-style:none;margin:7px 0 0;padding:0 0 0 2px}
-.step{display:flex;gap:8px;padding:4px 0 4px 9px;border-left:2px solid var(--line);position:relative}
-.step .pic{flex:none;width:16px;text-align:center;font-size:12px;line-height:1.5}
-.step .body{flex:1;min-width:0}
-.step .et{font-weight:600;font-size:11.5px}
-.step .det{color:var(--muted);font-size:11.5px;
-  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-.step code{display:block;margin-top:3px}
-.step.w{border-left-color:var(--warn)}
-/* côté serveur : la barre change, c'est ce qui reste à écrire */
-.step.route,.step.ctrl,.step.svc,.step.acl,.step.sql,.step.blob,.step.event,.step.note{
-  border-left-color:var(--accent);border-left-style:solid}
-.step.http,.step.json{border-left:2px dashed var(--accent)}
-.step.http .et,.step.json .et{color:var(--accent)}
-.step.acl .et{color:var(--ok)}
-.step.ui .et,.step.render .et{color:var(--muted);font-weight:500}
-.fr{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);
-  padding:5px 0 3px 11px;border-left:2px dotted var(--line)}
-.fr.srv{color:var(--accent);border-left-color:var(--accent)}
-
-/* ---- retrait d'un tag ---- */
-.tagx{border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:4px;
-  cursor:pointer;font-size:10px;line-height:1;padding:2px 4px;margin-left:5px}
-.tagx:hover{border-color:var(--danger);color:var(--danger)}
-
-/* ---- barre d'actions du message : gauche = travail, droite = destruction ---- */
-.dacts{align-items:center}
-.dacts .pousse{flex:1}
-.dacts .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
-.hbtn.ic{padding:6px 8px;line-height:1.2}
-.statsel{border:1px solid var(--line);border-radius:7px;padding:5px 8px;background:var(--panel2);
-  font-size:12px;font-weight:600;cursor:pointer}
-.statsel.st-a_faire{border-color:var(--warn);color:var(--warn)}
-.statsel.st-en_cours{border-color:var(--accent);color:var(--accent)}
-.statsel.st-attente{border-color:var(--muted)}
-.statsel.st-traite{border-color:var(--ok);color:var(--ok)}
-
-/* ---- menu « ⋯ » ---- */
-.dhead{position:relative}
-.menu{position:absolute;right:14px;top:100%;z-index:20;min-width:270px;
-  background:var(--panel);border:1px solid var(--line);border-radius:9px;
-  box-shadow:0 8px 24px var(--shadow);padding:5px;margin-top:-4px}
-.menu button{display:flex;align-items:center;gap:7px;width:100%;text-align:left;border:0;
-  background:none;padding:6px 9px;border-radius:6px;cursor:pointer;font-size:12.5px}
-.menu button:hover{background:var(--accent-soft);color:var(--accent)}
-.menu .mgrp{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
-  padding:7px 9px 3px}
-.menu .mprov{margin-left:auto;font-size:10.5px;color:var(--muted)}
-
-/* ---- administration ---- */
-.admin{padding:0 4px 14px}
-.erpl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;
-  color:var(--muted);font-weight:600;padding:3px 8px 5px 0;border-bottom:1px solid var(--line)}
-.capa{border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:8px;
-  background:var(--panel2)}
-.capa .capt{display:flex;align-items:baseline;gap:9px;margin-bottom:6px;flex-wrap:wrap}
-.capa .capt .hash{font-size:10px}
-.capa .chips{margin-bottom:5px}
-
-/* ---- gestion des pièces jointes ---- */
-.pjrow{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;
-  border-bottom:1px solid var(--line)}
-.pjrow:hover{background:var(--panel2)}
-.pjrow .pic{font-size:17px;flex:none;line-height:1.3}
-.pjrow .pjn{flex:1;min-width:0}
-.pjname{width:100%;max-width:420px;border:1px solid transparent;border-radius:5px;
-  padding:2px 5px;background:none;font-weight:600}
-.pjname:hover{border-color:var(--line)}
-.pjname:focus{border-color:var(--accent);background:var(--panel2);outline:none}
-.pjrow .ps{color:var(--muted);font-size:11px;padding-left:5px}
-.pjacts{display:flex;gap:3px;flex:none}
-.jalon{display:inline-block;font-size:9.5px;font-weight:700;border-radius:3px;padding:0 4px;
-  border:1px solid var(--muted);color:var(--muted);margin-left:4px;vertical-align:1px}
-.jalon.v3{border-color:var(--accent);color:var(--accent)}
-.jalon.v4{border-color:var(--warn);color:var(--warn)}
-.jalon.v6{border-color:var(--danger);color:var(--danger);border-style:dashed}
-.chip.futur{opacity:.6;border-style:dashed}
-
-/* ---- bandeau « ceci est un POC » ---- */
-.app{grid-template-rows:auto auto auto 1fr}
-.pocbar{display:flex;align-items:center;gap:10px;padding:5px 12px;flex-wrap:wrap;
-  background:var(--warn);color:#fff;font-size:11.5px}
-.pocb{font-weight:800;letter-spacing:1px;border:1px solid rgba(255,255,255,.7);
-  border-radius:4px;padding:0 6px;flex:none}
-.poct{flex:1;min-width:180px;opacity:.95}
-.poct b{opacity:1}
-.pocnav{display:flex;gap:4px;flex:none}
-.pocnav button{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);
-  color:#fff;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:11.5px}
-.pocnav button:hover{background:rgba(255,255,255,.28)}
-
-/* ---- pages documentaires ---- */
-.doc p{margin:0 0 8px;line-height:1.55}
-.doc ul{margin:4px 0 0;padding-left:18px}
-.doc li{margin-bottom:4px;line-height:1.5}
-.doc .box h4{font-size:12px;color:var(--fg);text-transform:none;letter-spacing:0}
-.doc kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;
-  padding:0 4px;font-size:11px;background:var(--panel2)}
-.doc code{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
-  padding:0 4px;font-size:11.5px}
-@media (max-width:760px){
-  .poct{display:none}
-  .pocnav button{padding:3px 7px}
+.backbar button {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 9px;
+  cursor: pointer;
 }
 
-/* ---- expediteur normalise (D126) et signal d'usurpation (D128) ---- */
-.adr{color:var(--muted);font-size:11.5px}
-.from.adr-av{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
-.decl{color:var(--muted);font-size:11px;font-style:italic;margin-left:5px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.alerte{color:var(--danger);font-size:10.5px;font-weight:700;margin-left:5px;white-space:nowrap}
-.alerte-bloc{margin:12px 16px;padding:9px 11px;border:1px solid var(--danger);
-  border-left-width:3px;border-radius:8px;background:var(--panel2)}
-.alerte-bloc>b{color:var(--danger)}
+.scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 40;
+}
 
-/* ---- nature du message (D130) et refus de reponse (D131) ----
-   Une nature n'est pas une alerte : c'est un fait de classement. Elle se lit
-   en gris, jamais en rouge — sinon l'ecran crie sur du courrier normal. */
-.from.srv{font-weight:600}
-.nat{font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-left:6px;
-  padding:1px 5px;border-radius:4px;border:1px solid var(--line);color:var(--muted);
-  white-space:nowrap;vertical-align:1px}
-.nat-n{border-color:var(--accent);color:var(--accent)}
-.hbtn.off{opacity:.45;cursor:not-allowed}
+.scrim.on {
+  display: block;
+}
+
+@media (max-width: 1240px) {
+  .main.qopen {
+    grid-template-columns: 250px 350px 1fr;
+  }
+  #qpanel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(430px, 92vw);
+    z-index: 50;
+    border-left: 1px solid var(--line);
+    box-shadow: -8px 0 24px var(--shadow);
+  }
+  .main:not(.qopen) #qpanel {
+    display: none;
+  }
+}
+@media (max-width: 980px) {
+  .main, .main.qopen {
+    grid-template-columns: 1fr 1.35fr;
+  }
+  #nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 86vw);
+    z-index: 45;
+    box-shadow: 8px 0 24px var(--shadow);
+    transform: translateX(-102%);
+    transition: transform 0.18s;
+  }
+  .main.navopen #nav {
+    transform: none;
+  }
+  #bnav {
+    display: inline-block;
+  }
+}
+@media (max-width: 760px) {
+  header {
+    padding: 7px 10px;
+    gap: 8px;
+  }
+  .hsearch {
+    max-width: none;
+  }
+  .logo {
+    font-size: 12px;
+  }
+  .main, .main.qopen {
+    grid-template-columns: 1fr;
+  }
+  #list, #detail {
+    display: none;
+  }
+  .main[data-vue=liste] #list {
+    display: block;
+  }
+  .main[data-vue=detail] #detail {
+    display: block;
+  }
+  .main[data-vue=detail] .backbar {
+    display: flex;
+  }
+  #qpanel {
+    width: 100vw;
+  }
+  .dsubj {
+    font-size: 15px;
+  }
+  .thread {
+    padding: 10px;
+  }
+  .box {
+    margin: 10px;
+  }
+}
+@media (max-width: 760px) {
+  .tab {
+    max-width: 150px;
+  }
+  .compo {
+    padding: 10px;
+  }
+  .frow > label {
+    width: 44px;
+  }
+}
+@media (max-width: 480px) {
+  #qn {
+    display: none;
+  }
+  #bnew {
+    font-size: 0;
+    padding: 6px 9px;
+  }
+  #bnew::before {
+    content: "✚";
+    font-size: 13px;
+  }
+  .hbtn {
+    padding: 6px 8px;
+  }
+  .msg .snip {
+    display: none;
+  }
+}
+/* ---- onglets : une 2e ligne d'en-tete, toujours visible ---- */
+.tabs {
+  display: flex;
+  background: var(--panel2);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.tabs:empty {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  flex: none;
+  max-width: 240px;
+  border-right: 1px solid var(--line);
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.tab:hover {
+  background: var(--panel);
+}
+
+.tab.on {
+  background: var(--panel);
+  color: var(--fg);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.tab.prov .tl {
+  font-style: italic;
+}
+
+.tab .tl {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab .dot {
+  color: var(--warn);
+  font-size: 9px;
+}
+
+.tab .tx {
+  opacity: 0.45;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.tab .tx:hover {
+  opacity: 1;
+  background: var(--line);
+  color: var(--danger);
+}
+
+/* ---- composition ---- */
+.compo {
+  padding: 12px 16px;
+  max-width: 880px;
+}
+
+.frow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 7px;
+}
+
+.frow > label {
+  width: 56px;
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.frow input, .frow select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel2);
+}
+
+.compo textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel2);
+  font: inherit;
+  resize: vertical;
+}
+
+.cbar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.chk {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin-top: 7px;
+}
+
+.lien {
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: var(--accent-soft);
+  margin: 8px 0;
+}
+
+/* ---- actions au survol dans la liste ---- */
+.msg {
+  position: relative;
+}
+
+.mact {
+  position: absolute;
+  right: 8px;
+  top: 26px;
+  display: none;
+  gap: 3px;
+}
+
+.msg:hover .mact {
+  display: flex;
+}
+
+.mact button {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 5px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.mact button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---- liste ---- */
+.lbar {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 7px 9px;
+  z-index: 2;
+}
+
+.lbar .t {
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lbar .t small {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  border-radius: 20px;
+  padding: 2px 9px;
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+}
+
+.chip.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sortsel {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 6px;
+  background: var(--panel2);
+  font-size: 11.5px;
+}
+
+.msg {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.msg:hover {
+  background: var(--panel2);
+}
+
+.msg.sel {
+  background: var(--accent-soft);
+}
+
+.msg.unread .from, .msg.unread .subj {
+  font-weight: 700;
+}
+
+.msg .r1 {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.msg .from {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.msg .dt {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.msg .subj {
+  margin: 1px 0;
+}
+
+.msg .snip {
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.msg .meta {
+  margin-top: 3px;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tag {
+  font-size: 10.5px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--muted);
+}
+
+.tag.ax {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pj {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.empty {
+  padding: 26px 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ---- arborescence ---- */
+.navsearch {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  z-index: 2;
+}
+
+.navsearch input {
+  width: 100%;
+  padding: 5px 26px 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel2);
+}
+
+.navx {
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+
+.navx:hover {
+  background: var(--line);
+  color: var(--fg);
+}
+
+.grp {
+  padding: 9px 10px 3px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+.node {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.node:hover {
+  background: var(--panel2);
+}
+
+.node.sel {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.node .tw {
+  width: 12px;
+  color: var(--muted);
+  font-size: 10px;
+  flex: none;
+  text-align: center;
+}
+
+.node .ic {
+  width: 16px;
+  flex: none;
+  text-align: center;
+}
+
+.node .lb {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node .ct {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.node .ct b {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.node .ct .sep {
+  margin: 0 1px;
+  opacity: 0.6;
+}
+
+.node.child {
+  padding-left: 34px;
+}
+
+.node.child2 {
+  padding-left: 52px;
+}
+
+.more {
+  padding: 3px 10px 3px 34px;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 11.5px;
+}
+
+.more:hover {
+  text-decoration: underline;
+}
 
 /* ---- ordre des axes (D135) ----
    Les commandes n'apparaissent qu'au survol : une arborescence n'est pas un
    tableau de bord, et trois boutons par ligne la rendraient illisible. */
-.axops{display:none;gap:2px;margin-left:auto;padding-right:4px}
-.node.axe-tete:hover .axops{display:inline-flex}
-.axop{border:1px solid var(--line);background:var(--panel);color:var(--muted);
-  border-radius:4px;font-size:9.5px;line-height:1;padding:2px 4px;cursor:pointer}
-.axop:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
-.axop[disabled]{opacity:.3;cursor:default}
-.axop.on{border-color:var(--accent);color:var(--accent)}
+.axops {
+  display: none;
+  gap: 2px;
+  margin-left: auto;
+  padding-right: 4px;
+}
+
+.node.axe-tete:hover .axops {
+  display: inline-flex;
+}
+
+.axop {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 4px;
+  font-size: 9.5px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.axop:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.axop[disabled] {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.axop.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ---- outils de tout dossier (D144 épingle, D143 suppression) et formulaire de dossier virtuel */
+.nops {
+  display: none;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.node:hover .nops {
+  display: inline-flex;
+}
+
+.node.pin .ic {
+  color: var(--accent);
+}
+
+.grp .axop {
+  margin-left: 6px;
+  vertical-align: middle;
+  font-size: 11px;
+  padding: 0 5px;
+}
+
+.vform {
+  padding: 6px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--panel2);
+}
+
+.vform input, .vform select {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: inherit;
+  min-width: 0;
+}
+
+.vcrit {
+  display: flex;
+  gap: 4px;
+}
+
+.vcrit select {
+  flex: 0 0 46%;
+}
+
+.vcrit input {
+  flex: 1;
+}
+
+/* ---- détail ---- */
+.dhead {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 16px;
+  z-index: 2;
+}
+
+.dsubj {
+  font-size: 16px;
+  font-weight: 650;
+  margin-bottom: 6px;
+}
+
+.dmeta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dacts {
+  margin-top: 9px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.thread {
+  padding: 12px 16px;
+}
+
+.tm {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 9px;
+  background: var(--panel2);
+}
+
+.tm .h {
+  padding: 8px 11px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+}
+
+.tm .h b {
+  flex: 1;
+}
+
+.tm .b {
+  padding: 10px 11px;
+  white-space: pre-wrap;
+}
+
+.tm.cur {
+  border-color: var(--accent);
+}
+
+.kv {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+
+.kv .k {
+  width: 104px;
+  color: var(--muted);
+  flex: none;
+}
+
+.kv .v {
+  flex: 1;
+  min-width: 0;
+}
+
+.box {
+  margin: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+}
+
+.box h4 {
+  margin: 0 0 7px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+
+/* ---- retrait d'un tag ---- */
+.tagx {
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--muted);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 4px;
+  margin-left: 5px;
+}
+
+.tagx:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---- barre d'actions du message : gauche = travail, droite = destruction ---- */
+.dacts {
+  align-items: center;
+}
+
+.dacts .pousse {
+  flex: 1;
+}
+
+.dacts .sep {
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+  margin: 0 2px;
+}
+
+.hbtn.ic {
+  padding: 6px 8px;
+  line-height: 1.2;
+}
+
+.statsel {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 8px;
+  background: var(--panel2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.statsel.st-a_faire {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.statsel.st-en_cours {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.statsel.st-attente {
+  border-color: var(--muted);
+}
+
+.statsel.st-traite {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+/* ---- menu « ⋯ » ---- */
+.dhead {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  right: 14px;
+  top: 100%;
+  z-index: 20;
+  min-width: 270px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 8px 24px var(--shadow);
+  padding: 5px;
+  margin-top: -4px;
+}
+
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 6px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.menu button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.menu .mgrp {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  padding: 7px 9px 3px;
+}
+
+.menu .mprov {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+/* ---- expediteur normalise (D126) et signal d'usurpation (D128) ---- */
+.adr {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.from.adr-av {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+}
+
+.decl {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: italic;
+  margin-left: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.alerte {
+  color: var(--danger);
+  font-size: 10.5px;
+  font-weight: 700;
+  margin-left: 5px;
+  white-space: nowrap;
+}
+
+.alerte-bloc {
+  margin: 12px 16px;
+  padding: 9px 11px;
+  border: 1px solid var(--danger);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--panel2);
+}
+
+.alerte-bloc > b {
+  color: var(--danger);
+}
+
+/* ---- nature du message (D130) et refus de reponse (D131) ----
+   Une nature n'est pas une alerte : c'est un fait de classement. Elle se lit
+   en gris, jamais en rouge — sinon l'ecran crie sur du courrier normal. */
+.from.srv {
+  font-weight: 600;
+}
+
+.nat {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+.nat-n {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.hbtn.off {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 /* ---- indicateur de confiance (D137) ----
    Discret par construction : la confiance ne se crie pas, elle se constate. */
-.fiab{font-size:11px;font-weight:700;margin-right:5px;vertical-align:1px}
-.fiab.f2{color:var(--ok)}
-.fiab.f1{color:var(--muted)}
-.fiab-bloc{border-left:3px solid var(--ok)}
+.fiab {
+  font-size: 11px;
+  font-weight: 700;
+  margin-right: 5px;
+  vertical-align: 1px;
+}
+
+.fiab.f2 {
+  color: var(--ok);
+}
+
+.fiab.f1 {
+  color: var(--muted);
+}
+
+.fiab-bloc {
+  border-left: 3px solid var(--ok);
+}
 
 /* « en pause » : ni acquis, ni en attente d'arbitrage — ecarte volontairement. */
-.st.pause{background:var(--panel2);color:var(--muted);border:1px dashed var(--line)}
-.jalon.aucun{background:transparent;color:var(--muted);border:1px dashed var(--line)}
+.st.pause {
+  background: var(--panel2);
+  color: var(--muted);
+  border: 1px dashed var(--line);
+}
 
+.jalon.aucun {
+  background: transparent;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+}
+
+/* ---- pièces jointes ---- */
+.pjl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pjc {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 9px;
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.pjc:hover {
+  border-color: var(--accent);
+}
+
+.pjc .pic {
+  font-size: 17px;
+  line-height: 1.25;
+  flex: none;
+}
+
+.pjc .pn {
+  flex: 1;
+  min-width: 0;
+}
+
+.pjc .pn b {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pjc .ps {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pjc .bd {
+  display: block;
+  margin-top: 2px;
+}
+
+.hash {
+  font: 10.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted);
+}
+
+.badge {
+  display: inline-block;
+  font-size: 10.5px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin: 2px 3px 0 0;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--muted);
+}
+
+.badge.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.badge.w {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* ---- gestion des pièces jointes ---- */
+.pjrow {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pjrow:hover {
+  background: var(--panel2);
+}
+
+.pjrow .pic {
+  font-size: 17px;
+  flex: none;
+  line-height: 1.3;
+}
+
+.pjrow .pjn {
+  flex: 1;
+  min-width: 0;
+}
+
+.pjname {
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 2px 5px;
+  background: none;
+  font-weight: 600;
+}
+
+.pjname:hover {
+  border-color: var(--line);
+}
+
+.pjname:focus {
+  border-color: var(--accent);
+  background: var(--panel2);
+  outline: none;
+}
+
+.pjrow .ps {
+  color: var(--muted);
+  font-size: 11px;
+  padding-left: 5px;
+}
+
+.pjacts {
+  display: flex;
+  gap: 3px;
+  flex: none;
+}
+
+.jalon {
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 700;
+  border-radius: 3px;
+  padding: 0 4px;
+  border: 1px solid var(--muted);
+  color: var(--muted);
+  margin-left: 4px;
+  vertical-align: 1px;
+}
+
+.jalon.v3 {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.jalon.v4 {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.jalon.v6 {
+  border-color: var(--danger);
+  color: var(--danger);
+  border-style: dashed;
+}
+
+.chip.futur {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+/* ---- intégration ERP ---- */
+.box.erp {
+  border-color: var(--accent);
+}
+
+.box.erp h4 {
+  color: var(--accent);
+}
+
+.erpl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 7px;
+}
+
+.erpl td {
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.erpl tr:last-child td {
+  border-bottom: 0;
+}
+
+.erpl td.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.st {
+  font-size: 10.5px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.st.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.st.due {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.st.wait {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.qi.api code {
+  border-left: 3px solid var(--accent);
+}
+
+/* ---- administration ---- */
+.admin {
+  padding: 0 4px 14px;
+}
+
+.erpl th {
+  text-align: left;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 3px 8px 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.capa {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 11px;
+  margin-bottom: 8px;
+  background: var(--panel2);
+}
+
+.capa .capt {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.capa .capt .hash {
+  font-size: 10px;
+}
+
+.capa .chips {
+  margin-bottom: 5px;
+}
+
+/* ---- la session (D157) : sans session, l'écran de connexion et rien d'autre */
+#connexion {
+  display: none;
+}
+
+body[data-etat=connexion] #connexion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+body[data-etat=connexion] header, body[data-etat=connexion] .tabs, body[data-etat=connexion] .main, body[data-etat=connexion] .pocbar {
+  display: none;
+}
+
+.cnx {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(360px, 100%);
+  padding: 26px 28px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.cnx .logo {
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+
+.cnx label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.cnx input {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel2);
+  color: inherit;
+}
+
+.cnx .hbtn.prim {
+  margin-top: 8px;
+  padding: 9px;
+}
+
+.cnxerr {
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+/* ---- panneau requêtes ---- */
+.q {
+  background: var(--panel2);
+}
+
+.qh {
+  position: sticky;
+  top: 0;
+  background: var(--panel2);
+  border-bottom: 1px solid var(--line);
+  padding: 9px 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+}
+
+.qh b {
+  flex: 1;
+}
+
+.qi {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 11px;
+}
+
+.qi .lbl {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.qi code {
+  display: block;
+  white-space: pre-wrap;
+  font: 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 8px;
+}
+
+.qi .idx {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--ok);
+}
+
+.qi .idx.w {
+  color: var(--warn);
+}
+
+.note {
+  padding: 10px 11px;
+  color: var(--muted);
+  font-size: 11.5px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ---- cascade : la succession d'un geste, du clic au rendu ---- */
+.qi.w {
+  background: linear-gradient(90deg, rgba(180, 83, 9, 0.07), transparent 60%);
+}
+
+.qi .nsteps {
+  float: right;
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.casc {
+  list-style: none;
+  margin: 7px 0 0;
+  padding: 0 0 0 2px;
+}
+
+.step {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0 4px 9px;
+  border-left: 2px solid var(--line);
+  position: relative;
+}
+
+.step .pic {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.step .body {
+  flex: 1;
+  min-width: 0;
+}
+
+.step .et {
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
+.step .det {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.step code {
+  display: block;
+  margin-top: 3px;
+}
+
+.step.w {
+  border-left-color: var(--warn);
+}
+
+/* côté serveur : la barre change, c'est ce qui reste à écrire */
+.step.route, .step.ctrl, .step.svc, .step.acl, .step.sql, .step.blob, .step.event, .step.note {
+  border-left-color: var(--accent);
+  border-left-style: solid;
+}
+
+.step.http, .step.json {
+  border-left: 2px dashed var(--accent);
+}
+
+.step.http .et, .step.json .et {
+  color: var(--accent);
+}
+
+.step.acl .et {
+  color: var(--ok);
+}
+
+.step.ui .et, .step.render .et {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.fr {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  padding: 5px 0 3px 11px;
+  border-left: 2px dotted var(--line);
+}
+
+.fr.srv {
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+
+/* ---- bandeau « ceci est un POC » ---- */
+.app {
+  grid-template-rows: auto auto auto 1fr;
+}
+
+.pocbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  flex-wrap: wrap;
+  background: var(--warn);
+  color: #fff;
+  font-size: 11.5px;
+}
+
+.pocb {
+  font-weight: 800;
+  letter-spacing: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 4px;
+  padding: 0 6px;
+  flex: none;
+}
+
+.poct {
+  flex: 1;
+  min-width: 180px;
+  opacity: 0.95;
+}
+
+.poct b {
+  opacity: 1;
+}
+
+.pocnav {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.pocnav button {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  border-radius: 5px;
+  padding: 3px 9px;
+  cursor: pointer;
+  font-size: 11.5px;
+}
+
+.pocnav button:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* ---- pages documentaires ---- */
+.doc p {
+  margin: 0 0 8px;
+  line-height: 1.55;
+}
+
+.doc ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.doc li {
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+
+.doc .box h4 {
+  font-size: 12px;
+  color: var(--fg);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.doc kbd {
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: 11px;
+  background: var(--panel2);
+}
+
+.doc code {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: 11.5px;
+}
+
+@media (max-width: 760px) {
+  .poct {
+    display: none;
+  }
+  .pocnav button {
+    padding: 3px 7px;
+  }
+}
 /* ---- lecture du CDC et du dictionnaire dans la maquette ----
    Le texte est long : on le rend lisible (mesure, interligne), pas compact. */
-.doc .lecture{max-width:92ch}
-.doc .lecture h2,.doc .lecture h3,.doc .lecture h4,.doc .lecture h5{margin:18px 0 6px}
-.doc .lecture h2{font-size:17px}.doc .lecture h3{font-size:15px}.doc .lecture h4{font-size:13.5px}
-.doc .lecture p,.doc .lecture li{line-height:1.55;font-size:13px}
-.doc .lecture blockquote,.doc blockquote{margin:10px 0;padding:8px 12px;border-left:3px solid var(--accent);
-  background:var(--panel2);border-radius:0 6px 6px 0}
-.doc .lecture hr{border:0;border-top:1px solid var(--line);margin:18px 0}
-.md-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;background:var(--panel2);
-  border:1px solid var(--line);border-radius:6px;padding:8px 10px;overflow-x:auto;white-space:pre}
-.cdc-lien{color:var(--accent);text-decoration:none;cursor:pointer}
-.cdc-lien:hover{text-decoration:underline}
-.doc .tw{overflow-x:auto}
-.doc td.long{max-width:44ch;white-space:normal}
-.doc .erpl td,.doc .erpl th{vertical-align:top}
+.doc .lecture {
+  max-width: 92ch;
+}
+
+.doc .lecture h2, .doc .lecture h3, .doc .lecture h4, .doc .lecture h5 {
+  margin: 18px 0 6px;
+}
+
+.doc .lecture h2 {
+  font-size: 17px;
+}
+
+.doc .lecture h3 {
+  font-size: 15px;
+}
+
+.doc .lecture h4 {
+  font-size: 13.5px;
+}
+
+.doc .lecture p, .doc .lecture li {
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.doc .lecture blockquote, .doc blockquote {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel2);
+  border-radius: 0 6px 6px 0;
+}
+
+.doc .lecture hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 18px 0;
+}
+
+.md-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.cdc-lien {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.cdc-lien:hover {
+  text-decoration: underline;
+}
+
+.doc .tw {
+  overflow-x: auto;
+}
+
+.doc td.long {
+  max-width: 44ch;
+  white-space: normal;
+}
+
+.doc .erpl td, .doc .erpl th {
+  vertical-align: top;
+}
 
 /* ---- la V0 simulee (D140) ----
    Un jalon a part : celui ou il n'y a ni base ni moteur. */
-.jalon.v0{background:transparent;color:var(--fg);border:1px dashed var(--fg)}
-.pocv0{margin-left:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);
-  border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
-.pocv0.on{border-color:var(--fg);color:var(--fg);font-weight:700}
+.jalon.v0 {
+  background: transparent;
+  color: var(--fg);
+  border: 1px dashed var(--fg);
+}
+
+.pocv0 {
+  margin-left: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pocv0.on {
+  border-color: var(--fg);
+  color: var(--fg);
+  font-weight: 700;
+}
 
 /* en-tetes de colonne triables (page Fonctionnalites) */
-.trih{cursor:pointer;user-select:none;white-space:nowrap}
-.trih:hover{color:var(--accent)}
-.trih.on{color:var(--accent)}
+.trih {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
 
-/* ---- outils de tout dossier (D144 épingle, D143 suppression) et formulaire de dossier virtuel */
-.nops{display:none;gap:2px;margin-left:4px}
-.node:hover .nops{display:inline-flex}
-.node.pin .ic{color:var(--accent)}
-.grp .axop{margin-left:6px;vertical-align:middle;font-size:11px;padding:0 5px}
-.vform{padding:6px 10px 8px;display:flex;flex-direction:column;gap:5px;background:var(--panel2)}
-.vform input,.vform select{font:inherit;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:inherit;min-width:0}
-.vcrit{display:flex;gap:4px}.vcrit select{flex:0 0 46%}.vcrit input{flex:1}
+.trih:hover {
+  color: var(--accent);
+}
 
-/* ---- la session (D157) : sans session, l'écran de connexion et rien d'autre */
-#connexion{display:none}
-body[data-etat="connexion"] #connexion{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
-body[data-etat="connexion"] header,body[data-etat="connexion"] .tabs,body[data-etat="connexion"] .main,body[data-etat="connexion"] .pocbar{display:none}
-.cnx{display:flex;flex-direction:column;gap:8px;width:min(360px,100%);padding:26px 28px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
-.cnx .logo{font-size:22px;margin-bottom:10px}
-.cnx label{font-size:12px;color:var(--muted)}
-.cnx input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:inherit}
-.cnx .hbtn.prim{margin-top:8px;padding:9px}
-.cnxerr{color:var(--danger);font-size:12.5px}
+.trih.on {
+  color: var(--accent);
+}
