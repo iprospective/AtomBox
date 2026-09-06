@@ -16,7 +16,7 @@ const html = fs.readFileSync(BUNDLE, "utf8");
 
 console.log("— forme du bundle ————————————————————————————");
 eq((html.match(/<script src=/g) || []).length, 0, "aucun script externe");
-eq(html.includes("css/app.css"), false, "aucune feuille de style externe");
+eq(/<link[^>]*href="css\/app\.css"/.test(html), false, "aucune feuille de style externe (la balise, pas la chaîne : le CDC embarqué la cite)");
 vrai(html.includes("<style>"), "la feuille est inlinée");
 vrai(html.includes("engendrée par outils/bundle.py"), "le fichier se déclare engendré");
 vrai(html.length > 150000, "taille : " + Math.round(html.length / 1024) + " Ko");
