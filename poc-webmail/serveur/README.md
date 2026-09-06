@@ -43,6 +43,20 @@ domaine de journal, ses migrations. Les internes (`session`, `etat`, `ingestion`
 ainsi. Un module tiers s'installe par `pip` (point d'entrée `atombox.modules`) ou
 `ATOMBOX_MODULES=paquet:Classe` ; ses routes propres vivent sous `/api/v1/modules/<nom>/`.
 
+## Lancer une instance (V0)
+
+```
+export DATABASE_URL=postgresql:///atombox ATOMBOX_MAGASIN=/var/lib/atombox/magasin
+.venv/bin/alembic upgrade head                                          # le schéma, par la file des migrations
+.venv/bin/python -m atombox.amorcer --login mathieu --nom "Mathieu" --mot-de-passe … --boite contact@exemple.fr
+ATOMBOX_IMAP_HOTE=imap.exemple.fr ATOMBOX_IMAP_MOT_DE_PASSE=… .venv/bin/python -m atombox.ingestion.demon   # la relève
+ATOMBOX_SMTP_HOTE=smtp.exemple.fr .venv/bin/python -m atombox.taches                                        # événements, envois, tâches
+.venv/bin/uvicorn atombox.api.app:app --port 8000                       # l'API sous /api/v1, le webmail sur /
+```
+
+Ouvrir `http://localhost:8000/`, se connecter avec le compte amorcé : c'est le webmail du POC,
+branché sur le vrai serveur — `serveur.poc.js` n'est pas chargé (D141, D157).
+
 ## Quatre mécanismes d'extension (D161, chapitre 19)
 
 | | décorateur | niveau | garantie |

@@ -55,6 +55,11 @@
 
     ["GET", /^\/messages\/([^/]+)$/, (m) => { const x = C.par(dec(m[1])); return x ? rep(x, true) : null; }],
 
+    ["GET", /^\/recherche$/, (_, p) => { const q = (p.q || "").toLowerCase().trim();
+      const l = q.length < 2 ? [] : C.tous.filter(m => !m.motif_sortie && m.dossier !== "trash" &&
+        ((m.sujet || "").toLowerCase().includes(q) || (m.corps || "").toLowerCase().includes(q) || (m.from_adresse || "").toLowerCase().includes(q) || (m.from_nom || "").toLowerCase().includes(q)));
+      return { messages: l.map(m => rep(m, false)), total: l.length, q }; }],
+
     ["GET", /^\/pieces-jointes$/, () => { const out = [];
       C.tous.forEach(m => (m.pieces_jointes || []).forEach((p, i) => out.push({ m, p, i })));
       return { pieces_jointes: out }; }],

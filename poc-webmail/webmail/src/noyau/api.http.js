@@ -28,7 +28,7 @@
       .then(r => { if (r.status === 404) return null;
         if (!r.ok) throw new Error(methode + " " + chemin + " → " + r.status); return r.json(); });
   }
-  const q = o => Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== "")
+  const q_ = o => Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== "")
     .map(([k, v]) => encodeURIComponent(k) + "=" + encodeURIComponent(v)).join("&");
   /* Le contrat sert des dates ISO 8601 (C009) ; les vues comparent des nombres.
      La normalisation se fait ICI, à la réception, une fois pour toutes. Les pièces
@@ -50,11 +50,13 @@
 
   const ImplHttp = {
     /* ---- lecture --------------------------------------------------------- */
-    liste: (folder, filtre, tri, sens, statut) =>
-      req("GET", "/messages?" + q({ dossier: folder.id, kind: folder.kind, axe: folder.axe, filtre, tri, sens, statut }))
+    liste: (folder, filtre, tri, sens, statut) => folder.kind === "recherche"
+      ? ImplHttp.rechercher(folder.q)
+      :
+      req("GET", "/messages?" + q_({ dossier: folder.id, kind: folder.kind, axe: folder.axe, filtre, tri, sens, statut }))
         .then(r => { const l = (r && r.messages) || []; l.forEach(garde); return l; }),
     contenu: folder =>
-      req("GET", "/messages?" + q({ dossier: folder.id, kind: folder.kind, axe: folder.axe, tout: 1 }))
+      req("GET", "/messages?" + q_({ dossier: folder.id, kind: folder.kind, axe: folder.axe, tout: 1 }))
         .then(r => ((r && r.messages) || []).map(garde)),
     message: id => req("GET", "/messages/" + encodeURIComponent(id)).then(garde),
     fil: m => req("GET", "/messages/" + encodeURIComponent(m.id) + "/fil")
@@ -63,7 +65,12 @@
       cache.compteurs = (r && r.compteurs) || {};
       cache.virtuels = (r && r.virtuels) || []; cache.epingles = (r && r.epingles) || [];
       return cache.compteurs; }),
-    piecesJointes: () => req("GET", "/pieces-jointes").then(r => (r && r.pieces_jointes) || []),
+    rechercher: q => req("GET", "/recherche?" + q_({ q })).then(r => { const l = (r && r.messages) || []; l.forEach(garde); return l; }),
+    /* le serveur sert {pj_id, nom, octets, mime_detecte, sha256, partage_par, message:{…}} ; la page
+       d'administration lit encore {m, p, i} — même adaptateur que pour un message (la dette du module) */
+    piecesJointes: () => req("GET", "/pieces-jointes").then(r => ((r && r.pieces_jointes) || []).map(x => x.m ? x
+        : { m: normaliser(Object.assign({ id: x.message.id, sujet: x.message.sujet, from_nom: x.message.from_nom, date_recue: x.message.date_recue })),
+            p: normaliser({ pieces_jointes: [x] }).pieces_jointes[0], i: x.ordre })),
     referentiels: () => req("GET", "/referentiels")
         .then(r => r || { moi: { nom: "", boites: [] }, speciaux: [], util: [], axes: [], valeurs: {}, statuts: [], vues: [] }),
 

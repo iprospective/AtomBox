@@ -71,7 +71,7 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
                    date_declaree=a.date_declaree, date_ingestion=datetime.now(timezone.utc), sens=sens, sujet=a.sujet,
                    sujet_normalise=a.sujet_normalise, thread_id=thread_id, nature=a.nature, from_adresse=a.from_adresse,
                    from_nom=a.from_nom, taille=a.taille, nb_pieces_jointes=len(a.pieces), langue=None,
-                   est_chiffre=a.est_chiffre, est_signe=a.est_signe, snippet=a.snippet))
+                   est_chiffre=a.est_chiffre, est_signe=a.est_signe, snippet=a.snippet, corps_texte=(a.corps_texte or "")[:200000] or None))
         s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, in_reply_to=a.in_reply_to, references=" ".join(a.references) or None,
                         return_path=a.return_path, list_id=a.list_id, list_unsubscribe=a.list_unsubscribe, headers=a.headers,
                         blob_ref=brut.empreinte, empreinte=identite, structure_mime=a.structure_mime, uid=uid, uid_validity=uid_validity,
