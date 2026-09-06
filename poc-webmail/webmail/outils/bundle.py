@@ -31,11 +31,11 @@ if not declares:
     sys.exit("aucun script trouvé dans index.html")
 
 def liste_du_chargeur(nom):
-    src = io.open(os.path.join(RACINE, "js", "core", "chargeur.js"), encoding="utf-8").read()
+    src = io.open(os.path.join(RACINE, "src", "noyau", "chargeur.js"), encoding="utf-8").read()
     m = re.search(r"const %s\s*=\s*\[(.*?)\];" % nom, src, re.S)
     return re.findall(r'"([^"]+)"', m.group(1)) if m else []
 
-POINTS = { "js/core/chargeur.js": "TETE", "js/core/chargeur.donnees.js": "DONNEES", "js/core/chargeur.fin.js": "FIN" }
+POINTS = { "src/noyau/chargeur.js": "TETE", "src/noyau/chargeur.donnees.js": "DONNEES", "src/noyau/chargeur.fin.js": "FIN" }
 fichiers = []
 for f in declares:
     fichiers.append(f)
@@ -62,7 +62,7 @@ html = re.sub(r"\n<!--[^>]*?-->\n(?=\s*(<script>|</body>))", "\n", html, flags=r
 html = re.sub(r"\n{3,}", "\n\n", html)
 
 marque = ("<!-- Page %s engendrée par outils/bundle.py le %s.\n"
-          "     NE PAS ÉDITER : les sources sont dans js/ et css/. -->\n"
+          "     NE PAS ÉDITER : les sources sont dans src/ (scss compris) et css/ est compilé. -->\n"
           % ("autonome" if MODE == "poc" else "produit", datetime.datetime.now().strftime("%Y-%m-%d %H:%M")))
 html = html.replace("<!doctype html>", "<!doctype html>\n" + marque, 1)
 

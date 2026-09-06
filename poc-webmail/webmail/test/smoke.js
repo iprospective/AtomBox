@@ -16,10 +16,10 @@ const ls = creerStockage();
 let p = demarrer(ls); await drainer(p);
 let A = p.ABX;
 vrai(p.fichiers.length > 25, p.fichiers.length + " scripts chargés — ceux d'index.html et ceux que le chargeur a écrits (D157)");
-vrai(p.fichiers.indexOf("js/services/corpus.js") > p.fichiers.indexOf("js/services/attachments.js")
-     && p.fichiers.indexOf("js/services/corpus.js") < p.fichiers.indexOf("js/services/api.js"),
+vrai(p.fichiers.indexOf("src/poc/corpus.js") > p.fichiers.indexOf("src/modules/pieces-jointes/service.js")
+     && p.fichiers.indexOf("src/poc/corpus.js") < p.fichiers.indexOf("src/noyau/api.js"),
      "le corpus est écrit après les services de base et avant l'Api — à sa place d'avant");
-vrai(p.fichiers.indexOf("js/poc/pocbar.js") < p.fichiers.indexOf("js/app.js"), "la barre du POC est écrite avant app.js");
+vrai(p.fichiers.indexOf("src/poc/pocbar.js") < p.fichiers.indexOf("src/noyau/amorcage.js"), "la barre du POC est écrite avant app.js");
 vrai(A.Corpus.tous.length > 3000, "corpus engendré (" + A.Corpus.tous.length + " messages)");
 vrai(A.Registry.liste().length >= 15, "partielles enregistrées : " + A.Registry.liste().length);
 vrai(p.doc.getElementById("nav").innerHTML.includes("Fournisseurs"), "arborescence peinte");

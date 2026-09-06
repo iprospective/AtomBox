@@ -67,8 +67,9 @@ const { creerDocument } = require("./fake-dom");
        "d'autres identifiants vont au serveur — indisponible ici, la porte le dit et ne s'ouvre pas");
 
   console.log("— dette de migration : les vues lisent encore l'objet interne ————");
-  const srcJs = ["js/controllers", "js/views", "js/services"].flatMap(d =>
-    fs.readdirSync(path.join(RACINE, d)).map(f => path.join(d, f)));
+  const lister = d => fs.readdirSync(path.join(RACINE, d), { withFileTypes: true }).flatMap(e =>
+    e.isDirectory() ? lister(path.join(d, e.name)) : [path.join(d, e.name)]);
+  const srcJs = ["src/noyau", "src/modules"].flatMap(lister);
   const deballages = srcJs.filter(f => !/serveur\.poc|api\.http/.test(f))
     .map(f => [f, (fs.readFileSync(path.join(RACINE, f), "utf8").match(/_m \|\| r|\._m\b/g) || []).length])
     .filter(([, n]) => n > 0);

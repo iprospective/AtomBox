@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Génère js/services/cdc-index.js depuis le CDC réel.
+"""Génère src/poc/cdc-index.js depuis le CDC réel.
 
 Le POC affiche le registre des décisions ; le retaper à la main garantirait
 qu'il diverge. Ce script lit les tableaux de synthèse des fichiers 90 et 99 du
 CDC et en produit un module JS. À relancer après chaque décision consignée :
 
-    python3 outils/gen-cdc-index.py          (depuis la racine du dépôt — écrit webmail/js/services/cdc-index.js)
+    python3 outils/gen-cdc-index.py          (depuis la racine du dépôt — écrit webmail/src/poc/cdc-index.js)
 """
 import io, os, re, sys, json, datetime
 
@@ -21,7 +21,7 @@ def trouver_cdc():
 
 CDC = os.environ.get("CDC_DIR") or trouver_cdc()
 DEPOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-SORTIE = os.path.join(DEPOT, "webmail", "js", "services", "cdc-index.js")
+SORTIE = os.path.join(DEPOT, "webmail", "src", "poc", "cdc-index.js")
 
 def propre(t):
     t = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", t)       # liens markdown

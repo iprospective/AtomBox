@@ -1,0 +1,15 @@
+// LA FEUILLE DE STYLE — un seul fichier compilé (css/app.css) depuis le noyau et chaque module,
+// comme Encore le fait : `npm run css`. L'ordre est celui de la cascade : le noyau d'abord, le POC en dernier.
+
+@use "noyau/base" as noyau_base;
+@use "modules/partials/style" as modules_partials_style;
+@use "modules/onglets/style" as modules_onglets_style;
+@use "modules/composition/style" as modules_composition_style;
+@use "modules/liste/style" as modules_liste_style;
+@use "modules/arborescence/style" as modules_arborescence_style;
+@use "modules/message/style" as modules_message_style;
+@use "modules/pieces-jointes/style" as modules_pieces_jointes_style;
+@use "modules/integration/style" as modules_integration_style;
+@use "modules/administration/style" as modules_administration_style;
+@use "modules/connexion/style" as modules_connexion_style;
+@use "poc/style" as poc_style;
