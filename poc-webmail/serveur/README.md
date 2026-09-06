@@ -9,7 +9,8 @@ Python 3.12, `asyncio`, PostgreSQL ≥ 14 (**D154**). Découpé par fonctionnali
 | `atombox/ingestion/` | F001, F113 | le démon IMAP : IDLE, PEEK, reprise par UID ; synchronisation des états |
 | `atombox/filtres/` | F016 | le moteur de filtres |
 | `atombox/api/` | — | le routage (routes = contrôleurs + actions), la sécurité, l'application FastAPI, le contrat Pydantic engendré |
-| `atombox/controleurs/` | F124… | une classe par ressource, une méthode `@action(méthode, chemin)` par route de `routes.yml` — le contrat est vérifié au démarrage |
+| `atombox/controleurs/` | F124, F122, liste, message, fil, rattachement, création | une classe par ressource, une méthode `@action(méthode, chemin)` par route de `routes.yml` — le contrat est vérifié au démarrage |
+| `atombox/services/` | — | le métier appelé par les contrôleurs, sans HTTP : `messages.py` sert le contrat que le webmail lit (dossiers spéciaux par alias IMAP, compteurs en une passe, sérialisation, rattachement) |
 | `atombox/etat/` | F122 | la page d'état et les métriques |
 
 ```

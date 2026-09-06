@@ -3,6 +3,9 @@ from __future__ import annotations
 from . import Module, accroche
 from ..controleurs.session import SessionControleur
 from ..controleurs.etat import EtatControleur
+from ..controleurs.referentiels import ReferentielsControleur
+from ..controleurs.arborescence import ArborescenceControleur
+from ..controleurs.messages import MessagesControleur
 from ..journal import journal
 
 class ModuleSession(Module):
@@ -22,4 +25,8 @@ class ModuleIngestion(Module):
         """dernier de la chaîne : dit ce que les modules ont fait du message"""
         if ctx.get("tags"): self.log.debug("%s : tags posés par les modules : %s", ctx["comm_id"], ctx["tags"])
 
-MODULES_INTERNES = [ModuleSession, ModuleEtat, ModuleIngestion]
+class ModuleMessages(Module):
+    nom = "messages"; version = "0.1"; description = "référentiels, arborescence, liste, message, fil, rattachement, création — ce que le webmail lit (D141)"; interne = True
+    controleurs = [ReferentielsControleur, ArborescenceControleur, MessagesControleur]
+
+MODULES_INTERNES = [ModuleSession, ModuleEtat, ModuleIngestion, ModuleMessages]
