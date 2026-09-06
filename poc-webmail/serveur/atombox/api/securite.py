@@ -10,6 +10,7 @@ from ..schema.modeles import Compte, Session as SessionModele
 from ..uuid7 import uuid7
 from .dependances import session_async
 from ..journal import journal
+from ..modules.accroches import accroches
 
 log = journal("auth")
 
@@ -51,4 +52,5 @@ async def ouvrir_session(s: AsyncSession, compte: Compte, agent: str | None) -> 
                         cree_le=datetime.now(timezone.utc), expire_le=datetime.now(timezone.utc) + DUREE, agent=agent))
     await s.commit()
     log.info("session ouverte pour %s (%s)", compte.login, agent or "agent inconnu")
+    await accroches.emettre_async("session.ouverte", compte=compte, agent=agent)
     return jeton

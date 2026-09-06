@@ -11,6 +11,7 @@ from ..api.dependances import session_async
 from ..api.securite import compte_courant, ouvrir_session, verifier_mot_de_passe
 from ..schema.modeles import Compte
 from ..journal import journal
+from ..modules.accroches import accroches
 
 log = journal("auth")
 
@@ -38,4 +39,5 @@ class SessionControleur(Controleur):
         ses.revoque_le = datetime.now(timezone.utc)
         await s.commit()
         log.info("session fermée pour %s", compte.login)
+        await accroches.emettre_async("session.fermee", compte=compte)
         return {"ok": True, "fermee": True}

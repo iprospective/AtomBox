@@ -18,6 +18,8 @@ from ..magasin import Magasin
 from ..uuid7 import uuid7
 from .imap import Releve
 from .ingestion import ingerer
+from ..modules import chargement
+from ..modules.accroches import accroches
 
 log = journal("demon")
 
@@ -78,7 +80,9 @@ async def principal():
                "magasin": os.environ.get("ATOMBOX_MAGASIN", "./magasin") }
     with ouvrir_session() as s:
         boites = s.execute(select(Boite.boite_id, Adresse.adresse_complete).join(Adresse, Adresse.adresse_id == Boite.adresse_id)).all()
+    chargement.charger()
     log.info("démarrage : %d boîte(s) administrée(s), hôte %s, magasin %s", len(boites), config["hote"], config["magasin"])
+    accroches.emettre("demon.demarrage", boites=boites)
     await asyncio.gather(*(surveiller_boite(b.boite_id, b.adresse_complete, config) for b in boites))
 
 if __name__ == "__main__":

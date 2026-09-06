@@ -14,6 +14,7 @@ from ..schema.modeles import Adresse, Blob, Comm, CommEmail, CommPieceJointe, Do
 from .analyse import analyser
 from .identite import empreinte_identite
 from ..journal import journal
+from ..modules.accroches import accroches
 
 log = journal("ingestion")
 
@@ -47,6 +48,9 @@ def blob(s: Session, magasin: Magasin, octets: bytes) -> Blob:
 def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, uid_validity=None, dossier_id=None,
             date_recue: datetime | None = None, sens: str = "in") -> dict:
     a = analyser(octets)
+    ctx = accroches.emettre("message.avant_ingestion", analyse=a, boite_id=boite_id, octets=octets, tags=[])
+    if ctx.get("ignorer"):
+        log.info("ignoré par un module : %s (%s)", a.message_id, ctx.get("raison", "sans raison")); return {"comm_id": None, "nouveau": False, "ignore": True, "identite": None, "nature": a.nature, "pieces": len(a.pieces)}
     identite = empreinte_identite(a)
     existant = s.scalar(select(CommEmail).where(CommEmail.empreinte == identite))
     if existant:
@@ -88,4 +92,5 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
         s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, drapeau=False, statut="nouveau", personnel=False, gele=False, dossier_id=dossier_id))
     s.commit()
     if nouveau: log.info("nouveau %s : %s, de %s, %d octets, %d pièce(s), nature %s", comm_id, a.sujet or "(sans sujet)", a.from_adresse, a.taille, len(a.pieces), a.nature)
+    accroches.emettre("message.ingere", comm_id=comm_id, nouveau=nouveau, analyse=a, boite_id=boite_id, tags=ctx.get("tags", []))
     return {"comm_id": comm_id, "nouveau": nouveau, "identite": identite, "nature": a.nature, "pieces": len(a.pieces)}

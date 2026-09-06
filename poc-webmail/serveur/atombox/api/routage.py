@@ -45,11 +45,14 @@ def routes_du_dictionnaire(chemin_dict: str | None = None) -> list[tuple[str, st
     rows = yaml.safe_load(open(os.path.join(d, "routes.yml"), encoding="utf-8"))
     return [(r["methode"].upper(), r["chemin"].replace(PREFIXE, "", 1), r) for r in rows]
 
-def verifier_contrat(table: list[tuple[str, str, str]], chemin_dict: str | None = None) -> dict:
-    """{hors_contrat: [...], sans_action: [...], couvertes: n}"""
+def verifier_contrat(table: list[tuple[str, str, str]], chemin_dict: str | None = None, modules: list[str] | None = None) -> dict:
+    """{hors_contrat: [...], sans_action: [...], couvertes: n, propres: n} — une route sous /modules/<nom>/ d'un
+    module chargé est PROPRE au module (D160) : hors du contrat du noyau, et légitime"""
     contrat = {(m, _norm(c)): r for m, c, r in routes_du_dictionnaire(chemin_dict)}
     ecrites = {(m, _norm(c)): a for m, c, a in table}
-    return { "hors_contrat": sorted("%s %s → %s" % (m, c, a) for (m, c), a in ecrites.items() if (m, c) not in contrat),
+    propre = lambda c: any(c.startswith("/modules/%s/" % n) for n in (modules or []))
+    return { "hors_contrat": sorted("%s %s → %s" % (m, c, a) for (m, c), a in ecrites.items() if (m, c) not in contrat and not propre(c)),
+             "propres": sum(1 for (m, c) in ecrites if propre(c)),
              "sans_action": sorted("%s %s (%s)" % (m, c, r.get("etat")) for (m, c), r in contrat.items() if (m, c) not in ecrites),
              "couvertes": sum(1 for k in ecrites if k in contrat), "contrat": len(contrat) }
 
