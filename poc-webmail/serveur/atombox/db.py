@@ -6,6 +6,9 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from .journal import journal
+
+log = journal("schema")
 
 def url() -> str:
     u = os.environ.get("DATABASE_URL")
@@ -16,7 +19,8 @@ _sync = {}; _async = {}
 
 def moteur(u: str | None = None):
     u = u or url()
-    if u not in _sync: _sync[u] = create_engine(u, pool_pre_ping=True)
+    if u not in _sync:
+        log.debug("moteur synchrone : %s", u.split("@")[-1]); _sync[u] = create_engine(u, pool_pre_ping=True)
     return _sync[u]
 
 def session(u: str | None = None) -> Session:
@@ -24,7 +28,8 @@ def session(u: str | None = None) -> Session:
 
 def moteur_async(u: str | None = None):
     u = u or url()
-    if u not in _async: _async[u] = create_async_engine(u, pool_pre_ping=True)
+    if u not in _async:
+        log.debug("moteur asynchrone : %s", u.split("@")[-1]); _async[u] = create_async_engine(u, pool_pre_ping=True)
     return _async[u]
 
 def fabrique_async(u: str | None = None) -> async_sessionmaker[AsyncSession]:

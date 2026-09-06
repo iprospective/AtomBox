@@ -9,6 +9,9 @@ gagne ; la trame zstd se reconnaît à son en-tête, donc la lecture n'a rien à
 """
 import hashlib, os, tempfile
 import zstandard
+from ..journal import journal
+
+log = journal("magasin")
 
 MAGIE_ZSTD = b"\x28\xb5\x2f\xfd"
 SEUIL_GAIN = 0.10          # en dessous de 10 % gagnés, on garde les octets tels quels (D069)
@@ -51,6 +54,7 @@ class Magasin:
             os.replace(tmp, chemin)
         finally:
             if os.path.exists(tmp): os.unlink(tmp)
+        log.debug("écrit %s : %d → %d octets (%s)", identifiant, len(octets), len(contenu), "zstd" if garder_zstd else "aucune")
         return { "compression": "zstd" if garder_zstd else "aucune", "taille_octets": len(octets),
                  "taille_stockee": len(contenu), "nouveau": True }
 
