@@ -40,7 +40,7 @@ VERSION="$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M)"
 ENVOI="$(mktemp -d)"; trap 'rm -rf "$ENVOI"' EXIT
 cp -r css src README.md "$ENVOI"/
 for f in index.html; do
-  sed -E "s#(src|href)=\"((js|css)/[^\"?]+)\"#\1=\"\2?v=$VERSION\"#g; s#(<meta name=\"abx-version\" content=\")[^\"]*#\1$VERSION#" "$f" > "$ENVOI/$f"
+  sed -E "s#(src|href)=\"((src|css)/[^\"?]+)\"#\1=\"\2?v=$VERSION\"#g; s#(<meta name=\"abx-version\" content=\")[^\"]*#\1$VERSION#" "$f" > "$ENVOI/$f"
 done
 echo "→ version $VERSION : $(grep -c "?v=$VERSION" "$ENVOI/index.html") références estampillées dans index.html"
 echo "→ envoi vers $HOTE:$CIBLE"
