@@ -1,4 +1,4 @@
-"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-06T11:22:35 depuis le dictionnaire (D158).
+"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-06T16:01:43 depuis le dictionnaire (D158).
 NE PAS ÉDITER : corriger .mmi-pm/docs/dict/*.yml, régénérer. Les tables sont celles de schema.sql (F114)."""
 from __future__ import annotations
 import datetime, decimal, uuid
@@ -30,6 +30,7 @@ class Comm(Base):
     est_chiffre: Mapped[bool] = mapped_column(Boolean, nullable=False)
     est_signe: Mapped[bool] = mapped_column(Boolean, nullable=False)
     snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
+    corps_texte: Mapped[str | None] = mapped_column(Text, nullable=True)
     thread: Mapped[Comm | None] = relationship("Comm", foreign_keys=[thread_id], remote_side=[comm_id])
     __table_args__ = (PrimaryKeyConstraint("comm_id", name="pk_comm"), CheckConstraint("\"type\" IN ('email', 'interne', 'groupe', 'sms', 'whatsapp', 'tel')", name="ck_comm_type"), CheckConstraint("\"sens\" IN ('in', 'out')", name="ck_comm_sens"), CheckConstraint("\"nature\" IN ('humain', 'liste', 'notification', 'service')", name="ck_comm_nature"),)
 

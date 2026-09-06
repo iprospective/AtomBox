@@ -24,6 +24,7 @@ class Comm(BaseModel):
     est_chiffre: bool
     est_signe: bool
     snippet: str | None = None
+    corps_texte: str | None = None
 
 class CommEmail(BaseModel):
     model_config = ConfigDict(from_attributes=True)

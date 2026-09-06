@@ -4,8 +4,9 @@ vérifié au démarrage — une action hors de routes.yml est refusée.
     DATABASE_URL=postgresql:///atombox .venv/bin/uvicorn atombox.api.app:app
 """
 from __future__ import annotations
-import time
+import os, time
 from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 from ..journal import journal
 from .routage import enregistrer, verifier_contrat
 from ..modules import chargement
@@ -42,6 +43,10 @@ def creer_app(verifier: bool = True, modules=None) -> FastAPI:
         app.state.contrat = bilan
         log.info("démarrage : %d module(s), %d action(s), %d/%d route(s) du contrat couverte(s), %d route(s) propre(s) aux modules", len(charges), len(table), bilan["couvertes"], bilan["contrat"], bilan["propres"])
     accroches.emettre("api.demarrage", app=app, table=table)
+    # le webmail lui-même, en statique (D157 : un seul index ; ATOMBOX_WEBMAIL pour le dossier, vide = pas de statique)
+    webmail = os.environ.get("ATOMBOX_WEBMAIL", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "webmail"))
+    if webmail and os.path.isfile(os.path.join(webmail, "index.html")):
+        app.mount("/", StaticFiles(directory=webmail, html=True), name="webmail")
     return app
 
 app = creer_app()

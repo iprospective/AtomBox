@@ -34,6 +34,11 @@
     : (D.byId("main").classList.contains("navopen") ? App.fermerNav() : App.ouvrirNav());
   D.byId("scrim").onclick = () => { App.fermerNav(); App.setQ(false); };
 
+  D.byId("gsearch").onkeydown = e => {
+    if (e.key !== "Enter") return;
+    const q = e.target.value.trim(); if (q.length < 2) return;
+    ABX.Controllers.List.ouvrir({ id: "recherche:" + q, label: "Recherche « " + q + " »", kind: "recherche", q });
+  };
   D.byId("gsearch").oninput = e => {
     if (e.target.value.length !== 3) return;
     ABX.log("Recherche globale plein texte",

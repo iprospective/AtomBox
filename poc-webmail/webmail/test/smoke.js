@@ -819,6 +819,19 @@ console.log("— dossiers virtuels personnels (D143) et épingles (D144) ——"
   A.Store.ui.jalon = null; A.Controllers.Nav.peindre();
 }
 
+console.log("— recherche plein texte (F104) ————————————————————");
+{
+  const cible = A.Corpus.tous.find(m => !m.motif_sortie && m.dossier !== "trash" && (m.sujet || "").length > 8);
+  const mot = cible.sujet.split(" ").find(w => w.length > 4) || cible.sujet.slice(0, 5);
+  const res = await A.Api.rechercher(mot);
+  vrai(res.length > 0 && res.some(m => m.id === cible.id), "GET /recherche trouve le message par un mot de son sujet (" + res.length + ")");
+  eq((await A.Api.rechercher("x")).length, 0, "moins de deux caractères : rien");
+  A.Controllers.List.ouvrir({ id: "recherche:" + mot, label: "Recherche « " + mot + " »", kind: "recherche", q: mot }); await tick();
+  vrai(A.Controllers.List._cache.length === res.length && p.doc.getElementById("list").innerHTML.includes("msg"), "un dossier de recherche se liste comme un dossier");
+  const g = p.doc.getElementById("gsearch"); g.value = mot; g.onkeydown({ key: "Enter", target: g }); await tick();
+  eq(A.Store.ui.folder.kind, "recherche", "Entrée dans la recherche globale ouvre le dossier de recherche");
+}
+
 console.log("— déterminisme ————————————————————————————————");
 const p3 = demarrer(creerStockage()); await drainer(p3);   // stockage vierge
 const C = p3.ABX;

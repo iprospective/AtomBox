@@ -240,7 +240,7 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None) -> d
     if magasin is not None: magasin.ecrire(str(comm_id), octets)
     c = Comm(comm_id=comm_id, type="email", date_recue=maintenant, date_declaree=maintenant, date_ingestion=maintenant, sens="out", sujet=a.sujet,
              sujet_normalise=a.sujet_normalise, thread_id=comm_id, nature="humain", from_adresse=adresses[boite.boite_id], from_nom=compte.nom,
-             taille=len(octets), nb_pieces_jointes=0, est_chiffre=False, est_signe=False, snippet=a.snippet)
+             taille=len(octets), nb_pieces_jointes=0, est_chiffre=False, est_signe=False, snippet=a.snippet, corps_texte=a.corps_texte or None)
     s.add(c)
     s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, headers=a.headers, blob_ref="", empreinte=empreinte_identite(a), structure_mime=a.structure_mime, reponse_possible="oui"))
     s.add(Rattachement(comm_id=comm_id, boite_id=boite.boite_id, compte_id=compte.compte_id, lu_le=maintenant, drapeau=False, statut="nouveau", personnel=False, gele=False,

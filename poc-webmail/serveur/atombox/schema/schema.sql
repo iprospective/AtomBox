@@ -1,4 +1,4 @@
--- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-06T11:22:34 depuis le dictionnaire des données.
+-- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-06T16:01:43 depuis le dictionnaire des données.
 -- NE PAS ÉDITER : la source est .mmi-pm/docs/dict/*.yml (F114, D154). PostgreSQL ≥ 14 (D027).
 -- 34 tables, 68 clés étrangères, 57 index, 7 unicités. Identifiants : uuid v7 engendrés par
 -- l'application (D145). Le tronc comm n'est PAS partitionné en V0 : la partition par canal (D138)
@@ -26,6 +26,7 @@ CREATE TABLE "comm" (
   "est_chiffre" boolean NOT NULL,
   "est_signe" boolean NOT NULL,
   "snippet" text,
+  "corps_texte" text,
   CONSTRAINT "pk_comm" PRIMARY KEY ("comm_id"),
   CONSTRAINT "ck_comm_type" CHECK ("type" IN ('email', 'interne', 'groupe', 'sms', 'whatsapp', 'tel')),
   CONSTRAINT "ck_comm_sens" CHECK ("sens" IN ('in', 'out')),

@@ -47,6 +47,8 @@
     /* l'arborescence de l'utilisateur : compteurs en UNE passe (D078), dossiers
        virtuels personnels (D143), épingles (D144) — GET /arborescence */
     compteurs:  () => appelle("compteurs", []),
+    /* recherche plein texte, portée du jeton, zone active par défaut — GET /recherche */
+    rechercher: q => appelle("rechercher", [q]),
     /* toutes les pièces jointes (page d'administration des blobs) */
     piecesJointes: () => appelle("piecesJointes", []),
     /* les RÉFÉRENTIELS de l'utilisateur connecté : ses boîtes, les dossiers
