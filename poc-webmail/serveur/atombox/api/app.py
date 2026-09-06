@@ -8,11 +8,19 @@ import time
 from fastapi import FastAPI, Request
 from ..journal import journal
 from .routage import enregistrer, verifier_contrat
-from ..controleurs import CONTROLEURS
+from ..modules import chargement
+from ..modules.accroches import accroches
 
-def creer_app(verifier: bool = True) -> FastAPI:
+def creer_app(verifier: bool = True, modules=None) -> FastAPI:
+    """monte les modules (internes, tiers, et ceux passés ici) — tout est module (D160)"""
     app = FastAPI(title="AtomBox", version="0.0.1", docs_url="/api/v1/doc", openapi_url="/api/v1/openapi.json")
-    table = enregistrer(app, CONTROLEURS)
+    charges = chargement.charger(supplementaires=modules)
+    controleurs = [c for m in charges for c in m.controleurs]
+    for m in charges:
+        for c in m.controleurs:
+            if not m.interne and not c.prefixe.startswith(m.routes_propres()): c.prefixe = m.routes_propres() + c.prefixe
+    table = enregistrer(app, controleurs)
+    app.state.modules = charges
     app.state.table = table
     log = journal("api")
 
@@ -28,11 +36,12 @@ def creer_app(verifier: bool = True) -> FastAPI:
             "%s %s → %d en %.0f ms", request.method, request.url.path, reponse.status_code, ms)
         return reponse
     if verifier:
-        bilan = verifier_contrat(table)
+        bilan = verifier_contrat(table, modules=[m.nom for m in charges])
         if bilan["hors_contrat"]:
             raise SystemExit("actions hors contrat (routes.yml) : " + "; ".join(bilan["hors_contrat"]))
         app.state.contrat = bilan
-        log.info("démarrage : %d action(s), %d/%d route(s) du contrat couverte(s)", len(table), bilan["couvertes"], bilan["contrat"])
+        log.info("démarrage : %d module(s), %d action(s), %d/%d route(s) du contrat couverte(s), %d route(s) propre(s) aux modules", len(charges), len(table), bilan["couvertes"], bilan["contrat"], bilan["propres"])
+    accroches.emettre("api.demarrage", app=app, table=table)
     return app
 
 app = creer_app()

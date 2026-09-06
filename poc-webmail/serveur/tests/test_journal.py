@@ -33,7 +33,7 @@ def test_chaque_module_ecrit_dans_le_journal_et_jamais_print():
     for f in glob.glob(os.path.join(paquet, "**", "*.py"), recursive=True):
         rel = os.path.relpath(f, paquet); s = open(f, encoding="utf-8").read()
         if re.search(r"^\s*print\(", s, re.M): prints.append(rel)
-        if rel in ("journal.py", "__init__.py", "uuid7.py") or "/migrations/" in rel or rel.startswith("schema/modeles") or rel.startswith("api/contrat") or rel.startswith("api/dependances") or rel.startswith("api/routage") or rel.startswith("ingestion/analyse") or rel.startswith("ingestion/identite") or rel.endswith("__init__.py"):
+        if rel in ("journal.py", "__init__.py", "uuid7.py") or "/migrations/" in rel or rel.startswith("schema/modeles") or rel.startswith("api/contrat") or rel.startswith("api/dependances") or rel.startswith("api/routage") or rel.startswith("ingestion/analyse") or rel.startswith("ingestion/identite") or rel.startswith("modules/__init__") or rel.endswith("__init__.py"):
             continue
         if "journal(" not in s: sans_journal.append(rel)
     assert not prints, "print() dans : " + ", ".join(prints)
