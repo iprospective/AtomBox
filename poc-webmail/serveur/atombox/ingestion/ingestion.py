@@ -13,6 +13,9 @@ from ..magasin import Magasin
 from ..schema.modeles import Adresse, Blob, Comm, CommEmail, CommPieceJointe, Domaine, Participant, PieceJointe, Rattachement
 from .analyse import analyser
 from .identite import empreinte_identite
+from ..journal import journal
+
+log = journal("ingestion")
 
 def domaine(s: Session, nom: str) -> Domaine:
     nom_ascii = nom.lower()
@@ -48,6 +51,7 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
     existant = s.scalar(select(CommEmail).where(CommEmail.empreinte == identite))
     if existant:
         comm_id, nouveau = existant.comm_id, False
+        log.debug("déjà connu %s (%s) → rattachement à %s", comm_id, a.message_id, boite_id)
     else:
         nouveau = True; comm_id = uuid7()
         # le fil (D055) : par In-Reply-To / References vers une comm connue, sinon soi-même
@@ -83,4 +87,5 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
     if not s.get(Rattachement, (comm_id, boite_id)):
         s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, drapeau=False, statut="nouveau", personnel=False, gele=False, dossier_id=dossier_id))
     s.commit()
+    if nouveau: log.info("nouveau %s : %s, de %s, %d octets, %d pièce(s), nature %s", comm_id, a.sujet or "(sans sujet)", a.from_adresse, a.taille, len(a.pieces), a.nature)
     return {"comm_id": comm_id, "nouveau": nouveau, "identite": identite, "nature": a.nature, "pieces": len(a.pieces)}

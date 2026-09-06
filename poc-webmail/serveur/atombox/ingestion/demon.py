@@ -9,7 +9,8 @@ UID, IDLE sur la boîte de réception ; les dossiers IMAP deviennent des `dossie
 avec sa raison et le démon passe au suivant — il ne réessaie pas en boucle, il ne s'arrête pas.
 """
 from __future__ import annotations
-import asyncio, logging, os
+import asyncio, os
+from ..journal import journal
 from sqlalchemy import select
 from ..db import session as ouvrir_session
 from ..schema.modeles import Adresse, Boite, Dossier
@@ -18,7 +19,7 @@ from ..uuid7 import uuid7
 from .imap import Releve
 from .ingestion import ingerer
 
-log = logging.getLogger("atombox.ingestion")
+log = journal("demon")
 
 def _dossier(s, boite_id, alias: str) -> Dossier:
     d = s.scalar(select(Dossier).where(Dossier.boite_id == boite_id, Dossier.alias_imap == alias))
@@ -31,6 +32,7 @@ def _dossier(s, boite_id, alias: str) -> Dossier:
 def relever_boite(s, magasin: Magasin, releve: Releve, boite_id, adresse: str) -> int:
     """un passage complet sur tous les dossiers d'une boîte ; rend le nombre de messages ingérés"""
     n = 0
+    log.debug("%s : relève", adresse)
     for alias in releve.dossiers():
         d = _dossier(s, boite_id, alias)
         validity, uidnext = releve.selectionner(alias)
@@ -43,7 +45,7 @@ def relever_boite(s, magasin: Magasin, releve: Releve, boite_id, adresse: str) -
                 octets, date, drapeaux = releve.lire(uid)
                 r = ingerer(s, magasin, boite_id, octets, uid=uid, uid_validity=validity, dossier_id=d.dossier_id, date_recue=date)
                 n += 1
-                log.info("%s/%s uid %d → %s (%s)", adresse, alias, uid, "nouveau" if r["nouveau"] else "rattaché", r["nature"])
+                log.debug("%s/%s uid %d → %s (%s)", adresse, alias, uid, "nouveau" if r["nouveau"] else "rattaché", r["nature"])
             except Exception as e:
                 s.rollback()
                 log.error("%s/%s uid %d : NON INGÉRÉ — %s", adresse, alias, uid, e)   # bruyant, et on continue (D152)
@@ -51,6 +53,7 @@ def relever_boite(s, magasin: Magasin, releve: Releve, boite_id, adresse: str) -
                 d.uid_validity, d.uid_suivant = validity, uid + 1; s.commit()
         if not releve.nouveaux(depuis):
             d.uid_validity, d.uid_suivant = validity, max(depuis, uidnext); s.commit()
+    if n: log.info("%s : %d message(s) ingéré(s)", adresse, n)
     return n
 
 async def surveiller_boite(boite_id, adresse: str, config: dict):
@@ -70,13 +73,12 @@ async def surveiller_boite(boite_id, adresse: str, config: dict):
             await asyncio.sleep(60)
 
 async def principal():
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = { "hote": os.environ["ATOMBOX_IMAP_HOTE"], "port": int(os.environ.get("ATOMBOX_IMAP_PORT", "993")),
                "master": os.environ.get("ATOMBOX_IMAP_MASTER", "masteruser"), "mot_de_passe": os.environ["ATOMBOX_IMAP_MOT_DE_PASSE"],
                "magasin": os.environ.get("ATOMBOX_MAGASIN", "./magasin") }
     with ouvrir_session() as s:
         boites = s.execute(select(Boite.boite_id, Adresse.adresse_complete).join(Adresse, Adresse.adresse_id == Boite.adresse_id)).all()
-    log.info("%d boîte(s) administrée(s)", len(boites))
+    log.info("démarrage : %d boîte(s) administrée(s), hôte %s, magasin %s", len(boites), config["hote"], config["magasin"])
     await asyncio.gather(*(surveiller_boite(b.boite_id, b.adresse_complete, config) for b in boites))
 
 if __name__ == "__main__":
