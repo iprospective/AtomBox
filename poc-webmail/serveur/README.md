@@ -34,6 +34,14 @@ Le schéma n'est **jamais** édité à la main : on corrige le dictionnaire, on 
   vérifie par lecture que la file couvre chaque colonne, et avec une base qu'elle s'applique ;
 - **identifiants** : UUID v7 engendrés par l'application (`atombox/uuid7.py`, D145).
 
+## Tout est module (D160)
+
+`atombox/modules/` : un module est une classe (`Module`) qui déclare ses contrôleurs, ses
+accroches (`@accroche("message.ingere")` sur des points nommés dans `accroches.py`), son
+domaine de journal, ses migrations. Les internes (`session`, `etat`, `ingestion`) sont écrits
+ainsi. Un module tiers s'installe par `pip` (point d'entrée `atombox.modules`) ou
+`ATOMBOX_MODULES=paquet:Classe` ; ses routes propres vivent sous `/api/v1/modules/<nom>/`.
+
 ## F001, F002 — l'ingestion et le magasin
 
 `atombox/magasin/` : `ab/cd/<id>`, zstd conditionnel, jamais réécrit. `atombox/ingestion/` :
