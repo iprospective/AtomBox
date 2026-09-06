@@ -31,6 +31,18 @@ def charger(supplementaires: list[Module] | None = None, tiers: bool = True) -> 
                 mod, cls = spec.strip().split(":"); liste.append(getattr(importlib.import_module(mod), cls)())
             except Exception: log.exception("module %s : chargement en échec — ignoré", spec)
     liste += list(supplementaires or [])
+    # les dépendances (D161) : un module se charge après ceux qu'il déclare ; une dépendance absente l'écarte
+    disponibles = {m.nom for m in liste}
+    ordonnee, vus = [], set()
+    def visiter(m, pile=()):
+        if m.nom in vus: return
+        if m.nom in pile: log.error("modules en cycle : %s — %s écarté", " → ".join(pile + (m.nom,)), m.nom); return
+        for d in m.dependances:
+            if d not in disponibles: log.error("module %s : dépendance %s absente — écarté", m.nom, d); return
+            visiter(next(x for x in liste if x.nom == d), pile + (m.nom,))
+        if all(d in vus for d in m.dependances): vus.add(m.nom); ordonnee.append(m)
+    for m in liste: visiter(m)
+    liste = ordonnee
     noms = set()
     noyau = Noyau()
     for m in liste:

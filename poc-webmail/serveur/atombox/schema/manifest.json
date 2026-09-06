@@ -1,5 +1,5 @@
 {
- "genere": "2026-09-06T00:25:21",
+ "genere": "2026-09-06T11:22:34",
  "tables": {
   "comm": {
    "cle": [
@@ -1926,6 +1926,72 @@
     "D063",
     "D150",
     "D157"
+   ]
+  },
+  "evenement": {
+   "cle": [
+    "evenement_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "evenement_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "type",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "module",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "cible",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "charge",
+     "type": "jsonb",
+     "obligatoire": true
+    },
+    {
+     "nom": "cree_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "prochaine_tentative",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "tentatives",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "traite_le",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "abandonne",
+     "type": "boolean",
+     "obligatoire": false
+    },
+    {
+     "nom": "erreur",
+     "type": "text",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D086",
+    "D161"
    ]
   }
  },

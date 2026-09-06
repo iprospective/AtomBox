@@ -1,6 +1,6 @@
--- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-06T00:25:21 depuis le dictionnaire des données.
+-- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-06T11:22:34 depuis le dictionnaire des données.
 -- NE PAS ÉDITER : la source est .mmi-pm/docs/dict/*.yml (F114, D154). PostgreSQL ≥ 14 (D027).
--- 33 tables, 68 clés étrangères, 57 index, 7 unicités. Identifiants : uuid v7 engendrés par
+-- 34 tables, 68 clés étrangères, 57 index, 7 unicités. Identifiants : uuid v7 engendrés par
 -- l'application (D145). Le tronc comm n'est PAS partitionné en V0 : la partition par canal (D138)
 -- se pose quand un second canal existe — l'uuid rend la clé indépendante de la partition.
 
@@ -490,6 +490,22 @@ CREATE TABLE "session" (
   "revoque_le" timestamptz,
   "agent" text,
   CONSTRAINT "pk_session" PRIMARY KEY ("session_id")
+);
+
+-- evenement — Un événement PERSISTÉ, écrit dans la transaction du fait métier et traité hors processus, au moins une fois, a
+CREATE TABLE "evenement" (
+  "evenement_id" uuid NOT NULL,
+  "type" text NOT NULL,
+  "module" text NOT NULL,
+  "cible" text,
+  "charge" jsonb NOT NULL,
+  "cree_le" timestamptz NOT NULL,
+  "prochaine_tentative" timestamptz NOT NULL,
+  "tentatives" bigint NOT NULL,
+  "traite_le" timestamptz,
+  "abandonne" boolean,
+  "erreur" text,
+  CONSTRAINT "pk_evenement" PRIMARY KEY ("evenement_id")
 );
 
 -- clés étrangères, après toutes les tables : l'ordre de création n'importe plus

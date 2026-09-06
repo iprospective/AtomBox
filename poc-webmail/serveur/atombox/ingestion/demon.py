@@ -80,6 +80,11 @@ async def principal():
                "magasin": os.environ.get("ATOMBOX_MAGASIN", "./magasin") }
     with ouvrir_session() as s:
         boites = s.execute(select(Boite.boite_id, Adresse.adresse_complete).join(Adresse, Adresse.adresse_id == Boite.adresse_id)).all()
+    # grosses infrastructures (D161) : N démons se partagent les boîtes — ATOMBOX_PART="2/4" prend la 2e part sur 4
+    part = os.environ.get("ATOMBOX_PART")
+    if part:
+        i, n = (int(x) for x in part.split("/")); boites = [b for b in boites if int(b.boite_id.hex, 16) % n == i - 1]
+        log.info("part %s : %d boîte(s)", part, len(boites))
     chargement.charger()
     log.info("démarrage : %d boîte(s) administrée(s), hôte %s, magasin %s", len(boites), config["hote"], config["magasin"])
     accroches.emettre("demon.demarrage", boites=boites)

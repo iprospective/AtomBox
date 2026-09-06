@@ -1,4 +1,4 @@
-"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-06T00:25:21 depuis le dictionnaire (D158).
+"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-06T11:22:35 depuis le dictionnaire (D158).
 NE PAS ÉDITER : corriger .mmi-pm/docs/dict/*.yml, régénérer. Les tables sont celles de schema.sql (F114)."""
 from __future__ import annotations
 import datetime, decimal, uuid
@@ -529,4 +529,20 @@ class Session(Base):
     compte: Mapped[Compte | None] = relationship("Compte", foreign_keys=[compte_id])
     __table_args__ = (PrimaryKeyConstraint("session_id", name="pk_session"), UniqueConstraint("jeton_empreinte", name="uq_session_jeton_empreinte"),)
 
-MODELES = {"comm": Comm, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session}
+class Evenement(Base):
+    """Un événement PERSISTÉ, écrit dans la transaction du fait métier et traité hors processus, au moins une fois, avec tentat"""
+    __tablename__ = "evenement"
+    evenement_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    type: Mapped[str] = mapped_column(Text, nullable=False)
+    module: Mapped[str] = mapped_column(Text, nullable=False)
+    cible: Mapped[str | None] = mapped_column(Text, nullable=True)
+    charge: Mapped[dict | list] = mapped_column(JSONB, nullable=False)
+    cree_le: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    prochaine_tentative: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    tentatives: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    traite_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    abandonne: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    erreur: Mapped[str | None] = mapped_column(Text, nullable=True)
+    __table_args__ = (PrimaryKeyConstraint("evenement_id", name="pk_evenement"),)
+
+MODELES = {"comm": Comm, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}

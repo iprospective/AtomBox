@@ -42,6 +42,18 @@ domaine de journal, ses migrations. Les internes (`session`, `etat`, `ingestion`
 ainsi. Un module tiers s'installe par `pip` (point d'entrée `atombox.modules`) ou
 `ATOMBOX_MODULES=paquet:Classe` ; ses routes propres vivent sous `/api/v1/modules/<nom>/`.
 
+## Quatre mécanismes d'extension (D161, chapitre 19)
+
+| | décorateur | niveau | garantie |
+|---|---|---|---|
+| accroche | `@accroche("message.ingere")` | noyau, synchrone, dans la transaction | échec journalisé et ignoré |
+| déclencheur | `@declencheur("comm.apres_insertion")` | ORM, six points par entité | idem ; `RefusDeclencheur` refuse |
+| événement | `@evenement("message.ingere")` | hors processus, table `evenement`, au moins une fois | tentatives 30 s → 24 h, abandon bruyant |
+| tâche | `@tache(chaque="10m")` | cadencée par `python -m atombox.taches` | échec journalisé, reprogrammée |
+
+Processus : `uvicorn atombox.api.app:app` (N travailleurs), `python -m atombox.ingestion.demon`
+(`ATOMBOX_PART=2/4` pour partitionner les boîtes), `python -m atombox.taches` (N travailleurs).
+
 ## F001, F002 — l'ingestion et le magasin
 
 `atombox/magasin/` : `ab/cd/<id>`, zstd conditionnel, jamais réécrit. `atombox/ingestion/` :
