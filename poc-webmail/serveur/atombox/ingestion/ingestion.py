@@ -15,6 +15,7 @@ from .analyse import analyser
 from .identite import empreinte_identite
 from ..journal import journal
 from ..modules.accroches import accroches
+from ..modules import evenements
 
 log = journal("ingestion")
 
@@ -88,6 +89,7 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
                                   type_declare=p.type_declare, transfer_encoding=p.transfer_encoding, disposition=p.disposition,
                                   content_id=p.content_id, parametres=p.parametres))
         s.flush()
+        evenements.emettre(s, "message.ingere", {"comm_id": str(comm_id), "boite_id": str(boite_id), "nature": a.nature, "sujet": a.sujet}, cible=None)
     if not s.get(Rattachement, (comm_id, boite_id)):
         s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, drapeau=False, statut="nouveau", personnel=False, gele=False, dossier_id=dossier_id))
     s.commit()

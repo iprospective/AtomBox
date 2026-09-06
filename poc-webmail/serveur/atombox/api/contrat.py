@@ -403,4 +403,18 @@ class Session(BaseModel):
     revoque_le: datetime.datetime | None = None
     agent: str | None = None
 
-CONTRAT = {"comm": Comm, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session}
+class Evenement(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    evenement_id: uuid.UUID
+    type: str
+    module: str
+    cible: str | None = None
+    charge: dict | list
+    cree_le: datetime.datetime
+    prochaine_tentative: datetime.datetime
+    tentatives: int
+    traite_le: datetime.datetime | None = None
+    abandonne: bool | None = None
+    erreur: str | None = None
+
+CONTRAT = {"comm": Comm, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}
