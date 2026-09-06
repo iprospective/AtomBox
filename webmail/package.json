@@ -1,0 +1,14 @@
+{
+  "name": "atombox-webmail",
+  "private": true,
+  "description": "AtomBox — le webmail : scripts classiques par module, SCSS compilé en un seul css/app.css",
+  "scripts": {
+    "css": "sass --no-source-map --style=expanded src/app.scss css/app.css",
+    "css:watch": "sass --watch src/app.scss css/app.css",
+    "build": "npm run css && python3 outils/bundle.py && python3 outils/bundle.py dist/prod.html prod",
+    "test": "node test/smoke.js && node test/bundle.js && node test/prod.js && node test/style.js"
+  },
+  "devDependencies": {
+    "sass": "^1.104.0"
+  }
+}

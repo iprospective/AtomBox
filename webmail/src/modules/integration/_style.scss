@@ -1,0 +1,14 @@
+// MODULE integration — son style, à côté de sa vue et de son contrôleur. Compilé dans css/app.css.
+
+/* ---- intégration ERP ---- */
+.box.erp{border-color:var(--accent)}
+.box.erp h4{color:var(--accent)}
+.erpl{width:100%;border-collapse:collapse;font-size:12px;margin-top:7px}
+.erpl td{padding:3px 8px 3px 0;border-bottom:1px solid var(--line)}
+.erpl tr:last-child td{border-bottom:0}
+.erpl td.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.st{font-size:10.5px;border-radius:4px;padding:1px 6px;border:1px solid var(--line);white-space:nowrap}
+.st.ok{border-color:var(--ok);color:var(--ok)}
+.st.due{border-color:var(--danger);color:var(--danger)}
+.st.wait{border-color:var(--warn);color:var(--warn)}
+.qi.api code{border-left:3px solid var(--accent)}

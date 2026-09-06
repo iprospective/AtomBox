@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AtomBox</title>
+<meta name="abx-version" content="dev">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="connexion" class="connexion"></div>
+<div class="app">
+ <header>
+  <button class="hbtn" id="bnav" style="display:none" title="Dossiers">☰</button>
+  <div class="logo">Atom<span>Box</span></div>
+  <button class="hbtn prim" id="bnew" title="Nouveau message">✚ Nouveau</button>
+  <div class="hsearch"><input id="gsearch" placeholder="Rechercher dans tous les messages…"></div>
+  <div class="hspacer"></div>
+  <button class="hbtn ic" id="bpj" title="Pièces jointes">📎</button>
+  <button class="hbtn ic" id="badmin" title="Administration">⚙</button>
+  <button class="hbtn" id="btheme" title="Thème">◐</button>
+  <button class="hbtn" id="bsortir" title="Se déconnecter">Quitter</button>
+ </header>
+ <div class="tabs" id="tabs"></div>
+ <div class="scrim" id="scrim"></div>
+ <div class="main" id="main" data-vue="liste">
+  <div class="col" id="nav"></div>
+  <div class="col" id="list"></div>
+  <div class="col" id="detail"></div>
+ </div>
+</div>
+
+<!-- UN SEUL INDEX (D157). Ce que la page déclare est LE PRODUIT (D141). La maquette
+     est une session : poc/poc — et c'est le chargeur (src/noyau/chargeur.js) qui
+     écrit alors les fichiers du POC à leur place, en trois points marqués ci-dessous.
+
+     Scripts CLASSIQUES, pas des modules ES : les imports ES sont bloqués par
+     CORS en file://, et cette page doit rester ouvrable par double-clic, sans
+     serveur. L'ordre ci-dessous est donc la déclaration des dépendances. -->
+
+<!-- noyau : aucune dépendance métier -->
+<script src="src/noyau/format.js"></script>
+<script src="src/noyau/dom.js"></script>
+<script src="src/noyau/bus.js"></script>
+<script src="src/noyau/registre.js"></script>
+<script src="src/noyau/store.js"></script>
+<script src="src/noyau/session.js"></script>
+<script src="src/noyau/chargeur.js"></script>            <!-- ① POC : générateur, markdown, journal, index du CDC -->
+
+<!-- services : l'état et les règles, sans aucune connaissance du DOM -->
+<script src="src/modules/pieces-jointes/service.js"></script>
+<script src="src/modules/integration/erp.js"></script>
+<script src="src/modules/integration/fournisseurs.js"></script>
+<script src="src/noyau/chargeur.donnees.js"></script>    <!-- ② POC : fixtures, corpus -->
+<script src="src/noyau/api.js"></script>
+<script src="src/noyau/ref.js"></script>
+<script src="src/noyau/api.http.js"></script>
+<script src="src/modules/message/service.js"></script>
+<script src="src/modules/composition/service.js"></script>
+
+<!-- vues : des fonctions (contexte) -> HTML, sans effet de bord -->
+<script src="src/modules/partials/partials.js"></script>
+<script src="src/modules/partials/variantes.js"></script>
+<script src="src/modules/contexte/aide.js"></script>
+<script src="src/modules/arborescence/vue.js"></script>
+<script src="src/modules/liste/vue.js"></script>
+<script src="src/modules/message/vue.js"></script>
+<script src="src/modules/composition/vue.js"></script>
+<script src="src/modules/onglets/vue.js"></script>
+<script src="src/modules/administration/vue.js"></script>
+<script src="src/modules/pieces-jointes/vue.js"></script>
+<script src="src/modules/connexion/vue.js"></script>
+
+<script src="src/modules/integration/capacites.js"></script>
+
+<!-- contrôleurs : peignent les vues et câblent les événements -->
+<script src="src/noyau/application.js"></script>
+<script src="src/modules/arborescence/controleur.js"></script>
+<script src="src/modules/liste/controleur.js"></script>
+<script src="src/modules/onglets/controleur.js"></script>
+<script src="src/modules/message/controleur.js"></script>
+<script src="src/modules/composition/controleur.js"></script>
+<script src="src/modules/administration/controleur.js"></script>
+<script src="src/modules/connexion/controleur.js"></script>
+<script src="src/noyau/chargeur.fin.js"></script>        <!-- ③ POC : surcouche CDC, pages, traces, serveur simulé, barre du POC -->
+
+<script src="src/noyau/amorcage.js"></script>
+</body></html>

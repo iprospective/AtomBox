@@ -1,0 +1,11 @@
+// MODULE administration — son style, à côté de sa vue et de son contrôleur. Compilé dans css/app.css.
+
+/* ---- administration ---- */
+.admin{padding:0 4px 14px}
+.erpl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--muted);font-weight:600;padding:3px 8px 5px 0;border-bottom:1px solid var(--line)}
+.capa{border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:8px;
+  background:var(--panel2)}
+.capa .capt{display:flex;align-items:baseline;gap:9px;margin-bottom:6px;flex-wrap:wrap}
+.capa .capt .hash{font-size:10px}
+.capa .chips{margin-bottom:5px}

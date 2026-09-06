@@ -1,0 +1,37 @@
+// MODULE pieces-jointes — son style, à côté de sa vue et de son contrôleur. Compilé dans css/app.css.
+
+/* ---- pièces jointes ---- */
+.pjl{display:flex;flex-direction:column;gap:6px}
+.pjc{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--line);border-radius:7px;
+  padding:7px 9px;background:var(--panel);cursor:pointer}
+.pjc:hover{border-color:var(--accent)}
+.pjc .pic{font-size:17px;line-height:1.25;flex:none}
+.pjc .pn{flex:1;min-width:0}
+.pjc .pn b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pjc .ps{display:block;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pjc .bd{display:block;margin-top:2px}
+.hash{font:10.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
+.badge{display:inline-block;font-size:10.5px;border-radius:4px;padding:1px 6px;margin:2px 3px 0 0;
+  border:1px solid var(--line);background:var(--panel2);color:var(--muted)}
+.badge.ok{border-color:var(--ok);color:var(--ok)}
+.badge.w{border-color:var(--warn);color:var(--warn)}
+
+/* ---- gestion des pièces jointes ---- */
+.pjrow{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;
+  border-bottom:1px solid var(--line)}
+.pjrow:hover{background:var(--panel2)}
+.pjrow .pic{font-size:17px;flex:none;line-height:1.3}
+.pjrow .pjn{flex:1;min-width:0}
+.pjname{width:100%;max-width:420px;border:1px solid transparent;border-radius:5px;
+  padding:2px 5px;background:none;font-weight:600}
+.pjname:hover{border-color:var(--line)}
+.pjname:focus{border-color:var(--accent);background:var(--panel2);outline:none}
+.pjrow .ps{color:var(--muted);font-size:11px;padding-left:5px}
+.pjacts{display:flex;gap:3px;flex:none}
+.jalon{display:inline-block;font-size:9.5px;font-weight:700;border-radius:3px;padding:0 4px;
+  border:1px solid var(--muted);color:var(--muted);margin-left:4px;vertical-align:1px}
+.jalon.v3{border-color:var(--accent);color:var(--accent)}
+.jalon.v4{border-color:var(--warn);color:var(--warn)}
+.jalon.v6{border-color:var(--danger);color:var(--danger);border-style:dashed}
+.chip.futur{opacity:.6;border-style:dashed}

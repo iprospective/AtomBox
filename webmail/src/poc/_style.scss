@@ -1,0 +1,93 @@
+// POC — bandeau, pages, journal des requêtes, cascade, lecture du CDC, V0. Dans le même app.css : la maquette est une session (D157), pas une autre page.
+
+/* ---- panneau requêtes ---- */
+.q{background:var(--panel2)}
+.qh{position:sticky;top:0;background:var(--panel2);border-bottom:1px solid var(--line);padding:9px 11px;
+  display:flex;align-items:center;gap:8px;z-index:2}
+.qh b{flex:1}
+.qi{border-bottom:1px solid var(--line);padding:8px 11px}
+.qi .lbl{font-size:11px;color:var(--muted);margin-bottom:3px}
+.qi code{display:block;white-space:pre-wrap;font:11.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 8px}
+.qi .idx{margin-top:4px;font-size:11px;color:var(--ok)}
+.qi .idx.w{color:var(--warn)}
+.note{padding:10px 11px;color:var(--muted);font-size:11.5px;border-bottom:1px solid var(--line)}
+
+/* ---- cascade : la succession d'un geste, du clic au rendu ---- */
+.qi.w{background:linear-gradient(90deg,rgba(180,83,9,.07),transparent 60%)}
+.qi .nsteps{float:right;font-size:10px;color:var(--muted);font-weight:400}
+.casc{list-style:none;margin:7px 0 0;padding:0 0 0 2px}
+.step{display:flex;gap:8px;padding:4px 0 4px 9px;border-left:2px solid var(--line);position:relative}
+.step .pic{flex:none;width:16px;text-align:center;font-size:12px;line-height:1.5}
+.step .body{flex:1;min-width:0}
+.step .et{font-weight:600;font-size:11.5px}
+.step .det{color:var(--muted);font-size:11.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.step code{display:block;margin-top:3px}
+.step.w{border-left-color:var(--warn)}
+/* côté serveur : la barre change, c'est ce qui reste à écrire */
+.step.route,.step.ctrl,.step.svc,.step.acl,.step.sql,.step.blob,.step.event,.step.note{
+  border-left-color:var(--accent);border-left-style:solid}
+.step.http,.step.json{border-left:2px dashed var(--accent)}
+.step.http .et,.step.json .et{color:var(--accent)}
+.step.acl .et{color:var(--ok)}
+.step.ui .et,.step.render .et{color:var(--muted);font-weight:500}
+.fr{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);
+  padding:5px 0 3px 11px;border-left:2px dotted var(--line)}
+.fr.srv{color:var(--accent);border-left-color:var(--accent)}
+
+/* ---- bandeau « ceci est un POC » ---- */
+.app{grid-template-rows:auto auto auto 1fr}
+.pocbar{display:flex;align-items:center;gap:10px;padding:5px 12px;flex-wrap:wrap;
+  background:var(--warn);color:#fff;font-size:11.5px}
+.pocb{font-weight:800;letter-spacing:1px;border:1px solid rgba(255,255,255,.7);
+  border-radius:4px;padding:0 6px;flex:none}
+.poct{flex:1;min-width:180px;opacity:.95}
+.poct b{opacity:1}
+.pocnav{display:flex;gap:4px;flex:none}
+.pocnav button{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);
+  color:#fff;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:11.5px}
+.pocnav button:hover{background:rgba(255,255,255,.28)}
+
+/* ---- pages documentaires ---- */
+.doc p{margin:0 0 8px;line-height:1.55}
+.doc ul{margin:4px 0 0;padding-left:18px}
+.doc li{margin-bottom:4px;line-height:1.5}
+.doc .box h4{font-size:12px;color:var(--fg);text-transform:none;letter-spacing:0}
+.doc kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;
+  padding:0 4px;font-size:11px;background:var(--panel2)}
+.doc code{background:var(--panel2);border:1px solid var(--line);border-radius:4px;
+  padding:0 4px;font-size:11.5px}
+@media (max-width:760px){
+  .poct{display:none}
+  .pocnav button{padding:3px 7px}
+}
+
+/* ---- lecture du CDC et du dictionnaire dans la maquette ----
+   Le texte est long : on le rend lisible (mesure, interligne), pas compact. */
+.doc .lecture{max-width:92ch}
+.doc .lecture h2,.doc .lecture h3,.doc .lecture h4,.doc .lecture h5{margin:18px 0 6px}
+.doc .lecture h2{font-size:17px}.doc .lecture h3{font-size:15px}.doc .lecture h4{font-size:13.5px}
+.doc .lecture p,.doc .lecture li{line-height:1.55;font-size:13px}
+.doc .lecture blockquote,.doc blockquote{margin:10px 0;padding:8px 12px;border-left:3px solid var(--accent);
+  background:var(--panel2);border-radius:0 6px 6px 0}
+.doc .lecture hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+.md-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;background:var(--panel2);
+  border:1px solid var(--line);border-radius:6px;padding:8px 10px;overflow-x:auto;white-space:pre}
+.cdc-lien{color:var(--accent);text-decoration:none;cursor:pointer}
+.cdc-lien:hover{text-decoration:underline}
+.doc .tw{overflow-x:auto}
+.doc td.long{max-width:44ch;white-space:normal}
+.doc .erpl td,.doc .erpl th{vertical-align:top}
+
+/* ---- la V0 simulee (D140) ----
+   Un jalon a part : celui ou il n'y a ni base ni moteur. */
+.jalon.v0{background:transparent;color:var(--fg);border:1px dashed var(--fg)}
+.pocv0{margin-left:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);
+  border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer}
+.pocv0.on{border-color:var(--fg);color:var(--fg);font-weight:700}
+
+/* en-tetes de colonne triables (page Fonctionnalites) */
+.trih{cursor:pointer;user-select:none;white-space:nowrap}
+.trih:hover{color:var(--accent)}
+.trih.on{color:var(--accent)}

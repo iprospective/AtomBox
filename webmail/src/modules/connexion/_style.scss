@@ -1,0 +1,12 @@
+// MODULE connexion — son style, à côté de sa vue et de son contrôleur. Compilé dans css/app.css.
+
+/* ---- la session (D157) : sans session, l'écran de connexion et rien d'autre */
+#connexion{display:none}
+body[data-etat="connexion"] #connexion{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+body[data-etat="connexion"] header,body[data-etat="connexion"] .tabs,body[data-etat="connexion"] .main,body[data-etat="connexion"] .pocbar{display:none}
+.cnx{display:flex;flex-direction:column;gap:8px;width:min(360px,100%);padding:26px 28px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.cnx .logo{font-size:22px;margin-bottom:10px}
+.cnx label{font-size:12px;color:var(--muted)}
+.cnx input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:inherit}
+.cnx .hbtn.prim{margin-top:8px;padding:9px}
+.cnxerr{color:var(--danger);font-size:12.5px}
