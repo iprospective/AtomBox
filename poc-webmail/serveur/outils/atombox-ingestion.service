@@ -1,0 +1,17 @@
+# managed-by: serveur/outils/deployer-apache.sh (AtomBox) — __SERVEUR__ est remplacé au déploiement
+[Unit]
+Description=AtomBox — le démon d'ingestion IMAP
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+User=mathieu
+Group=mathieu
+WorkingDirectory=__SERVEUR__
+EnvironmentFile=/etc/atombox/env
+ExecStart=__SERVEUR__/.venv/bin/python -m atombox.ingestion.demon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

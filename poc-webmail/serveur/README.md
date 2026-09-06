@@ -58,6 +58,20 @@ Dans un conteneur, `localhost` est le sien : `--host 0.0.0.0` écoute sur toutes
 depuis l'hôte on ouvre `http://dev.lxc:8010/` (le nom du conteneur ; 8000 y est déjà pris). Se connecter avec le compte amorcé : c'est le webmail du POC,
 branché sur le vrai serveur — `serveur.poc.js` n'est pas chargé (D141, D157).
 
+## Derrière Apache, en service (conteneur dev)
+
+`outils/deployer-apache.sh` (avec `sudo`) installe le vhost **`atombox.dev.lxc`** (reverse proxy vers
+l'API sur `127.0.0.1:8010`, qui sert aussi le webmail), le fichier `/etc/atombox/env` (les secrets :
+base, magasin, IMAP, SMTP — copié de `outils/atombox.env.exemple` s'il n'existe pas) et trois unités
+systemd : `atombox-api` (démarrée), `atombox-ingestion` et `atombox-taches` (installées, à démarrer
+une fois l'environnement rempli). Idempotent. Puis, depuis l'hôte : `http://atombox.dev.lxc/`.
+
+```
+sudo bash serveur/outils/deployer-apache.sh          # ou --apache / --systemd
+sudo systemctl start atombox-ingestion atombox-taches
+journalctl -u atombox-api -f                          # et logs/ pour le journal applicatif (D152)
+```
+
 ## Quatre mécanismes d'extension (D161, chapitre 19)
 
 | | décorateur | niveau | garantie |
