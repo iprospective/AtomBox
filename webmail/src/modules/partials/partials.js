@@ -87,17 +87,24 @@
        ${R.render("statut.chip", { m })}
        ${m.tags.map(tag => R.render("tag.chip", { tag })).join("")}</div>`);
 
+  /* Les actions au survol d'une carte. Elles disent la MÊME chose que la barre du message
+     ouvert (D030) : ce qui est sorti de la file propose d'y revenir, jamais d'en sortir encore. */
   R.define("message.card.actions", ({ m }) => {
     const ou = m.dossier || m.dossier_origine;
+    const jetables = `<button data-act="junk" title="Indésirable">🚫</button>
+           <button data-act="corbeille" title="Mettre à la corbeille">🗑</button>`;
     const boutons = ou === "trash"
       ? `<button data-act="restaurer" title="Restaurer">↩</button>`
       : ou === "junk"
         ? `<button data-act="nonJunk" title="Ce n'est pas un indésirable">✓ ham</button>
            <button data-act="corbeille" title="Mettre à la corbeille">🗑</button>`
-        : `<button data-act="traiter" title="Marquer traité">✓</button>
+        : m.motif_sortie
+          ? `<button data-act="refile" title="${m.motif_sortie === "archive"
+               ? "Désarchiver — le remettre dans la file" : "Marquer non traité — il redevient à faire"}">↺</button>
+           ${jetables}`
+          : `<button data-act="traiter" title="Marquer traité">✓</button>
            <button data-act="archiver" title="Archiver">🗄</button>
-           <button data-act="junk" title="Indésirable">🚫</button>
-           <button data-act="corbeille" title="Mettre à la corbeille">🗑</button>`;
+           ${jetables}`;
     return `<div class="mact">${boutons}</div>`;
   });
 
