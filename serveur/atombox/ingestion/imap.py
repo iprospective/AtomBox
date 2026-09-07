@@ -35,6 +35,9 @@ class Releve:
             if not m: continue
             if b"\\Noselect" in m.group("flags"): continue
             nom = m.group("nom").strip().strip(b'"').decode("utf-7" if b"&" in m.group("nom") else "ascii", "replace")
+            # les dossiers virtuels de Dovecot (virtual.All, virtual.Flagged…) sont des vues, pas des boîtes ;
+            # et LIST peut renvoyer un nom deux fois (abonnement + hiérarchie)
+            if nom.lower().startswith("virtual.") or nom in out: continue
             out.append(nom)
         return out
 
