@@ -61,7 +61,7 @@
       const liste = el.querySelector("#t_vals");
       if (!axe || !val) return;
       const proposer = () => {
-        const vals = (ABX.Fixtures.valeurs[axe.value] || []).slice(0, 200);
+        const vals = ((ABX.Ref.valeurs || {})[axe.value] || []).slice(0, 200);
         liste.innerHTML = vals.map(v => `<option value="${F.esc(v.label)}">`).join("");
       };
       axe.onchange = proposer;

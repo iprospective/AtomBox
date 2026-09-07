@@ -167,7 +167,8 @@ VALUES (:id, 'ham', :moi, now());` },
     /* Le workflow de traitement. « Traité » sort de la file — les autres états
        sont des positions DANS la file, pas des sorties. */
     statuer(m, id) {
-      const st = ABX.Fixtures.statut(id);
+      const st = (ABX.Ref.statuts || []).find(s => s.id === id) || { id, label: id };
+      st.sortie = st.sortie || (id === "traite" ? "traite" : null);   // « traité » sort de la file (D093, D014)
       const patch = { statut: id };
       if (st.sortie) { patch.motif_sortie = st.sortie; patch.sorti_le = Date.now(); }
       else if (m.motif_sortie === "traite") { patch.motif_sortie = null; patch.sorti_le = null; }

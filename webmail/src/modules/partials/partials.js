@@ -178,7 +178,7 @@
   /* ---- tags : la seule partie du message que l'utilisateur écrit ---------- */
   R.define("message.tags", ({ m }) => {
     if (ABX.V0()) return "";
-    const AXES = ABX.Fixtures.AXES.map(a => a.id).concat(["projet", "type"]);
+    const AXES = (ABX.Ref.axes || []).map(a => a.id).concat(["projet", "type"]);
     return `<div class="box"><h4>Tags — plusieurs applications, sans écrasement (D017/D020)</h4>
       ${m.tags.length ? m.tags.map((t, i) => `<div class="kv">
           <span class="k">${F.esc(t.axe)}</span>

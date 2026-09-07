@@ -46,7 +46,14 @@
       b: { pj_id: p.pj_id, mime: p.mime_detecte, ko: Math.round((p.octets || 0) / 1024), sha: (p.sha256 || "").slice(0, 12), refs: p.partage_par || 1, ic: icone(p.mime_detecte) } });
     return m;
   };
-  const garde = m => { if (m) cache.messages[m.id] = normaliser(m); return m; };
+  /* Le cache FUSIONNE : une réponse enrichit l'objet déjà en cache au lieu de le remplacer —
+     sinon l'état de session posé dessus (_fil chargé, _charge) disparaît à chaque réponse,
+     et le fil se recharge sans fin. Le serveur simulé rendait toujours le même objet : il
+     cachait ce bug du vrai monde. */
+  const garde = m => { if (!m) return m;
+    const n = normaliser(m), c = cache.messages[m.id];
+    if (c && c !== n) { Object.assign(c, n); return c; }
+    cache.messages[m.id] = n; return n; };
 
   const ImplHttp = {
     /* ---- lecture --------------------------------------------------------- */

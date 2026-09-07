@@ -33,7 +33,7 @@ function demarrer(stockage, opts) {
     /* pas de réseau dans le harnais : en mode produit sans serveur simulé, chaque
        appel rejette proprement — l'interface doit tenir avec une API qui répond
        « indisponible », c'est ce que le test du mode produit vérifie */
-    fetch: () => Promise.reject(new Error("réseau indisponible dans le harnais")),
+    fetch: o.fetch || (() => Promise.reject(new Error("réseau indisponible dans le harnais"))),
   };
   sandbox.window = sandbox;
   const ctx = vm.createContext(sandbox);
