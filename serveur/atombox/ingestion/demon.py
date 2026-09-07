@@ -62,7 +62,10 @@ async def surveiller_boite(boite_id, adresse: str, config: dict):
     while True:
         try:
             s = ouvrir_session(); magasin = Magasin(config["magasin"])
-            releve = Releve(config["hote"], config["port"]).ouvrir("%s*%s" % (adresse, config["master"]), config["mot_de_passe"])
+            # compte master (chapitre 06) : « boite*master » ; sans master, ou si le master EST la boîte, le login est l'adresse
+            master = (config.get("master") or "").strip()
+            login = adresse if not master or master.lower() == adresse.lower() else "%s*%s" % (adresse, master)
+            releve = Releve(config["hote"], config["port"]).ouvrir(login, config["mot_de_passe"])
             try:
                 while True:
                     await asyncio.to_thread(relever_boite, s, magasin, releve, boite_id, adresse)
