@@ -63,8 +63,17 @@
        l'ordre des états compte, et il doit se voir. */
     statutHtml(m) {
       if (ABX.V0()) return "";          // V0 : pas de workflow, IMAP n'a que lu/drapeau (D140)
-      if (m.motif_sortie === "archive") return `<span class="tag">archivé</span>
-        <button class="hbtn" data-x="refile" title="Remettre dans la file">↺ Reprendre</button>`;
+      /* SORTI de la file (D030) : le sélecteur ne suffit pas — un message traité doit pouvoir
+         redevenir non traité d'un geste, et un archivé être désarchivé. Deux sorties, un même
+         retour : `refile` efface motif_sortie et sorti_le (D014). */
+      if (m.motif_sortie) {
+        const archive = m.motif_sortie === "archive";
+        return `<span class="tag">${archive ? "archivé" : "traité"}</span>
+          <button class="hbtn" data-x="refile"
+            title="${archive ? "Le remettre dans la file de travail"
+                             : "Il redevient à faire, dans la file de travail"}">↺ ${
+            archive ? "Désarchiver" : "Marquer non traité"}</button>${R.contexte("statut", { m })}`;
+      }
       return `<select class="statsel st-${F.esc(m.statut || "nouveau")}" id="stat"
           title="Statut de traitement">
         ${ABX.Ref.statuts.map(x => `<option value="${x.id}"${x.id === m.statut ? " selected" : ""}
@@ -79,7 +88,7 @@
       return `<div class="menu" id="menu" hidden>
         <div class="mgrp">Ce message</div>
         <button data-m="orig">⤓ Télécharger le .eml original</button>
-        <button data-m="archiver">🗄 Archiver sans traiter</button>
+        ${m.motif_sortie ? "" : `<button data-m="archiver">🗄 Archiver sans traiter</button>`}
         <div class="mgrp">Déplacer vers</div>
         ${ABX.Ref.util.map(u => `<button data-move="${F.esc(u.id)}">${u.icon} ${F.esc(u.label)}</button>`).join("")}
         <button data-move="">↩ Retirer du dossier</button>
