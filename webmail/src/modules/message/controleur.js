@@ -8,19 +8,23 @@
   const Message = {
     peindre(t) {
       const m = ABX.Api.cache.message(t.id);
-      /* pas en cache (onglet restauré, message créé à l'instant) : on le CHARGE par
-         la couche d'accès, on peint l'attente, et on repeint à la réponse — ou
-         « n'existe plus » sur 404 (D141) */
-      if (!m) {
-        if (t._charge) return void D.paint("detail", `<div class="empty">Ce message n'existe plus.</div>`);
-        t._charge = true;
-        ABX.Api.message(t.id).then(r => { if (St.ui.tab === t.key) Message.peindre(t); });
-        return void D.paint("detail", `<div class="empty">Chargement…</div>`);
+      /* pas en cache (onglet restauré, message créé à l'instant), ou en cache depuis la LISTE
+         seulement (sans corps ni pièces) : on CHARGE le détail par la couche d'accès, on
+         peint l'attente, et on repeint à la réponse — ou « n'existe plus » sur 404 (D141) */
+      if (!m || !m._complet) {
+        if (t._charge) { if (!m) return void D.paint("detail", `<div class="empty">Ce message n'existe plus.</div>`); }
+        else {
+          t._charge = true;
+          ABX.Api.message(t.id).then(r => { if (St.ui.tab === t.key) Message.peindre(t); });
+          if (!m) return void D.paint("detail", `<div class="empty">Chargement…</div>`);
+        }
       }
-      t._charge = false;
+      if (m && m._complet) t._charge = false;
+      if (!m) return;
       /* le fil se charge par promesse (D141) : on peint sans, puis on repeint avec —
          l'utilisateur voit le message tout de suite, le fil arrive ensuite */
-      if (!m._fil) ABX.Api.fil(m).then(fil => { m._fil = fil; if (St.ui.tab === t.key) Message.peindre(t); });
+      if (!m._fil && !m._filEnCours) { m._filEnCours = true;
+        ABX.Api.fil(m).then(fil => { m._fil = fil; m._filEnCours = false; if (St.ui.tab === t.key) Message.peindre(t); }, () => { m._filEnCours = false; }); }
       const el = D.paint("detail", ABX.Views.Message.render(m, St.ui));
       App().bindRetour(el);
 
