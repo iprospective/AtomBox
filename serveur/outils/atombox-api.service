@@ -9,7 +9,7 @@ User=mathieu
 Group=mathieu
 WorkingDirectory=__SERVEUR__
 EnvironmentFile=/etc/atombox/env
-ExecStart=__SERVEUR__/.venv/bin/uvicorn atombox.api.app
+ExecStart=__SERVEUR__/.venv/bin/uvicorn atombox.api.app:app --host 127.0.0.1 --port 8010
 Restart=on-failure
 RestartSec=3
 
