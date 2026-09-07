@@ -4,8 +4,9 @@
     DATABASE_URL=… python3 -m atombox.taches
 """
 from __future__ import annotations
-import asyncio, os, select as _select
-from .db import session as ouvrir_session, moteur
+import asyncio, os
+import psycopg
+from .db import session as ouvrir_session
 from .journal import journal
 from .modules import chargement
 from .modules.evenements import CANAL, a_traiter, traiter
@@ -25,13 +26,15 @@ def un_tour() -> int:
 async def principal():
     charges = chargement.charger()
     log.info("processus des tâches : %d module(s), %d tâche(s) cadencée(s)", len(charges), len(taches.liste()))
-    cnx = moteur().raw_connection(); cnx.set_isolation_level(0) if hasattr(cnx, "set_isolation_level") else None
-    cur = cnx.cursor(); cur.execute("LISTEN %s" % CANAL); cnx.commit()
+    # l'écoute NOTIFY : une connexion psycopg 3 à part, en autocommit (D161) — pas de SQL ici, un canal
+    cnx = psycopg.connect(os.environ["DATABASE_URL"], autocommit=True); cnx.execute("LISTEN %s" % CANAL)
+    pas = float(os.environ.get("ATOMBOX_TACHES_PAS", "15"))
+    def attendre():
+        for _ in cnx.notifies(timeout=pas): break      # réveillé par un NOTIFY, ou délai écoulé
     while True:
         traites = await asyncio.to_thread(un_tour)
         if traites: continue
-        await asyncio.to_thread(_select.select, [cnx], [], [], float(os.environ.get("ATOMBOX_TACHES_PAS", "15")))
-        cnx.poll() if hasattr(cnx, "poll") else None
+        await asyncio.to_thread(attendre)
 
 if __name__ == "__main__":
     asyncio.run(principal())
