@@ -834,6 +834,22 @@ console.log("— sortir de la file, et y revenir (D030) ————————
   clic(p.doc.getElementById("detail").querySelector('[data-x="refile"]')); await tick(); await tick();
   eq(m.motif_sortie, null, "il revient dans la file");
   eq(m.statut, "a_faire", "et il n'y revient pas « traité » : il redevient à faire");
+  /* la CARTE de la liste dit la même chose que le message ouvert : ce qui est sorti propose d'y revenir */
+  await A.MessageService.statuer(m, "traite"); await tick();
+  const carte = A.Registry.render("message.card.actions", { m });
+  vrai(carte.includes('data-act="refile"') && carte.includes("Marquer non traité"),
+       "dans la liste aussi, un message traité propose d'y revenir");
+  vrai(!carte.includes('data-act="traiter"') && !carte.includes('data-act="archiver"'),
+       "et ne propose plus de sortir de la file");
+  vrai(carte.includes('data-act="corbeille"'), "la corbeille reste, elle");
+  const dOrigine = { id: m.dossier_origine, kind: m.dossier_origine.includes(":") ? "virtuel" : "special", label: m.dossier_origine };
+  A.Store.ui.folder = dOrigine; A.Store.ui.filtre = "sortis";
+  await A.Controllers.List.charger(); A.Controllers.List.peindre();
+  vrai(p.doc.getElementById("list").innerHTML.includes('data-act="refile"'), "et la liste « traités / archivés » le montre");
+  A.Store.ui.filtre = "file"; await A.Controllers.List.charger();
+  const cArchive = A.Registry.render("message.card.actions", { m: { ...m, motif_sortie: "archive" } });
+  vrai(cArchive.includes("Désarchiver"), "un archivé propose de désarchiver");
+  await A.MessageService.refile(m); await tick();
   await A.MessageService.archiver(m); await tick();
   A.Controllers.Message.peindre(A.Store.ui.tabs.find(t => t.id === m.id)); await tick();
   vrai(detail().includes("Désarchiver"), "un message archivé propose de désarchiver");
