@@ -21,7 +21,7 @@ const { creerDocument } = require("./fake-dom");
   vrai(!rejet, "l'amorçage ne rejette pas — une API indisponible n'est pas une exception" + (rejet ? " : " + String(rejet.message).slice(0, 80) : ""));
 
   const POC = ["Corpus", "Fixtures", "PRNG", "QueryLog", "CDC", "ServeurSimule", "Traces", "Markdown", "ContexteCdc", "PocBar"];
-  const presents = POC.filter(k => A[k] !== undefined);
+  const presents = POC.filter(k => A[k] !== undefined && !(k === "Traces" && A[k]._neutre));   // le proxy neutre est du produit
   eq(presents.length, 0, "rien du POC n'est chargé" + (presents.length ? " — présents : " + presents.join(", ") : ""));
   vrai(p.fichiers.every(f => !/prng|markdown|query-log|cdc-index|fixtures|corpus|contexte\.cdc|pages|api-trace|serveur\.poc|pocbar/.test(f)),
        "le chargeur n'a écrit aucun fichier du POC : " + p.fichiers.length + " scripts, ceux de l'index");
@@ -65,6 +65,40 @@ const { creerDocument } = require("./fake-dom");
   await w.ABX.Controllers.Connexion.soumettre();
   vrai(w.ls.getItem("abx.session") === null && w.doc.getElementById("connexion").innerHTML.includes("indisponible"),
        "d'autres identifiants vont au serveur — indisponible ici, la porte le dit et ne s'ouvre pas");
+
+  console.log("— mode produit contre une API simulée par fetch : lire, ouvrir, patcher ————");
+  {
+    const M = [
+      { id: "a1", sujet: "Devis 12", from_nom: "Jean", from_adresse: "jean@x.fr", date_recue: "2026-09-04T09:12:00+00:00", thread_id: "a1", nb_pieces_jointes: 0, taille: 1200, sens: "in", nature: "humain", snippet: "Bonjour", boite: "contact@exemple.fr", lu: false, statut: "nouveau", sorti_le: null, motif_sortie: null, dossier_origine: "inbox", dossier: null, tags: [], connu: false, usurpation: false, valide: false, suppr: false, reponse_possible: "oui", list_id: null, destinataires: [], reference: null, composition: null, fiabilite: null, contact_alternatif: null, dsn: null, dom: null },
+      { id: "a2", sujet: "Re: Devis 12", from_nom: "Contact", from_adresse: "contact@exemple.fr", date_recue: "2026-09-04T11:00:00+00:00", thread_id: "a1", nb_pieces_jointes: 1, taille: 5000, sens: "out", nature: "humain", snippet: "Parfait", boite: "contact@exemple.fr", lu: true, statut: "nouveau", sorti_le: null, motif_sortie: null, dossier_origine: "sent", dossier: null, tags: [], connu: false, usurpation: false, valide: false, suppr: false, reponse_possible: "oui", list_id: null, destinataires: ["jean@x.fr"], reference: null, composition: null, fiabilite: null, contact_alternatif: null, dsn: null, dom: null },
+    ];
+    const appels = [];
+    const rep = (o, status) => ({ status: status || 200, ok: (status || 200) < 400, json: () => Promise.resolve(o) });
+    const api = (url, init) => {
+      const m = (init && init.method) || "GET"; const u = url.replace(/^\/api\/v1/, ""); appels.push(m + " " + u.split("?")[0]);
+      if (u === "/referentiels") return rep({ moi: { nom: "Test", login: "test", boites: [{ id: "b", adresse: "contact@exemple.fr", label: "contact" }] },
+        speciaux: [{ id: "inbox", label: "Boîte de réception", icon: "📥" }, { id: "sent", label: "Envoyés", icon: "📤", sortant: true }], util: [], axes: [], valeurs: {}, statuts: [{ id: "nouveau", label: "Nouveau" }, { id: "traite", label: "Traité" }], vues: ["trash", "archives", "traites"], virtuels: [] });
+      if (u === "/arborescence") return rep({ compteurs: { inbox: { t: 1, u: 1, f: 0 }, sent: { t: 1, u: 0, f: 0 } }, virtuels: [], epingles: [] });
+      if (u.startsWith("/messages?")) return rep({ messages: M.filter(x => x.dossier_origine === (u.includes("dossier=sent") ? "sent" : "inbox")), total: 1 });
+      let r = u.match(/^\/messages\/([^/?]+)\/fil$/); if (r) return rep({ messages: M.filter(x => x.thread_id === "a1") });
+      r = u.match(/^\/messages\/([^/?]+)\/rattachement$/); if (r && m === "PATCH") { const x = M.find(y => y.id === r[1]); Object.assign(x, JSON.parse(init.body)); return rep({ ok: true, modifies: 1, message: x }); }
+      r = u.match(/^\/messages\/([^/?]+)$/); if (r) { const x = M.find(y => y.id === r[1]); return x ? rep(Object.assign({ corps: "Bonjour, le devis.", pieces_jointes: [] }, x)) : rep({ message: "inconnu" }, 404); }
+      return rep({ message: "route inconnue " + m + " " + u }, 404);
+    };
+    const q = demarrer(creerStockage(), { session: "api", fetch: (url, init) => Promise.resolve(api(url, init)) }); await drainer(q);
+    const B = q.ABX;
+    vrai(q.doc.getElementById("list").innerHTML.includes("Devis 12"), "la liste du vrai contrat se peint (dates ISO normalisées)");
+    vrai(q.doc.getElementById("nav").innerHTML.includes("Boîte de réception"), "l'arborescence aussi");
+    B.Controllers.Tabs.ouvrir({ type: "msg", id: "a1" });
+    for (let i = 0; i < 6; i++) await drainer(q);
+    const det = q.doc.getElementById("detail").innerHTML;
+    vrai(det.includes("Devis 12") && det.includes("le devis"), "un message s'ouvre et son corps est là — sans ABX.Traces ni fixtures");
+    const fils = appels.filter(a => a.endsWith("/fil")).length;
+    eq(fils, 1, "le fil n'est chargé qu'UNE fois (" + fils + ") : le cache fusionne, il ne remplace pas");
+    await B.MessageService.lire(B.Api.cache.message("a1"), true); await drainer(q);
+    vrai(appels.some(a => a.startsWith("PATCH /messages/a1/rattachement")) && B.Api.cache.message("a1").lu === true, "marquer lu passe par PATCH et le cache suit");
+    vrai(B.Traces && B.Traces._neutre, "ABX.Traces est le proxy neutre du produit");
+  }
 
   console.log("— dette de migration : les vues lisent encore l'objet interne ————");
   const lister = d => fs.readdirSync(path.join(RACINE, d), { withFileTypes: true }).flatMap(e =>

@@ -108,7 +108,9 @@
        en prod la seconde n'est pas chargée. */
     fiabiliteHtml(m) {
       if (ABX.V0()) return "";
-      if (m.sens === "out" || m.fiabilite === undefined || m.usurpation) return "";
+      /* null = aucun verdict (V0, relève IMAP : l'IP est perdue — D026) : aucun indicateur, ni
+         rassurant ni alarmant (D137) ; le vrai serveur sert null, le POC un nombre */
+      if (m.sens === "out" || m.fiabilite == null || !m.dom || m.usurpation) return "";
       if (m.fiabilite >= 2)
         return `<div class="lien fiab-bloc" style="margin:12px 16px">✓ <b>Expéditeur validé</b> —
           quelqu'un de chez vous a marqué cette adresse comme fiable, et ce message est
