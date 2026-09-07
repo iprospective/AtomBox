@@ -39,6 +39,10 @@
   const ICONES = { "application/pdf": "📄", "image/": "🖼", "application/zip": "🗜", "text/": "📝" };
   const icone = mime => (Object.entries(ICONES).find(([k]) => (mime || "").startsWith(k)) || [0, "📎"])[1];
   const normaliser = m => {
+    /* la LISTE sert un message sans corps ni pièces ; les vues lisent des tableaux — jamais undefined */
+    if (!Array.isArray(m.tags)) m.tags = [];
+    if (!Array.isArray(m.destinataires)) m.destinataires = [];
+    if (m.pieces_jointes === undefined) m.pieces_jointes = [];
     if (typeof m.date_recue === "string") m.date_recue = Date.parse(m.date_recue);
     if (typeof m.sorti_le === "string") m.sorti_le = Date.parse(m.sorti_le);
     if (Array.isArray(m.pieces_jointes)) m.pieces_jointes = m.pieces_jointes.map(p => p.b ? p : {
@@ -65,7 +69,8 @@
     contenu: folder =>
       req("GET", "/messages?" + q_({ dossier: folder.id, kind: folder.kind, axe: folder.axe, tout: 1 }))
         .then(r => ((r && r.messages) || []).map(garde)),
-    message: id => req("GET", "/messages/" + encodeURIComponent(id)).then(garde),
+    /* le détail est COMPLET (corps, pièces) ; la liste ne l'est pas — le contrôleur le sait par _complet */
+    message: id => req("GET", "/messages/" + encodeURIComponent(id)).then(r => { const m = garde(r); if (m) m._complet = true; return m; }),
     fil: m => req("GET", "/messages/" + encodeURIComponent(m.id) + "/fil")
         .then(r => ((r && r.messages) || []).map(garde)),
     compteurs: () => req("GET", "/arborescence").then(r => {
