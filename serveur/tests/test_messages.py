@@ -55,6 +55,7 @@ def monde(tmp_path_factory):
     u = re.sub(r"/[^/?]*(\?|$)", "/" + nom + r"\1", url, count=1)
     ici = os.path.dirname(os.path.abspath(__file__))
     with psycopg.connect(u) as c: c.execute(open(os.path.join(ici, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read()); c.commit()
+    avant = {k: os.environ.get(k) for k in ("DATABASE_URL", "ATOMBOX_MAGASIN")}
     os.environ["DATABASE_URL"] = u; os.environ["ATOMBOX_MAGASIN"] = str(tmp_path_factory.mktemp("magasin"))
     s = ouvrir(u); m = Magasin(os.environ["ATOMBOX_MAGASIN"])
     a = adresse(s, "contact@exemple.fr")
@@ -66,7 +67,18 @@ def monde(tmp_path_factory):
     s.commit()
     ids = [ingerer(s, m, boite.boite_id, lire(f), dossier_id=inbox.dossier_id)["comm_id"] for f in ("simple.eml", "reponse.eml", "pieces.eml", "liste.eml")]
     yield {"session": s, "ids": ids, "url": u}
-    s.close(); admin.execute('DROP DATABASE "%s"' % nom); admin.close()
+    s.close()
+    for k, v in avant.items():   # ne jamais laisser l'environnement pointer sur une base détruite
+        if v is None: os.environ.pop(k, None)
+        else: os.environ[k] = v
+    import atombox.db as db, asyncio
+    db.moteur(u).dispose(); db._sync.clear()
+    for m in list(db._async.values()):
+        try: asyncio.run(m.dispose())
+        except Exception: pass
+    db._async.clear()
+    admin.execute("select pg_terminate_backend(pid) from pg_stat_activity where datname=%s and pid<>pg_backend_pid()", (nom,))
+    admin.execute('DROP DATABASE "%s"' % nom); admin.close()
 
 def test_parcours_du_webmail(monde):
     from fastapi.testclient import TestClient

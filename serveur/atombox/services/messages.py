@@ -237,12 +237,21 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None) -> d
     from ..ingestion.analyse import analyser
     from ..ingestion.identite import empreinte_identite
     a = analyser(octets)
-    if magasin is not None: magasin.ecrire(str(comm_id), octets)
+    from ..magasin import empreinte as empreinte_de
+    from ..schema.modeles import Blob
+    if magasin is not None:
+        magasin.ecrire(str(comm_id), octets)
+        brut, info = magasin.deposer(octets)
+    else:
+        brut, info = empreinte_de(octets), {"taille_octets": len(octets), "taille_stockee": len(octets), "compression": "aucune"}
+    b = await s.get(Blob, brut)
+    if b: b.nb_references += 1
+    else: s.add(Blob(empreinte=brut, taille_octets=info["taille_octets"], taille_stockee=info["taille_stockee"], compression=info["compression"], cree_le=maintenant, nb_references=1))
     c = Comm(comm_id=comm_id, type="email", date_recue=maintenant, date_declaree=maintenant, date_ingestion=maintenant, sens="out", sujet=a.sujet,
              sujet_normalise=a.sujet_normalise, thread_id=comm_id, nature="humain", from_adresse=adresses[boite.boite_id], from_nom=compte.nom,
              taille=len(octets), nb_pieces_jointes=0, est_chiffre=False, est_signe=False, snippet=a.snippet, corps_texte=a.corps_texte or None)
     s.add(c)
-    s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, headers=a.headers, blob_ref="", empreinte=empreinte_identite(a), structure_mime=a.structure_mime, reponse_possible="oui"))
+    s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, headers=a.headers, blob_ref=brut, empreinte=empreinte_identite(a), structure_mime=a.structure_mime, reponse_possible="oui"))
     s.add(Rattachement(comm_id=comm_id, boite_id=boite.boite_id, compte_id=compte.compte_id, lu_le=maintenant, drapeau=False, statut="nouveau", personnel=False, gele=False,
                        dossier_id=cible.dossier_id if cible else None))
     await s.flush()
