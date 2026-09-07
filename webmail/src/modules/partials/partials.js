@@ -199,6 +199,25 @@
     </div>`;
   });
 
+  /* Le SUIVI D'UN ENVOI (D099) — sous un message émis : où il en est, destinataire par
+     destinataire, et le bouton qui le relance quand il n'est pas parti. Un message « envoyé »
+     qui n'est jamais parti est le pire mensonge d'un webmail : cet encart existe pour ça. */
+  const ENVOI_ETATS = { remis: ["ok", "✓", "Remis au relais"], livre: ["ok", "✓", "Livré"],
+    accepte: ["ok", "✓", "Accepté"], en_attente: ["wait", "⏳", "En attente d'envoi"],
+    en_echec: ["due", "⚠", "Envoi en échec"], rejete: ["due", "✗", "Rejeté"],
+    abandonne: ["due", "✗", "Envoi abandonné"], differe: ["wait", "⏳", "Différé"] };
+  R.define("message.envoi", ({ e }) => {
+    if (!e) return "";
+    const [cls, ic, titre] = ENVOI_ETATS[e.etat] || ["", "·", e.etat];
+    return `<div class="box envoi ${cls}"><h4>${ic} ${F.esc(titre)}
+        ${e.relancable ? `<button class="hbtn" id="relancer" title="Remettre cet envoi dans la file">↻ Relancer l'envoi</button>` : ""}</h4>
+      <div class="dmeta">${F.esc(e.detail || "")}</div>
+      ${(e.destinataires || []).map(d => `<div class="kv"><span class="k">${F.esc(d.adresse)}</span>
+        <span class="v"><span class="st ${(ENVOI_ETATS[d.etat] || [""])[0]}">${F.esc((ENVOI_ETATS[d.etat] || [0, 0, d.etat])[2])}</span>
+        ${d.code ? `<span class="dmeta">${F.esc(d.code)}</span>` : ""}</span></div>`).join("")}
+      ${R.contexte("envoi", { e })}</div>`;
+  });
+
   /* ---- arborescence ------------------------------------------------------ */
   R.define("nav.node", ({ o, cls, sel }) =>
     `<div class="node ${cls || ""}${sel ? " sel" : ""}" data-id="${F.esc(o.id)}"

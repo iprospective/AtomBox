@@ -47,6 +47,10 @@
     /* l'arborescence de l'utilisateur : compteurs en UNE passe (D078), dossiers
        virtuels personnels (D143), épingles (D144) — GET /arborescence */
     compteurs:  () => appelle("compteurs", []),
+    /* le suivi d'un message émis (D099) : état, destinataires, tentatives — GET /envois/{id} */
+    envoi: id => appelle("envoi", [id]),
+    /* relancer un envoi qui n'est pas parti — POST /envois/{id}/relancer (idempotent) */
+    relancer: id => appelle("relancer", [id]),
     /* recherche plein texte, portée du jeton, zone active par défaut — GET /recherche */
     rechercher: q => appelle("rechercher", [q]),
     /* toutes les pièces jointes (page d'administration des blobs) */

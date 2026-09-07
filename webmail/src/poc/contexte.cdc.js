@@ -27,6 +27,7 @@
   Cd("liste.expediteur.inconnu", () => md("**D126** — le nom affiché n'est pas une identité : l'adresse en premier pour un inconnu. **D128** B1 quand le nom est connu et l'adresse non."));
 
   Cd("connexion", () => md("**D157** — la maquette est une *session* : `poc/poc` ouvre le monde simulé, la même page et la même interface (**D141**) ; tout autre couple va au serveur (**D063**, **D150**). Ce texte n'apparaît jamais avant la porte : la surcouche CDC se charge après."));
+  Cd("envoi", () => md("**D099** / **D161** — l'émission est un **événement persisté** : écrit dans la transaction du message (motif « boîte d'envoi »), traité hors processus, au moins une fois, tentatives à intervalle croissant, abandon bruyant. Relancer remet l'événement en file — jamais un envoi depuis la requête HTTP, qui n'a pas le droit d'attendre un réseau."));
   Cd("nav.virtuel", () => md("**D143** / **D075** — un dossier virtuel personnel est un *filtre sans action* : une **conjonction** de critères `axe = valeur`, ou `axe` seul pour la famille. Ni OU ni négation ici — c'est une règle du moteur (**D074**). Compté dans la passe unique (**D078**). Par compte ; partage à la boîte : **Q058**."));
   Cd("nav.epingle", () => md("**D144** / **D135** — l'épingle est un réglage par compte, nature *personnel* (**D106**) : un raccourci vers un nœud, pas une entité. L'ordre est celui de l'épinglage, sans réordonnancement manuel — même raison que D135."));
 
