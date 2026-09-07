@@ -1,4 +1,4 @@
--- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-06T19:08:35 depuis le dictionnaire des données.
+-- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-07T02:49:49 depuis le dictionnaire des données.
 -- NE PAS ÉDITER : la source est .mmi-pm/docs/dict/*.yml (F114, D154). PostgreSQL ≥ 14 (D027).
 -- 34 tables, 68 clés étrangères, 57 index, 7 unicités. Identifiants : uuid v7 engendrés par
 -- l'application (D145). Le tronc comm n'est PAS partitionné en V0 : la partition par canal (D138)
@@ -116,7 +116,7 @@ CREATE TABLE "comm_piece_jointe" (
   "content_id" text,
   "parametres" jsonb,
   "renomme_en" text,
-  CONSTRAINT "pk_comm_piece_jointe" PRIMARY KEY ("comm_id", "piece_jointe_id")
+  CONSTRAINT "pk_comm_piece_jointe" PRIMARY KEY ("comm_id", "ordre")
 );
 
 -- blob — Un contenu binaire adressé par empreinte, compressé zstd, hors base. Compteur de références pour le ramasse-mi

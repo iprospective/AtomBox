@@ -30,7 +30,7 @@ def amorcer(login: str, nom: str, mot_de_passe: str | None, boite_adresse: str, 
         boite = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee" if partagee else "personnelle"); s.add(boite)
     s.flush()
     if not s.get(Acces, (compte.compte_id, boite.boite_id)):
-        s.add(Acces(compte_id=compte.compte_id, boite_id=boite.boite_id, role="proprietaire" if not partagee else "membre", debut=datetime.now(timezone.utc), accorde_par=compte.compte_id))
+        s.add(Acces(compte_id=compte.compte_id, boite_id=boite.boite_id, role="gestionnaire" if not partagee else "membre", debut=datetime.now(timezone.utc), accorde_par=compte.compte_id))
     for alias, nom_d in SPECIAUX:
         if not s.scalar(select(Dossier).where(Dossier.boite_id == boite.boite_id, Dossier.alias_imap == alias)):
             s.add(Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom=nom_d, alias_imap=alias, protege=True))

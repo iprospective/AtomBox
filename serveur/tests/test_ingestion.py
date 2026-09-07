@@ -20,7 +20,10 @@ def base():
     with psycopg.connect(u) as c: c.execute(open(os.path.join(ici, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read()); c.commit()
     s = session(u)
     yield s
-    s.close(); admin.execute('DROP DATABASE "%s"' % nom); admin.close()
+    s.close()
+    import atombox.db as db; db.moteur(u).dispose(); db._sync.clear()   # sinon la base est « in use » à la destruction
+    admin.execute("select pg_terminate_backend(pid) from pg_stat_activity where datname=%s and pid<>pg_backend_pid()", (nom,))
+    admin.execute('DROP DATABASE "%s"' % nom); admin.close()
 
 @pytest.fixture
 def boites(base):

@@ -1,5 +1,5 @@
 {
- "genere": "2026-09-06T19:08:35",
+ "genere": "2026-09-07T02:49:49",
  "tables": {
   "comm": {
    "cle": [
@@ -382,7 +382,7 @@
   "comm_piece_jointe": {
    "cle": [
     "comm_id",
-    "piece_jointe_id"
+    "ordre"
    ],
    "colonnes": [
     {
