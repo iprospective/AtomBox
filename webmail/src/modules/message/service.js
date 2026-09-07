@@ -76,7 +76,10 @@ SELECT application_id, 'message.traite', :json, 'a_emettre', now()
       "motif_sortie distingue traité / archivé (D030) ; les vues « Traités » et « Archives » " +
       "n'en sont que la lecture (D051)"]),
 
-    refile: m => appliquer(m, { motif_sortie:null, sorti_le:null }, ["Remettre dans la file",
+    /* Remettre dans la file : la sortie s'efface, ET le statut cesse d'être « traité » — un message
+       qui revient dans la file en portant « traité » est un message qu'on ne retraitera jamais. */
+    refile: m => appliquer(m, { motif_sortie:null, sorti_le:null,
+                                ...(m.statut === "traite" ? { statut: "a_faire" } : {}) }, ["Remettre dans la file",
 `UPDATE rattachement SET sorti_le = NULL, motif_sortie = NULL
  WHERE comm_id = :id AND compte_id = :moi;`,
       "⚠ retour de partition : c'est exactement Q009 (« un email sorti peut-il revenir ? »). " +

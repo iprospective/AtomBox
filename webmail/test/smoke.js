@@ -819,6 +819,28 @@ console.log("— dossiers virtuels personnels (D143) et épingles (D144) ——"
   A.Store.ui.jalon = null; A.Controllers.Nav.peindre();
 }
 
+console.log("— sortir de la file, et y revenir (D030) ——————————");
+{
+  const m = A.Corpus.tous.find(x => !x.motif_sortie && x.dossier !== "trash" && x.sens === "in");
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: m.id }); await tick(); await tick();
+  const detail = () => p.doc.getElementById("detail").innerHTML;
+  vrai(detail().includes('id="stat"'), "tant qu'il est dans la file, le sélecteur de statut");
+  await A.MessageService.statuer(m, "traite"); await tick();
+  eq(m.motif_sortie, "traite", "« traité » sort de la file (D014)");
+  A.Controllers.Message.peindre(A.Store.ui.tabs.find(t => t.id === m.id)); await tick();
+  vrai(detail().includes("Marquer non traité"), "un message traité propose de redevenir non traité");
+  vrai(!detail().includes('id="stat"'), "et le sélecteur laisse la place au retour");
+  vrai(!detail().includes("Archiver sans traiter"), "on n'archive pas ce qui est déjà sorti");
+  clic(p.doc.getElementById("detail").querySelector('[data-x="refile"]')); await tick(); await tick();
+  eq(m.motif_sortie, null, "il revient dans la file");
+  eq(m.statut, "a_faire", "et il n'y revient pas « traité » : il redevient à faire");
+  await A.MessageService.archiver(m); await tick();
+  A.Controllers.Message.peindre(A.Store.ui.tabs.find(t => t.id === m.id)); await tick();
+  vrai(detail().includes("Désarchiver"), "un message archivé propose de désarchiver");
+  clic(p.doc.getElementById("detail").querySelector('[data-x="refile"]')); await tick(); await tick();
+  eq(m.motif_sortie, null, "désarchivé, il est de retour dans la file");
+}
+
 console.log("— suivi d'envoi et relance (D099) ————————————————");
 {
   const envoye = A.Corpus.tous.find(m => m.sens === "out" && m.dossier !== "trash");
