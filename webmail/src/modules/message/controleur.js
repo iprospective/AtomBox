@@ -23,10 +23,21 @@
       if (!m) return;
       /* le fil se charge par promesse (D141) : on peint sans, puis on repeint avec —
          l'utilisateur voit le message tout de suite, le fil arrive ensuite */
+      /* le suivi d'envoi (D099) : chargé comme le fil, par promesse, une seule fois */
+      if (m.sens === "out" && m._envoi === undefined && !m._envoiEnCours) { m._envoiEnCours = true;
+        ABX.Api.envoi(m.id).then(e => { m._envoi = e || null; m._envoiEnCours = false; if (St.ui.tab === t.key) Message.peindre(t); },
+                                 () => { m._envoi = null; m._envoiEnCours = false; }); }
       if (!m._fil && !m._filEnCours) { m._filEnCours = true;
         ABX.Api.fil(m).then(fil => { m._fil = fil; m._filEnCours = false; if (St.ui.tab === t.key) Message.peindre(t); }, () => { m._filEnCours = false; }); }
       const el = D.paint("detail", ABX.Views.Message.render(m, St.ui));
       App().bindRetour(el);
+
+      const relancer = el.querySelector("#relancer");
+      if (relancer) relancer.onclick = () => {
+        relancer.disabled = true; relancer.textContent = "↻ Relance…";
+        ABX.Api.relancer(m.id).then(() => ABX.Api.envoi(m.id)).then(e => { m._envoi = e || null; Message.peindre(t); },
+                                                                    () => { relancer.disabled = false; relancer.textContent = "↻ Relancer l'envoi"; });
+      };
 
       const suivre = el.querySelector("#suivre");
       if (suivre) suivre.onclick = () => ABX.Controllers.Tabs.ouvrir({ type:"msg", id:m.reference }, false);

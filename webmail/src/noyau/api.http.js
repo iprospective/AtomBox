@@ -77,6 +77,8 @@
       cache.compteurs = (r && r.compteurs) || {};
       cache.virtuels = (r && r.virtuels) || []; cache.epingles = (r && r.epingles) || [];
       return cache.compteurs; }),
+    envoi: id => req("GET", "/envois/" + encodeURIComponent(id)),
+    relancer: id => req("POST", "/envois/" + encodeURIComponent(id) + "/relancer"),
     rechercher: q => req("GET", "/recherche?" + q_({ q })).then(r => { const l = (r && r.messages) || []; l.forEach(garde); return l; }),
     /* le serveur sert {pj_id, nom, octets, mime_detecte, sha256, partage_par, message:{…}} ; la page
        d'administration lit encore {m, p, i} — même adaptateur que pour un message (la dette du module) */

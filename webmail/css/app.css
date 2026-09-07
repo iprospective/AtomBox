@@ -1166,6 +1166,31 @@ header {
   border: 1px dashed var(--line);
 }
 
+/* ---- suivi d'envoi (D099) : l'état d'un message émis, et sa relance */
+.box.envoi h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.box.envoi h4 .hbtn {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.box.envoi.ok h4 {
+  color: var(--ok, #2e7d32);
+}
+
+.box.envoi.due h4 {
+  color: var(--danger);
+}
+
+.box.envoi.wait h4 {
+  color: var(--muted);
+}
+
 /* ---- pièces jointes ---- */
 .pjl {
   display: flex;

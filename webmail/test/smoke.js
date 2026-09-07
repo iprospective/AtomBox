@@ -819,6 +819,25 @@ console.log("— dossiers virtuels personnels (D143) et épingles (D144) ——"
   A.Store.ui.jalon = null; A.Controllers.Nav.peindre();
 }
 
+console.log("— suivi d'envoi et relance (D099) ————————————————");
+{
+  const envoye = A.Corpus.tous.find(m => m.sens === "out" && m.dossier !== "trash");
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: envoye.id }); await tick(); await tick();
+  let h = p.doc.getElementById("detail").innerHTML;
+  vrai(h.includes("Remis au relais"), "un message émis montre où en est son envoi");
+  vrai(!h.includes('id="relancer"'), "rien à relancer quand c'est remis");   // le mot est aussi dans la voix CDC : on cherche le BOUTON
+  A.Store.envois = {}; A.Store.envois[envoye.id] = "en_echec";
+  const m = A.Api.cache.message(envoye.id); m._envoi = undefined;
+  A.Controllers.Message.peindre(A.Store.ui.tabs.find(t => t.id === envoye.id)); await tick(); await tick();
+  h = p.doc.getElementById("detail").innerHTML;
+  vrai(h.includes("Envoi en échec") && h.includes("nouvelle tentative"), "un envoi en échec le dit, avec la prochaine tentative");
+  vrai(h.includes('id="relancer"'), "et propose de relancer");
+  clic(p.doc.getElementById("detail").querySelector("#relancer")); await tick(); await tick(); await tick();
+  h = p.doc.getElementById("detail").innerHTML;
+  vrai(h.includes("Remis au relais") && !h.includes('id="relancer"'), "après relance, l'envoi est reparti");
+  eq(A.Store.envois[envoye.id], "remis", "la relance a bien touché le serveur");
+}
+
 console.log("— recherche plein texte (F104) ————————————————————");
 {
   const cible = A.Corpus.tous.find(m => !m.motif_sortie && m.dossier !== "trash" && (m.sujet || "").length > 8);

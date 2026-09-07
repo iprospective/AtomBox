@@ -44,6 +44,7 @@
           </div>
           ${ABX.Views.Message.menuHtml(m)}
         </div>
+        ${m.sens === "out" ? R.render("message.envoi", { e: m._envoi }) : ""}
         ${ABX.Views.Message.fiabiliteHtml(m)}
         ${ABX.Views.Message.repondHtml(m)}
         ${ABX.Views.Message.spoofHtml(m)}

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from ..journal import journal
 from ..magasin import Magasin
+from ..controleurs.envois import EnvoisControleur
 from ..modules import Module, evenement
 from ..modules import evenements
 from ..schema.modeles import Adresse, Boite, Comm, Envoi, EnvoiDestinataire, Identite
@@ -15,7 +16,8 @@ from .smtp import remettre
 log = journal("apps")
 
 class ModuleEmission(Module):
-    nom = "emission"; version = "0.1"; description = "remise au relais SMTP (F109, D114), envoi et destinataires (D099), copie dans Envoyés"; interne = True
+    nom = "emission"; version = "0.1"; description = "remise au relais SMTP (F109, D114), envoi et destinataires, suivi et relance (D099)"; interne = True
+    controleurs = [EnvoisControleur]
 
     @evenement("message.a_envoyer")
     def envoyer(self, ctx):
@@ -35,7 +37,7 @@ class ModuleEmission(Module):
             envoi = Envoi(envoi_id=uuid7(), comm_id=comm_id, identite_id=identite.identite_id, retour_enveloppe=expediteur)
             s.add(envoi); s.flush()
             for d in dest:
-                s.add(EnvoiDestinataire(envoi_id=envoi.envoi_id, adresse_id=adresse_de(s, d).adresse_id, etat="a_envoyer", mis_a_jour_le=datetime.now(timezone.utc)))
+                s.add(EnvoiDestinataire(envoi_id=envoi.envoi_id, adresse_id=adresse_de(s, d).adresse_id, etat="prepare", mis_a_jour_le=datetime.now(timezone.utc)))
             s.flush()
         if not dest: raise RuntimeError("aucun destinataire pour %s" % comm_id)
         resultat = remettre(octets, envoi.retour_enveloppe, dest)          # lève si le relais est injoignable → tentative suivante (D161)
@@ -43,7 +45,9 @@ class ModuleEmission(Module):
         for ed in s.scalars(select(EnvoiDestinataire).where(EnvoiDestinataire.envoi_id == envoi.envoi_id)):
             a = s.get(Adresse, ed.adresse_id).adresse_complete
             if a in resultat["refuses"]:
-                ed.etat = "refuse"; ed.code = "%s %s" % resultat["refuses"][a][:2] if isinstance(resultat["refuses"][a], tuple) else str(resultat["refuses"][a])
+                r = resultat["refuses"][a]
+                ed.etat = "rejete"                      # 5xx du relais : refusé pour CE destinataire (D099)
+                ed.code = ("%s %s" % (r[0], r[1].decode("utf-8", "replace") if isinstance(r[1], bytes) else r[1]))[:200] if isinstance(r, tuple) else str(r)[:200]
             else: ed.etat = "remis"
             ed.mis_a_jour_le = datetime.now(timezone.utc)
         evenements.emettre(s, "message.envoye", {"comm_id": str(comm_id), "boite_id": str(boite_id), "refuses": list(resultat["refuses"])}, module=self.nom)

@@ -55,6 +55,21 @@
 
     ["GET", /^\/messages\/([^/]+)$/, (m) => { const x = C.par(dec(m[1])); return x ? rep(x, true) : null; }],
 
+    /* le suivi d'envoi (D099) : le POC le simule sur les messages sortants — deux états qui
+       se succèdent, pour qu'on voie les deux à l'écran sans serveur */
+    ["GET", /^\/envois\/([^/]+)$/, (m) => { const x = C.par(dec(m[1])); if (!x || x.sens !== "out") return null;
+      const st = St.envois && St.envois[x.id] || (x._envoiEtat || "remis");
+      const dest = (x.destinataires || []).map(a => ({ adresse: a, etat: st === "remis" ? "remis" : "prepare", code: null, mis_a_jour_le: new Date().toISOString() }));
+      const DETAIL = { remis: "remis au relais", en_echec: "échec (1 tentative), nouvelle tentative à 12:05 : relais injoignable", en_attente: "en attente de remise au relais" };
+      return { comm_id: x.id, sujet: x.sujet, date: new Date(x.date_recue).toISOString(), envoi_id: "e-" + x.id,
+               remis_le: st === "remis" ? new Date(x.date_recue).toISOString() : null, etat: st, detail: DETAIL[st] || st,
+               tentatives: st === "en_echec" ? 1 : 0, erreur: st === "en_echec" ? "relais injoignable" : null,
+               relancable: st !== "remis", destinataires: dest }; }],
+
+    ["POST", /^\/envois\/([^/]+)\/relancer$/, (m) => { const x = C.par(dec(m[1])); if (!x || x.sens !== "out") return null;
+      St.envois = St.envois || {}; St.envois[x.id] = "remis"; St.save();
+      return ok({ relance: 1, comm_id: x.id, destinataires: x.destinataires || [] }); }],
+
     ["GET", /^\/recherche$/, (_, p) => { const q = (p.q || "").toLowerCase().trim();
       const l = q.length < 2 ? [] : C.tous.filter(m => !m.motif_sortie && m.dossier !== "trash" &&
         ((m.sujet || "").toLowerCase().includes(q) || (m.corps || "").toLowerCase().includes(q) || (m.from_adresse || "").toLowerCase().includes(q) || (m.from_nom || "").toLowerCase().includes(q)));

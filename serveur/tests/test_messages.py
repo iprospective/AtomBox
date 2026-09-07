@@ -111,6 +111,15 @@ def test_parcours_du_webmail(monde):
     n = c.post("/api/v1/messages", json={"boite": "contact@exemple.fr", "destinataires": ["jean@x.fr"], "sujet": "Test", "corps": "Bonjour", "composition": None}, headers=h).json()
     assert n["ok"] and n["crees"] == 1 and n["message"]["sens"] == "out" and n["message"]["dossier_origine"] == "sent"
     assert c.get("/api/v1/messages", params={"dossier": "sent"}, headers=h).json()["total"] == 1
+    # le suivi d'envoi (D099) : le message est en base, l'événement est en file, rien n'est encore remis
+    envoye = n["message"]["id"]
+    e = c.get("/api/v1/envois/" + envoye, headers=h).json()
+    assert e["etat"] == "en_attente" and e["relancable"] and e["destinataires"] == [], e
+    assert c.get("/api/v1/envois", headers=h).json()["total"] == 1
+    r = c.post("/api/v1/envois/%s/relancer" % envoye, headers=h).json()
+    assert r["ok"] and r["relance"] == 1 and r["destinataires"] == ["jean@x.fr"], r
+    assert c.post("/api/v1/envois/%s/relancer" % envoye, headers=h).json()["ok"], "relancer deux fois ne casse rien"
+    assert c.get("/api/v1/envois/" + str(monde["ids"][0]), headers=h).status_code == 404, "un message reçu n'a pas d'envoi"
     assert c.delete("/api/v1/messages/" + mid + "/rattachement", headers=h).json()["detache"]
     assert c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=h).json()["total"] == 2
     assert c.get("/api/v1/messages/" + str(uuid.uuid4()), headers=h).status_code == 404
