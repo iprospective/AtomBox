@@ -56,7 +56,7 @@ class MessagesControleur(Controleur):
     @action("POST", "")
     async def creer(self, request: Request, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
         corps = await request.json()
-        m = await svc.creer(s, compte, corps or {}, magasin())
+        m = await svc.creer(s, compte, corps or {}, magasin(), ip_client=(request.client.host if request.client else None))
         if m is None: raise HTTPException(400, "aucune boîte pour ce compte")
         log.info("message %s créé par %s (%s)", m["id"], compte.login, "brouillon" if (corps or {}).get("composition") else "à envoyer")
         return {"ok": True, "crees": 1, "message": m}

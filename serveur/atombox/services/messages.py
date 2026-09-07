@@ -5,7 +5,7 @@ Les dossiers du webmail : des identifiants courts pour les spéciaux (inbox, sen
 trash — les alias IMAP protégés, D047), des vues calculées (traites, archives — D051), l'UUID
 d'un dossier utilisateur, et les dossiers virtuels personnels (perso:…, D143)."""
 from __future__ import annotations
-import email.message, email.policy, email.utils
+import email.message, email.policy, email.utils, os, socket
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, func, case, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -216,7 +216,32 @@ async def detacher(s: AsyncSession, compte: Compte, comm_id) -> bool:
     r = await patcher(s, compte, comm_id, {"suppr": True})
     return r is not None
 
-async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None) -> dict | None:
+def hote_atombox() -> str:
+    """le nom de CETTE instance dans la chaîne de relais — jamais deviné à partir d'une requête"""
+    return os.environ.get("ATOMBOX_HOTE") or socket.getfqdn() or "atombox"
+
+def entetes_de_relais(m: email.message.EmailMessage, comm_id, expediteur: str, quand: datetime, ip_client: str | None = None) -> None:
+    """AtomBox n'est pas un client SMTP : il REÇOIT par son API et REMET au relais. Le Received le
+    dit (RFC 5321 § 4.4), avec l'identifiant qui corrèle journal, envoi et DSN (D119).
+
+    L'IP du client n'y est JAMAIS écrite (D162) : un en-tête sortant part chez tous les
+    destinataires et géolocalise l'expéditeur à chaque message ; l'IP vit au journal, chez nous.
+    Le paramètre existe pour un client qui l'exigerait — verrouillable, désactivé par défaut."""
+    trace = ""
+    if ip_client and os.environ.get("ATOMBOX_TRACER_IP_CLIENT") == "1":
+        trace = " (client %s)" % ip_client                        # jamais par défaut — D162
+    # une seule ligne LOGIQUE : c'est la politique qui replie (elle refuse un CRLF écrit à la main)
+    recu = ("from webmail (atombox%s) by %s with HTTPS id %s (authenticated sender: %s); %s"
+            % (trace, hote_atombox(), comm_id, expediteur, email.utils.format_datetime(quand)))
+    m["X-Mailer"] = "AtomBox"                                     # sans version : pas de carte des failles
+    # un Received se pose EN TÊTE : la chaîne de trace se lit du plus récent au plus ancien, et le
+    # relais suivant ajoutera le sien au-dessus du nôtre (RFC 5321 § 4.4)
+    anciens = m.items()
+    for cle in dict.fromkeys(k for k, _ in anciens): del m[cle]
+    m["Received"] = recu
+    for cle, valeur in anciens: m[cle] = valeur
+
+async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_client: str | None = None) -> dict | None:
     """POST /messages : un message écrit ici — brouillon (composition présente) ou envoyé.
     V0 : le message est en base et au magasin ; l'émission SMTP (F109) prend le relais par un événement."""
     boites = await boites_du_compte(s, compte)
@@ -232,8 +257,9 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None) -> d
     m["Message-ID"] = email.utils.make_msgid(domain=adresses[boite.boite_id].split("@")[-1])
     if corps.get("reference"): m["X-AtomBox-Reference"] = str(corps["reference"])
     m.set_content(corps.get("corps") or "")
-    octets = m.as_bytes()
     comm_id = uuid7(); maintenant = datetime.now(timezone.utc)
+    entetes_de_relais(m, comm_id, adresses[boite.boite_id], maintenant, ip_client)   # D162
+    octets = m.as_bytes()
     from ..ingestion.analyse import analyser
     from ..ingestion.identite import empreinte_identite
     a = analyser(octets)
