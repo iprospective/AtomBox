@@ -17,7 +17,88 @@
       D.on(el, ".chip[data-cap]", "onclick", c =>
         ABX.Providers.choisir(c.dataset.cap, c.dataset.f));
       D.on(el, "[data-adm]", "onclick", b => Admin.geste(b.dataset.adm));
+      Admin.brancherEtat(t, el);
+      Admin.brancherRegles(t, el);
       Admin.log(t.volet);
+    },
+
+    /* ---- État & journal (F122) : deux chargements par promesse, deux repeintures ---------- */
+    brancherEtat(t, el) {
+      const V = ABX.Views.Admin;
+      if (t.volet !== "etat") return;
+      if (!V._etat && !V._etatEnCours) { V._etatEnCours = true;
+        ABX.Api.etat().then(e => { V._etat = e; V._etatEnCours = false; Admin.peindre(t); },
+                            () => { V._etatEnCours = false; }); }
+      if (!V._journal && !V._journalEnCours) Admin.chargerJournal(t);
+      if (!V._etat) return;                       // rien à câbler tant que la page dit « Chargement… »
+      D.byId("etat-recharger").onclick = () => { V._etat = null; V._journal = null; Admin.peindre(t); };
+      ["j-domaine", "j-niveau", "j-filtre"].forEach(id => {
+        const c = D.byId(id);
+        const relire = () => {
+          V._jd = D.byId("j-domaine").value; V._jn = D.byId("j-niveau").value; V._jf = D.byId("j-filtre").value;
+          V._journal = null; Admin.chargerJournal(t);
+        };
+        if (id === "j-filtre") { c.onkeydown = e => { if (e.key === "Enter") relire(); }; }
+        else c.onchange = relire;
+      });
+    },
+
+    chargerJournal(t) {
+      const V = ABX.Views.Admin;
+      V._journalEnCours = true;
+      return ABX.Api.journal(V._jd || "atombox", V._jn || "INFO", V._jf || "")
+        .then(l => { V._journal = l; V._journalEnCours = false; if (St.ui.tab === t.key) Admin.peindre(t); },
+              () => { V._journal = []; V._journalEnCours = false; });
+    },
+
+    /* ---- Règles (F016) : lister, créer, activer, supprimer -------------------------------- */
+    brancherRegles(t, el) {
+      const V = ABX.Views.Admin;
+      if (t.volet !== "regles") return;
+      if (!V._filtres && !V._filtresEnCours) { V._filtresEnCours = true;
+        ABX.Api.filtres().then(d => { V._filtres = d; V._filtresEnCours = false; Admin.peindre(t); },
+                               () => { V._filtresEnCours = false; }); }
+      const recharger = () => { V._filtres = null; V._nouvelle = null; Admin.peindre(t); };
+      if (!V._filtres) return;
+      D.byId("r-nouvelle").onclick = () => {
+        const d = V._filtres || {};
+        V._nouvelle = { nom: "", mode: "et", action: (d.actions || ["classer"])[0], dossier: "",
+                        criteres: [{ champ: (d.champs || ["from"])[0], operateur: "contient", valeur: "" }] };
+        Admin.peindre(t);
+      };
+      D.on(el, "[data-rtoggle]", "onclick", b => {
+        const f = (V._filtres.filtres || []).find(x => x.id === b.dataset.rtoggle);
+        ABX.Api.modifierFiltre(f.id, { actif: !f.actif }).then(recharger, recharger);
+      });
+      D.on(el, "[data-rdel]", "onclick", b => {
+        if (!confirm("Supprimer cette règle ? Aucun message n'est touché.")) return;
+        ABX.Api.supprimerFiltre(b.dataset.rdel).then(recharger, recharger);
+      });
+      if (!V._nouvelle) return;
+      const lire = () => {
+        const f = V._nouvelle;
+        f.nom = D.byId("r-nom").value; f.action = D.byId("r-action").value;
+        f.dossier = D.byId("r-dossier").value;
+        f.criteres.forEach((c, i) => {
+          c.champ = D.byId("r-champ-" + i).value;
+          c.operateur = D.byId("r-op-" + i).value;
+          c.valeur = D.byId("r-val-" + i).value;
+        });
+      };
+      D.byId("r-mode").onclick = () => { lire(); V._nouvelle.mode = V._nouvelle.mode === "ou" ? "et" : "ou"; Admin.peindre(t); };
+      D.byId("r-plus").onclick = () => { lire(); V._nouvelle.criteres.push({ champ: (V._filtres.champs || ["from"])[0], operateur: "contient", valeur: "" }); Admin.peindre(t); };
+      D.byId("r-action").onchange = () => { lire(); Admin.peindre(t); };
+      D.byId("r-non").onclick = () => { V._nouvelle = null; Admin.peindre(t); };
+      D.byId("r-ok").onclick = () => {
+        lire();
+        const f = V._nouvelle;
+        const action = { type: f.action };
+        if (f.action === "classer" && f.dossier) action.dossier = f.dossier;
+        ABX.Api.creerFiltre({ nom: f.nom, portee: "compte",
+                              predicat: { mode: f.mode, criteres: f.criteres.filter(c => c.valeur || c.operateur === "existe") },
+                              action })
+          .then(recharger, e => { alert("Règle refusée : " + (e && e.message || e)); });
+      };
     },
 
     log(volet) {

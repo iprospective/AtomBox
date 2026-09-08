@@ -9,3 +9,18 @@
 .capa .capt{display:flex;align-items:baseline;gap:9px;margin-bottom:6px;flex-wrap:wrap}
 .capa .capt .hash{font-size:10px}
 .capa .chips{margin-bottom:5px}
+
+/* ---- état d'exploitation (F122) et règles (F016) */
+.kpis{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.kpi{flex:1 1 92px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel2)}
+.kpi b{display:block;font-size:17px;line-height:1.2}
+.kpi span{font-size:11px;color:var(--muted)}
+.kpi.ok b{color:var(--ok,#2e7d32)} .kpi.due b{color:var(--danger)} .kpi.pause b{color:var(--muted)}
+.box.due>h4{color:var(--danger)} .box.pause>h4{color:var(--muted)}
+.journal{margin-top:8px;max-height:340px;overflow:auto;font-size:12px;background:var(--panel2);
+  border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.jl{padding:2px 0;border-bottom:1px solid var(--line);white-space:pre-wrap;word-break:break-word}
+.jl:last-child{border-bottom:0}
+.jl .jd{display:inline-block;min-width:72px;color:var(--muted)}
+.rcrit select,.rcrit input{min-width:0}
+.rcrit select{flex:0 0 30%}

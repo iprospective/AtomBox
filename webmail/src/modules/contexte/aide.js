@@ -44,6 +44,10 @@
     affichée en premier, le nom déclaré ensuite — le nom, lui, n'est pas vérifié.</div>`);
 
   ABX.ContexteAide = { points: R.pointsDuMode("aide") };
+  A("etat.journal", () => `<div class="hint">Le journal du logiciel : ce qu'AtomBox a fait, et ce
+    qui a échoué. Il ne contient pas vos messages, seulement leurs identifiants et leurs sujets.</div>`);
+  A("regles", () => `<div class="hint">Vos règles s'appliquent à l'arrivée d'un message, dans
+    l'ordre affiché. Une règle qui n'a jamais rien attrapé est probablement mal écrite.</div>`);
   A("envoi", ({ e }) => `<div class="hint">${e && e.relancable
     ? "Ce message n'est pas encore parti. AtomBox réessaie tout seul, à intervalle croissant ; « Relancer » redemande un essai immédiat."
     : "Ce message a été remis au serveur d'envoi. La suite (acceptation par le destinataire) est rapportée par les avis de non-remise."}</div>`);

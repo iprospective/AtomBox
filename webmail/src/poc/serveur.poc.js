@@ -70,6 +70,67 @@
       St.envois = St.envois || {}; St.envois[x.id] = "remis"; St.save();
       return ok({ relance: 1, comm_id: x.id, destinataires: x.destinataires || [] }); }],
 
+    /* L'ÉTAT et les RÈGLES : le POC les simule pour que les deux écrans vivent sans serveur.
+       Les mêmes formes que le vrai serveur — c'est le contrat qui compte, pas la source. */
+    ["GET", /^\/etat$/, () => {
+      const dossiers = ABX.Ref.speciaux.filter(x => !x.vue).map((x, i) => ({
+        boite: ABX.Ref.moi.boites[0].adresse, dossier: x.label, uid_validity: 1788742784,
+        uid_suivant: 100 + i * 37, messages: ABX.Api.cache.compteur(x.id).t, jamais_releve: false }));
+      const muettes = (St.filtres || []).filter(f => !f.nb_declenchements).map(f => ({ nom: f.nom }));
+      return { quand: new Date().toISOString(), ingestion: dossiers,
+        files: { en_attente: 0, en_echec: 1, abandonnes: 0, traites: 128, retard_secondes: 42,
+                 prochaine_tentative: new Date(Date.now() + 6e4).toISOString(),
+                 plus_vieux_en_attente: new Date(Date.now() - 42e3).toISOString() },
+        en_echec: [{ type: "message.a_envoyer", tentatives: 1, erreur: "relais injoignable", cree_le: new Date(Date.now() - 42e3).toISOString() }],
+        magasin: { chemin: "/var/lib/atombox/magasin", blobs: C.tous.length + 40,
+                   octets_stockes: 41 * 1024 * 1024, octets_bruts: 68 * 1024 * 1024, orphelins: 2, gain: 0.397 },
+        contenu: { messages: C.tous.length, pieces_jointes: 312, rattachements: C.tous.length, boites: ABX.Ref.moi.boites.length },
+        regles_muettes: muettes, journaux: "/var/log/atombox" }; }],
+
+    ["GET", /^\/etat\/journal$/, (_, p) => {
+      const N = ["DEBUG", "INFO", "WARNING", "ERROR"], seuil = N.indexOf((p.niveau || "INFO").toUpperCase());
+      const brut = [
+        ["INFO", "ingestion", "nouveau 01a07b28 : Devis 4521, de jean@tessier-industries.example, 8 pièce(s)"],
+        ["DEBUG", "imap", "FETCH uid 42 : 8214 octets, \\Seen"],
+        ["INFO", "auth", "session ouverte pour mathieu (Firefox)"],
+        ["WARNING", "imap", "IDLE refusé : reconnexion dans 60 s"],
+        ["ERROR", "apps", "événement message.a_envoyer : tentative 1 en échec — relais injoignable"],
+        ["INFO", "api", "GET /api/v1/messages → 200 en 12 ms"],
+      ];
+      const q = (p.filtre || "").toLowerCase();
+      const lignes = brut
+        .filter(([n, d]) => N.indexOf(n) >= seuil && (!p.domaine || p.domaine === "atombox" || p.domaine === "erreurs" || d === p.domaine))
+        .filter(([n, d, m]) => !q || (d + m).toLowerCase().includes(q))
+        .filter(([n]) => p.domaine !== "erreurs" || N.indexOf(n) >= 2)
+        .map(([niveau, domaine, message], i) => ({ quand: new Date(Date.now() - i * 6e4).toISOString().slice(0, 19).replace("T", " "),
+                                                   niveau, domaine, message }));
+      return { domaine: p.domaine || "atombox", niveau: p.niveau || "INFO", lignes, fichier: "/var/log/atombox/atombox.log" }; }],
+
+    ["GET", /^\/filtres$/, () => ({ filtres: (St.filtres || []).slice(), total: (St.filtres || []).length,
+      champs: ["corps", "destinataire", "dossier", "from", "from_nom", "liste", "nature", "pieces", "sujet", "taille"],
+      operateurs: ["commence_par", "contient", "correspond_a", "est", "existe", "finit_par", "inferieur_a", "ne_contient_pas", "superieur_a"],
+      actions: ["classer", "marquer_lu", "drapeau", "statut", "corbeille", "indesirable", "arreter", "ignorer"] })],
+
+    ["POST", /^\/filtres$/, (_, __, corps) => { const c = corps || {};
+      if (!(c.nom || "").trim()) throw new Error("POST /filtres → 400 : un nom");
+      if (!((c.predicat || {}).criteres || []).length) throw new Error("POST /filtres → 400 : au moins un critère");
+      St.filtres = St.filtres || [];
+      const f = { id: "f" + (++St.seq), nom: c.nom.trim(), ordre: St.filtres.length + 1, actif: c.actif !== false,
+                  predicat: c.predicat, action: c.action, portee: c.portee || "compte",
+                  nb_declenchements: 0, dernier_declenchement: null, muette: true };
+      St.filtres.push(f); St.save();
+      return ok({ crees: 1, filtre: f }); }],
+
+    ["PATCH", /^\/filtres\/([^/]+)$/, (m, _, corps) => { const f = (St.filtres || []).find(x => x.id === dec(m[1]));
+      if (!f) return null;
+      Object.assign(f, corps || {}); St.save();
+      return ok({ modifies: 1, filtre: f }); }],
+
+    ["DELETE", /^\/filtres\/([^/]+)$/, (m) => { const i = (St.filtres || []).findIndex(x => x.id === dec(m[1]));
+      if (i < 0) return null;
+      St.filtres.splice(i, 1); St.save();
+      return ok({ supprimes: 1 }); }],
+
     ["GET", /^\/recherche$/, (_, p) => { const q = (p.q || "").toLowerCase().trim();
       const l = q.length < 2 ? [] : C.tous.filter(m => !m.motif_sortie && m.dossier !== "trash" &&
         ((m.sujet || "").toLowerCase().includes(q) || (m.corps || "").toLowerCase().includes(q) || (m.from_adresse || "").toLowerCase().includes(q) || (m.from_nom || "").toLowerCase().includes(q)));
