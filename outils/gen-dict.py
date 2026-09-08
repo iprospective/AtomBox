@@ -182,6 +182,30 @@ def ordre_realisation(feats):
 # ---- jalons : la feuille de route DÉRIVÉE des fonctionnalités ----
 # Deux vues des mêmes F… : ici par jalon, dans l'ordre de réalisation ; en 16.13 par domaine.
 # Le « contenu » libre de jalons.yml devient une note d'intention ; la liste est calculée.
+w("\n\n---\n\n## 16.10b — Les statuts d'une fonctionnalité\n")
+w("Deux axes, à ne pas confondre : **où en est la décision**, et **où en est le code**. Le premier "
+  "champ (`etat`) date de l'époque où le POC était le seul livrable ; « maquetté » y veut dire "
+  "« visible dans la maquette », **pas** « codé ». Le second (`avancement`) dit la réalisation.\n")
+w("| `etat` — la conception | ce que ça veut dire |\n|---|---|")
+for v, sens in (("à trancher", "une question ouverte la bloque (`Q…`)"),
+                ("décidé", "tranché au CDC : la règle est écrite"),
+                ("maquetté", "*hérité* : visible dans le POC — ne dit rien de la réalisation"),
+                ("en pause", "écarté pour l'instant, avec sa condition de reprise (⏸)"),
+                ("écarté", "abandon ou doublon : la ligne reste, jalon `null`, l'identifiant n'est jamais réattribué")):
+    w("| **%s** | %s |" % (v, sens))
+w("")
+w("| `avancement` — la réalisation | ce que ça veut dire |\n|---|---|")
+for v, sens in (("à faire", "rien n'existe encore"),
+                ("maquetté", "l'interface le montre, aucun serveur derrière"),
+                ("codé", "écrit et testé des deux côtés, mais jamais confronté au réel"),
+                ("éprouvé", "a tourné pour de vrai — vraie base, vraie boîte, vrai relais. **Le seul statut qui vaille une promesse à un client.**")):
+    w("| **%s** | %s |" % (v, sens))
+w("")
+_av = {}
+for f in FEA: _av.setdefault(f.get("avancement", "à faire"), []).append(f)
+w("État des lieux, tous jalons : " + " · ".join("**%s** %d" % (k, len(v)) for k, v in
+    sorted(_av.items(), key=lambda kv: -len(kv[1]))) + ".\n")
+
 w("\n\n---\n\n## 16.11 — Feuille de route\n")
 w("Chaque jalon liste **toutes** ses fonctionnalités (`F…`), **dans l'ordre de réalisation** (16.12). "
   "C'est la même donnée que 16.13, organisée par jalon plutôt que par domaine — aucune fonctionnalité "
@@ -197,6 +221,7 @@ for j in JAL:
         w("*Intention :* " + " · ".join(j["contenu"]) + "\n")
     w(table([("Ordre", lambda f: (_rang[f["id"]] + 1) if f["id"] in _rang else "—"), ("#", g("id")),
              ("Fonctionnalité", g("libelle")), ("Domaine", g("domaine")), ("État", g("etat")),
+             ("Avancement", lambda f: f.get("avancement", "à faire")),
              ("Dépend de", lambda f: f.get("depend_de") if f.get("depend_de") is not None else "à renseigner")], feats))
 _ecartees = [f for f in FEA if f.get("jalon") is None]
 if _ecartees:

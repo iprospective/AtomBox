@@ -745,6 +745,15 @@ const hf = p.doc.getElementById("detail").innerHTML;
 const nFeat = A.Views.Pages.FEATURES.reduce((s, [, l]) => s + l.length, 0);
 vrai(nFeat >= 40, nFeat + " fonctionnalités listées");
 vrai(hf.includes("V4"), "les jalons y figurent");
+vrai(hf.includes("Avancement") && hf.includes("éprouvé"), "l'avancement du CODE est une colonne à part (8 sept. 2026)");
+{
+  const F = A.CDC.dict.fonctionnalites;
+  vrai(F.every(f => ["à faire", "maquetté", "codé", "éprouvé"].includes(f.avancement || "à faire")),
+       "chaque fonctionnalité a un avancement de la liste fermée");
+  const v0 = F.filter(f => f.jalon === 0);
+  vrai(v0.filter(f => f.avancement === "éprouvé").length >= 5, "la V0 a des fonctionnalités éprouvées en réel");
+  vrai(v0.every(f => (f.avancement || "à faire") !== "à faire"), "et plus rien « à faire » en V0");
+}
 vrai(hf.includes("Moteur de filtres"), "le moteur de filtres (D074) est listé");
 vrai(hf.includes("DMARC"), "la délivrabilité DMARC est listée");
 vrai(hf.includes("expéditeur externe"), "l'affichage sûr est listé");

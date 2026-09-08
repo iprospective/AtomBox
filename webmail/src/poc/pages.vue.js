@@ -153,8 +153,12 @@
      qu'un tri parmi d'autres. L'ordre de codage (rang topologique) en est un
      aussi : c'est lui qui rend la liste utile au moment de coder. */
   const COLS_F = [["rang","Ordre"], ["id","#"], ["libelle","Fonctionnalité"], ["domaine","Domaine"],
-                  ["jalon","Jalon"], ["etat","État"], ["depend_de","Dépend de"], ["refs","Réf."]];
+                  ["jalon","Jalon"], ["etat","État"], ["avancement","Avancement"], ["depend_de","Dépend de"], ["refs","Réf."]];
   const ORDRE_ETAT = { "maquetté":0, "décidé":1, "à trancher":2, "à venir":3, "en pause":4 };
+  /* DEUX AXES (8 septembre 2026) : `etat` dit où en est la DÉCISION, `avancement` où en est le CODE.
+     « maquetté » dans la première colonne veut dire « visible ici », pas « codé ». */
+  const AVANCEMENT = { "éprouvé":"ok", "codé":"wait", "maquetté":"", "à faire":"" };
+  const ORDRE_AV = { "éprouvé":0, "codé":1, "maquetté":2, "à faire":3 };
   function features() {
     const ui = ABX.Store.ui, tri = ui.triFeat || "domaine", desc = !!ui.triFeatDesc;
     const feats = (ABX.CDC.dict.fonctionnalites || []).map(f => ({ ...f, rang: RANG[f.id] || null,
@@ -162,6 +166,7 @@
     const val = f => {
       if (tri === "jalon") return f.jalon === null || f.jalon === undefined ? 99 : f.jalon;
       if (tri === "etat") return ORDRE_ETAT[f.etat] ?? 9;
+      if (tri === "avancement") return ORDRE_AV[f.avancement || "à faire"] ?? 9;
       if (tri === "rang") return f.rang || 1e6;
       if (tri === "depend_de") return (f.depend_de || []).length;
       return String(f[tri] || "");
@@ -179,7 +184,12 @@
         <span class="st due">à trancher</span> question ouverte ·
         <span class="st">à venir</span> jalon ultérieur ·
         <span class="st pause">en pause</span> écarté volontairement ·
-        <span class="jalon v0">V0</span> la V1 réduite à l'essentiel (D140b)</div></div>
+        <span class="jalon v0">V0</span> la V1 réduite à l'essentiel (D140b)
+        <br><b>Avancement</b> — où en est le CODE, à ne pas confondre avec l'état de la décision :
+        <span class="st ok">éprouvé</span> a tourné pour de vrai (vraie base, vraie boîte, vrai relais) ·
+        <span class="st wait">codé</span> écrit et testé, jamais confronté au réel ·
+        <span class="st">maquetté</span> l'interface le montre, aucun serveur derrière ·
+        <span class="st">à faire</span> rien n'existe encore</div></div>
     <div class="box"><table class="erpl">
       <tr>${COLS_F.map(([k, l]) => `<th class="trih${k === tri ? " on" : ""}" data-trif="${k}">${l}${k === tri ? (desc ? " ↓" : " ↑") : ""}</th>`).join("")}</tr>
       ${feats.map(f => `<tr>
@@ -189,6 +199,7 @@
         <td class="hint">${F.esc(f.domaine)}</td>
         <td>${jal(f.jalon)}</td>
         <td><span class="st ${ETATS[f.etat] || ""}">${F.esc(f.etat)}</span></td>
+        <td><span class="st ${AVANCEMENT[f.avancement] || ""}">${F.esc(f.avancement || "à faire")}</span></td>
         <td class="hash">${f.depend_de === null || f.depend_de === undefined ? "<i>à renseigner</i>" : (f.depend_de.length ? f.depend_de.join(", ") : "racine")}</td>
         <td><span class="hash">${F.esc(f.refs)}</span></td></tr>`).join("")}
       </table></div>`;
