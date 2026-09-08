@@ -48,7 +48,7 @@
             <button class="hbtn" id="c_pj">📎 Joindre un fichier</button>
             <button class="hbtn dgr" id="c_del">✕ Abandonner</button>
           </div>
-          <div class="hint">Les destinataires <b>internes</b> (@iprospective.eu / .fr) ne passent pas
+          <div class="hint">Les destinataires <b>internes</b> (@exemple.fr / .net) ne passent pas
             par le SMTP : le message est livré en base, en un seul exemplaire (D010/D012). Le piège est
             le mélange interne + externe — le relais ne doit pas re-livrer ce qui l'a déjà été.</div>
         </div>`;
