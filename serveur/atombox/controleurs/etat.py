@@ -5,6 +5,7 @@ import os, re
 from fastapi import Depends, HTTPException, Query
 from ..api.routage import Controleur, action
 from ..api.securite import compte_courant
+from ..api.dependances import session_async
 from ..journal import DOMAINES, dossier, journal
 from ..schema.modeles import Compte
 
@@ -13,6 +14,17 @@ log = journal("etat")
 
 class EtatControleur(Controleur):
     prefixe = "/etat"
+
+    @action("GET", "")
+    async def etat(self, compte: Compte = Depends(compte_courant), s=Depends(session_async)):
+        from ..services.etat import etat as calculer
+        return await calculer(s, compte)
+
+    @action("GET", "/metriques")
+    async def metriques(self, compte: Compte = Depends(compte_courant), s=Depends(session_async)):
+        from fastapi.responses import PlainTextResponse
+        from ..services.etat import etat as calculer, metriques as rendre
+        return PlainTextResponse(rendre(await calculer(s, compte)), media_type="text/plain; version=0.0.4")
 
     @action("GET", "/journal")
     async def journal(self, domaine: str = Query("atombox", description="atombox (tout), erreurs, ou un domaine : " + ", ".join(DOMAINES)),

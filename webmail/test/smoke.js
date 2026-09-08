@@ -875,6 +875,39 @@ console.log("— sortir de la file, et y revenir (D030) ————————
   eq(m.motif_sortie, null, "désarchivé, il est de retour dans la file");
 }
 
+console.log("— état d'exploitation et règles (F122, F016) ——————");
+{
+  const detail = () => p.doc.getElementById("detail").innerHTML;
+  A.Controllers.Admin.ouvrir("etat"); await tick(); await tick(); await tick();
+  vrai(detail().includes("Files d'événements"), "le volet État montre les files");
+  vrai(detail().includes("Ingestion") && detail().includes("UID suivant"), "et le retard d'ingestion, dossier par dossier (D043)");
+  vrai(detail().includes("Magasin") && detail().includes("orphelins"), "et le magasin, avec les blobs sans porteur (D087)");
+  vrai(detail().includes("Journal") && detail().includes("session ouverte"), "le journal se lit dans l'interface (D152)");
+  const jd = p.doc.getElementById("j-niveau");
+  jd.value = "ERROR"; jd.onchange(); await tick(); await tick();
+  vrai(detail().includes("relais injoignable") && !detail().includes("session ouverte"),
+       "changer le niveau refiltre le journal, côté serveur");
+
+  const t = A.Store.ui.tabs.find(x => x.type === "admin");
+  t.volet = "regles"; A.Controllers.Admin.peindre(t); await tick(); await tick();
+  vrai(detail().includes("Aucune règle"), "aucune règle au départ");
+  clic(p.doc.getElementById("r-nouvelle")); await tick();
+  vrai(detail().includes('id="rform"'), "le formulaire s'ouvre");
+  p.doc.getElementById("r-nom").value = "Factures";
+  p.doc.getElementById("r-champ-0").value = "sujet";
+  p.doc.getElementById("r-val-0").value = "facture";
+  p.doc.getElementById("r-action").value = "drapeau";
+  clic(p.doc.getElementById("r-ok")); await tick(); await tick(); await tick();
+  vrai(detail().includes("Factures") && detail().includes("jamais"),
+       "la règle apparaît, et son compteur dit qu'elle n'a jamais servi (D075 § 1)");
+  eq(A.Store.filtres.length, 1, "elle est bien côté serveur");
+  clic(p.doc.getElementById("detail").querySelector("[data-rtoggle]")); await tick(); await tick();
+  vrai(detail().includes("inactive"), "on peut la désactiver sans la perdre");
+  clic(p.doc.getElementById("detail").querySelector("[data-rdel]")); await tick(); await tick();
+  eq(A.Store.filtres.length, 0, "et la supprimer — aucun message touché");
+  A.Controllers.Tabs.fermer(t.key);
+}
+
 console.log("— suivi d'envoi et relance (D099) ————————————————");
 {
   const envoye = A.Corpus.tous.find(m => m.sens === "out" && m.dossier !== "trash");
