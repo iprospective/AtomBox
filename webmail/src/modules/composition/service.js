@@ -69,14 +69,21 @@ VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj
     /* Renvoie le message créé, ou null si l'envoi est refusé. */
     enregistrer(d, brouillonId, envoyer) {
       if (envoyer && !d.a.trim()) return null;
-      /* un brouillon réenregistré remplace le précédent : DELETE puis POST (D141) */
-      if (brouillonId) ABX.Api.detacher(brouillonId);
+      /* Un brouillon réenregistré GARDE son identité (D089) : PUT, pas DELETE + POST. L'ancien
+         chemin changeait l'identifiant à chaque enregistrement, et l'onglet ouvert pointait
+         sur un message qui n'existait plus. */
 
       const m = Compose.fabriquer(d, envoyer ? "sent" : "drafts");
       if (!envoyer) m.composition = d;              // un brouillon se rouvre en composition
       /* la création passe par la couche d'accès (D141) : on rend la PROMESSE du
-         message créé — l'appelant n'ouvre l'onglet qu'une fois la réponse là */
-      const cree = ABX.Api.creer(m).then(() => ABX.Api.compteurs()).then(() => m);
+         message créé — l'appelant n'ouvre l'onglet qu'une fois la réponse là.
+         Un brouillon déjà enregistré se MET À JOUR (PUT) : il garde son identifiant, donc
+         son onglet ; il n'est recréé que s'il devient un envoi. */
+      const reprise = brouillonId && !envoyer;
+      if (reprise) m.id = brouillonId;
+      const cree = (reprise ? ABX.Api.reenregistrer(brouillonId, m) : ABX.Api.creer(m))
+        .then(() => { if (envoyer && brouillonId) return ABX.Api.detacher(brouillonId); })
+        .then(() => ABX.Api.compteurs()).then(() => m);
 
       if (!envoyer) {
         ABX.log("Enregistrer le brouillon",

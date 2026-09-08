@@ -251,6 +251,54 @@ def entetes_de_relais(m: email.message.EmailMessage, comm_id, expediteur: str, q
     m["Received"] = recu
     for cle, valeur in anciens: m[cle] = valeur
 
+async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: dict, magasin=None) -> dict | None:
+    """Un brouillon réenregistré GARDE son identité (D089 : un brouillon est un message marqué).
+    Le webmail supprimait puis recréait : le message changeait d'identifiant à chaque frappe
+    enregistrée, et l'onglet ouvert pointait sur un mort."""
+    boites = [b.boite_id for b in await boites_du_compte(s, compte)]
+    r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, Rattachement.boite_id.in_(boites)).limit(1))
+    if not r: return None
+    c = await s.get(Comm, comm_id); ds = await _dossiers_par_id(s, boites)
+    if c is None or c.sens != "out" or dossier_id_court(ds.get(r.dossier_id)) != "drafts":
+        return None                       # on ne réécrit QUE des brouillons : un message est un fait (D029)
+    boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
+    m = email.message.EmailMessage(policy=email.policy.SMTP)
+    m["From"] = "%s <%s>" % (compte.nom, adresse); m["To"] = ", ".join(corps.get("destinataires") or [])
+    m["Subject"] = corps.get("sujet") or "(sans sujet)"; m["Date"] = email.utils.formatdate(localtime=True)
+    m["Message-ID"] = email.utils.make_msgid(domain=adresse.split("@")[-1])
+    m.set_content(corps.get("corps") or "")
+    entetes_de_relais(m, comm_id, adresse, datetime.now(timezone.utc))
+    octets = m.as_bytes()
+    from ..ingestion.analyse import analyser
+    a = analyser(octets)
+    if magasin is not None: magasin.ecrire(str(comm_id), octets, remplacer=True)
+    c.sujet, c.sujet_normalise = a.sujet, a.sujet_normalise
+    c.snippet, c.corps_texte, c.taille = a.snippet, a.corps_texte or None, len(octets)
+    e = await s.get(CommEmail, comm_id)
+    if e is not None: e.message_id, e.headers = a.message_id, a.headers
+    for p in await s.scalars(select(Participant).where(Participant.comm_id == comm_id)): await s.delete(p)
+    await s.flush()
+    for role, nom, adr, ordre in a.participants:
+        s.add(Participant(comm_id=comm_id, role=role, adresse_id=(await _adresse(s, adr)).adresse_id, nom_affiche=nom, ordre=ordre))
+    await s.commit()
+    log.info("brouillon %s réenregistré par %s", comm_id, compte.login)
+    return serialiser(r, c, ds, adresse, extra={"destinataires": corps.get("destinataires") or [],
+                                                "corps": corps.get("corps") or "", "composition": corps.get("composition")})
+
+async def _adresse(s: AsyncSession, complete: str):
+    """l'adresse, créée au besoin — version asynchrone de celle de l'ingestion"""
+    from ..schema.modeles import Domaine
+    a = await s.scalar(select(Adresse).where(Adresse.adresse_complete == complete))
+    if a: return a
+    local, _, dom = complete.partition("@")
+    nom = (dom or "invalide").lower()
+    d = await s.scalar(select(Domaine).where(Domaine.nom_ascii == nom))
+    if d is None:
+        d = Domaine(domaine_id=uuid7(), nom_ascii=nom, nom_unicode=nom, heberge_par_nous=False); s.add(d); await s.flush()
+    a = Adresse(adresse_id=uuid7(), local=local, local_cmp=local.lower(), domaine_id=d.domaine_id, adresse_complete=complete)
+    s.add(a); await s.flush()
+    return a
+
 async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_client: str | None = None) -> dict | None:
     """POST /messages : un message écrit ici — brouillon (composition présente) ou envoyé.
     V0 : le message est en base et au magasin ; l'émission SMTP (F109) prend le relais par un événement."""

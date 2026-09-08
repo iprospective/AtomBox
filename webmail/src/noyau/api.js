@@ -68,6 +68,10 @@
     /* ---- écriture : ce qui touche le RATTACHEMENT (D036) ------------------- */
     /* PATCH /messages/{id}/rattachement */
     patcher:    (id, patch) => appelle("patcher", [id, patch]),
+    /* PUT /messages/{id} — réenregistrer un brouillon SANS changer son identité (D089) */
+    reenregistrer: (id, m) => appelle("reenregistrer", [id, m]),
+    /* le carnet auto-collecté des destinataires écrits (D109) — GET /carnet */
+    carnet: q => appelle("carnet", [q]),
     /* POST /messages — un message écrit ici (envoyé, brouillon) */
     creer:      m => appelle("creer", [m]),
     /* suppression définitive = détachement (D118) */
