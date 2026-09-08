@@ -10,12 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ..uuid7 import uuid7
 from ..magasin import Magasin
-from ..schema.modeles import Adresse, Blob, Comm, CommEmail, CommPieceJointe, Domaine, Participant, PieceJointe, Rattachement
+from ..schema.modeles import Adresse, Blob, Comm, CommEmail, CommPieceJointe, Domaine, Dossier, Participant, PieceJointe, Rattachement
 from .analyse import analyser
 from .identite import empreinte_identite
 from ..journal import journal
 from ..modules.accroches import accroches
 from ..modules import evenements
+from ..filtres import appliquer as appliquer_filtres, filtres_de
 
 log = journal("ingestion")
 
@@ -47,7 +48,7 @@ def blob(s: Session, magasin: Magasin, octets: bytes) -> Blob:
     return b
 
 def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, uid_validity=None, dossier_id=None,
-            date_recue: datetime | None = None, sens: str = "in") -> dict:
+            date_recue: datetime | None = None, sens: str = "in", dossier_alias: str | None = None) -> dict:
     a = analyser(octets)
     ctx = accroches.emettre("message.avant_ingestion", analyse=a, boite_id=boite_id, octets=octets, tags=[])
     if ctx.get("ignorer"):
@@ -92,8 +93,23 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
         evenements.emettre(s, "message.ingere", {"comm_id": str(comm_id), "boite_id": str(boite_id), "nature": a.nature, "sujet": a.sujet}, cible=None)
     r = s.get(Rattachement, (comm_id, boite_id))
     if r is None:
-        s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, drapeau=False, statut="nouveau", personnel=False,
-                           gele=False, dossier_id=dossier_id, uid_imap=uid))
+        # LE MOTEUR DE FILTRES (F016, D074) : il décide du dossier et de l'état d'arrivée. Il ne
+        # tourne qu'à la PREMIÈRE arrivée dans une boîte : rejouer les règles sur un message déjà
+        # rattaché défferait ce que l'utilisateur a fait depuis.
+        regles = appliquer_filtres(s, filtres_de(s, boite_id), a, {"dossier": dossier_alias or ""})
+        if regles["ignorer"]:
+            log.info("ignoré par une règle (%s) : %s", ", ".join(regles["regles"]), a.message_id)
+            s.commit(); return {"comm_id": comm_id, "nouveau": nouveau, "ignore": True, "identite": identite, "nature": a.nature, "pieces": len(a.pieces)}
+        p = regles["patch"]
+        cible = dossier_id
+        if regles["dossier"]:
+            d2 = s.scalar(select(Dossier).where(Dossier.boite_id == boite_id, Dossier.alias_imap == regles["dossier"]))
+            if d2 is not None: cible = d2.dossier_id
+            else: log.warning("règle « %s » : dossier %r inconnu dans cette boîte", ", ".join(regles["regles"]), regles["dossier"])
+        s.add(Rattachement(comm_id=comm_id, boite_id=boite_id,
+                           lu_le=datetime.now(timezone.utc) if p.get("lu") else None,
+                           drapeau=bool(p.get("drapeau")), statut=p.get("statut", "nouveau"),
+                           personnel=False, gele=False, dossier_id=cible, uid_imap=uid))
     elif r.uid_imap is None and uid is not None:
         r.uid_imap = uid
     s.commit()
