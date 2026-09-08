@@ -18,6 +18,7 @@ POINTS = {
     "session.ouverte":          "un compte vient de se connecter — ctx : compte, agent",
     "session.fermee":           "un compte s'est déconnecté — ctx : compte",
     "filtre.action":            "le moteur de filtres rencontre une action qu'il ne connaît pas — ctx : action, comm_id, parametres (F016)",
+    "rattachement.pousse":      "un état a été poussé vers IMAP (F113) — ctx : comm_id, boite_id",
 }
 
 class Accroches:

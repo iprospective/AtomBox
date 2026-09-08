@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..schema.modeles import Acces, Adresse, Boite, Comm, CommEmail, CommPieceJointe, Compte, Dossier, Filtre, Participant, PieceJointe, Rattachement
 from ..uuid7 import uuid7
 from ..journal import journal
+from ..sync import sync
 
 log = journal("api")
 
@@ -187,7 +188,7 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
     r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, _portee(boites)).limit(1))
     if not r: return None
     ds = await _dossiers_par_id(s, boites)
-    n = 0
+    n = 0; dossier_avant = r.dossier_id
     for k, v in (patch or {}).items():
         if k == "lu": r.lu_le = datetime.now(timezone.utc) if v else None; n += 1
         elif k == "statut" and v in [x["id"] for x in STATUTS]: r.statut = v; n += 1
@@ -208,6 +209,15 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
             r.restaurable_jusqu_au = datetime.now(timezone.utc) + timedelta(days=30); n += 1
         elif k == "tags": log.info("PATCH %s : tags ignorés en V0 (pas d'axe métier, D140b)", comm_id)
         else: log.debug("PATCH %s : champ ignoré %s", comm_id, k)
+    # SYNCHRONISATION MONTANTE (F113) : l'état part vers IMAP hors processus, jamais dans la
+    # requête — un serveur IMAP lent ou absent ne doit pas faire échouer un clic (D161).
+    # L'émission se fait ICI, au point de passage unique de l'API, et non dans un déclencheur ORM :
+    # insérer une ligne pendant le flush d'une autre est un piège (D158, D161).
+    if n and not sync.descendante() and any(k in (patch or {}) for k in ("lu", "drapeau", "dossier", "suppr")):
+        from ..modules import evenements
+        evenements.emettre(s, "rattachement.change",
+                           {"comm_id": str(comm_id), "boite_id": str(r.boite_id),
+                            "dossier_avant": str(dossier_avant) if dossier_avant else None})
     await s.commit()
     c = await s.get(Comm, comm_id); boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
     return {"modifies": n, "message": serialiser(r, c, ds, adresse)}

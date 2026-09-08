@@ -1,4 +1,4 @@
-"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-07T02:49:49 depuis le dictionnaire (D158).
+"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-08T02:02:24 depuis le dictionnaire (D158).
 NE PAS ÉDITER : corriger .mmi-pm/docs/dict/*.yml, régénérer. Les tables sont celles de schema.sql (F114)."""
 from __future__ import annotations
 import datetime, decimal, uuid
@@ -253,6 +253,7 @@ class Rattachement(Base):
     restaurable_jusqu_au: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dossier_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("dossier.dossier_id", name="fk_rattachement_dossier_id"), nullable=True)
     dossier_origine_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("dossier.dossier_id", name="fk_rattachement_dossier_origine_id"), nullable=True)
+    uid_imap: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     personnel: Mapped[bool] = mapped_column(Boolean, nullable=False)
     reveil_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     echeance_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

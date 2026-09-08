@@ -90,8 +90,12 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
                                   content_id=p.content_id, parametres=p.parametres))
         s.flush()
         evenements.emettre(s, "message.ingere", {"comm_id": str(comm_id), "boite_id": str(boite_id), "nature": a.nature, "sujet": a.sujet}, cible=None)
-    if not s.get(Rattachement, (comm_id, boite_id)):
-        s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, drapeau=False, statut="nouveau", personnel=False, gele=False, dossier_id=dossier_id))
+    r = s.get(Rattachement, (comm_id, boite_id))
+    if r is None:
+        s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, drapeau=False, statut="nouveau", personnel=False,
+                           gele=False, dossier_id=dossier_id, uid_imap=uid))
+    elif r.uid_imap is None and uid is not None:
+        r.uid_imap = uid
     s.commit()
     if nouveau: log.info("nouveau %s : %s, de %s, %d octets, %d pièce(s), nature %s", comm_id, a.sujet or "(sans sujet)", a.from_adresse, a.taille, len(a.pieces), a.nature)
     accroches.emettre("message.ingere", comm_id=comm_id, nouveau=nouveau, analyse=a, boite_id=boite_id, tags=ctx.get("tags", []))

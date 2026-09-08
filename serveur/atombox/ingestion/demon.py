@@ -13,7 +13,8 @@ import asyncio, os
 from ..journal import journal
 from sqlalchemy import select
 from ..db import session as ouvrir_session
-from ..schema.modeles import Adresse, Boite, Dossier
+from ..schema.modeles import Adresse, Boite, Dossier, Rattachement
+from ..sync.sync import appliquer_descendante
 from ..magasin import Magasin
 from ..uuid7 import uuid7
 from .imap import Releve
@@ -55,7 +56,32 @@ def relever_boite(s, magasin: Magasin, releve: Releve, boite_id, adresse: str) -
                 d.uid_validity, d.uid_suivant = validity, uid + 1; s.commit()
         if not releve.nouveaux(depuis):
             d.uid_validity, d.uid_suivant = validity, max(depuis, uidnext); s.commit()
+        # ce que les AUTRES clients ont changé descend maintenant (F113)
+        try: synchroniser_descendante(s, releve, boite_id, adresse, d)
+        except Exception as e:
+            s.rollback(); log.error("%s/%s : synchronisation descendante en échec — %s", adresse, alias, e)
     if n: log.info("%s : %d message(s) ingéré(s)", adresse, n)
+    return n
+
+
+def synchroniser_descendante(s, releve: Releve, boite_id, adresse: str, dossier, lot: int = 500) -> int:
+    """IMAP → AtomBox (F113) : ce que les AUTRES clients ont fait (lu dans Thunderbird, drapeau posé
+    depuis le téléphone) descend dans le rattachement. On ne relit que les UID qu'on connaît : un
+    message inconnu n'est pas un changement d'état, c'est une ingestion."""
+    ratts = list(s.scalars(select(Rattachement).where(Rattachement.boite_id == boite_id,
+                                                      Rattachement.dossier_id == dossier.dossier_id,
+                                                      Rattachement.uid_imap.isnot(None)).limit(lot)))
+    if not ratts: return 0
+    par_uid = {r.uid_imap: r for r in ratts}
+    n = 0
+    for uid, f in releve.drapeaux(sorted(par_uid)).items():
+        r = par_uid.get(uid)
+        if r is None: continue
+        change = appliquer_descendante(s, r, f)
+        if change:
+            n += 1
+            log.info("%s/%s uid %d : %s (venu d'IMAP)", adresse, dossier.alias_imap, uid, ", ".join(change))
+    if n: s.commit()
     return n
 
 async def surveiller_boite(boite_id, adresse: str, config: dict):
