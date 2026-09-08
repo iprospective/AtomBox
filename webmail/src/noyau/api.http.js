@@ -77,6 +77,12 @@
       cache.compteurs = (r && r.compteurs) || {};
       cache.virtuels = (r && r.virtuels) || []; cache.epingles = (r && r.epingles) || [];
       return cache.compteurs; }),
+    etat: () => req("GET", "/etat"),
+    journal: (domaine, niveau, filtre) => req("GET", "/etat/journal?" + q_({ domaine, niveau, filtre })).then(r => (r && r.lignes) || []),
+    filtres: () => req("GET", "/filtres"),
+    creerFiltre: f => req("POST", "/filtres", f),
+    modifierFiltre: (id, f) => req("PATCH", "/filtres/" + encodeURIComponent(id), f),
+    supprimerFiltre: id => req("DELETE", "/filtres/" + encodeURIComponent(id)),
     envoi: id => req("GET", "/envois/" + encodeURIComponent(id)),
     relancer: id => req("POST", "/envois/" + encodeURIComponent(id) + "/relancer"),
     rechercher: q => req("GET", "/recherche?" + q_({ q })).then(r => { const l = (r && r.messages) || []; l.forEach(garde); return l; }),

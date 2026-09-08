@@ -225,6 +225,31 @@
       ${R.contexte("envoi", { e })}</div>`;
   });
 
+  /* Le formulaire d'une RÈGLE (F016, D074) : des critères en ET ou en OU, une action, un ordre.
+     Ni langage ni syntaxe à apprendre — Sieve en avait une, et c'est ce qui rendait ses règles
+     illisibles à qui ne l'écrivait pas. */
+  R.define("regle.form", ({ d, form }) => {
+    const opt = (l, sel) => l.map(x => `<option${x === sel ? " selected" : ""}>${F.esc(x)}</option>`).join("");
+    return `<div class="box" id="rform"><h4>Nouvelle règle</h4>
+      <div class="frow"><input id="r-nom" placeholder="Nom de la règle" value="${F.esc(form.nom || "")}"></div>
+      <div class="dmeta">Si ${form.mode === "ou" ? "<b>l'un</b> des critères" : "<b>tous</b> les critères"} :
+        <button class="hbtn" id="r-mode">${form.mode === "ou" ? "passer en ET" : "passer en OU"}</button></div>
+      ${form.criteres.map((c, i) => `<div class="frow rcrit">
+        <select id="r-champ-${i}" class="r-champ">${opt(d.champs, c.champ)}</select>
+        <select id="r-op-${i}" class="r-op">${opt(d.operateurs, c.operateur)}</select>
+        <input id="r-val-${i}" class="r-val" placeholder="valeur" value="${F.esc(c.valeur || "")}">
+        </div>`).join("")}
+      <div class="frow"><button class="hbtn" id="r-plus">+ critère</button></div>
+      <div class="dmeta">Alors :</div>
+      <div class="frow">
+        <select id="r-action">${opt(d.actions, form.action)}</select>
+        <input id="r-dossier" placeholder="dossier (pour « classer »)" value="${F.esc(form.dossier || "")}"
+          ${form.action === "classer" ? "" : "disabled"}>
+      </div>
+      <div class="frow"><button class="hbtn on" id="r-ok">Créer la règle</button>
+        <button class="hbtn" id="r-non">Annuler</button></div></div>`;
+  });
+
   /* ---- arborescence ------------------------------------------------------ */
   R.define("nav.node", ({ o, cls, sel }) =>
     `<div class="node ${cls || ""}${sel ? " sel" : ""}" data-id="${F.esc(o.id)}"

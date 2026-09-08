@@ -47,6 +47,15 @@
     /* l'arborescence de l'utilisateur : compteurs en UNE passe (D078), dossiers
        virtuels personnels (D143), épingles (D144) — GET /arborescence */
     compteurs:  () => appelle("compteurs", []),
+    /* l'état d'exploitation (F122, D152) : retard d'ingestion, files, magasin, règles muettes */
+    etat: () => appelle("etat", []),
+    /* le journal, par domaine et par niveau — GET /etat/journal */
+    journal: (domaine, niveau, filtre) => appelle("journal", [domaine, niveau, filtre]),
+    /* les règles du moteur (F016, D074) */
+    filtres: () => appelle("filtres", []),
+    creerFiltre: f => appelle("creerFiltre", [f]),
+    modifierFiltre: (id, f) => appelle("modifierFiltre", [id, f]),
+    supprimerFiltre: id => appelle("supprimerFiltre", [id]),
     /* le suivi d'un message émis (D099) : état, destinataires, tentatives — GET /envois/{id} */
     envoi: id => appelle("envoi", [id]),
     /* relancer un envoi qui n'est pas parti — POST /envois/{id}/relancer (idempotent) */

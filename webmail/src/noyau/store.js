@@ -21,6 +21,8 @@
     crees: [],
     /* dossiers virtuels personnels (D143) : des filtres sans action, portés par le compte */
     virtuels: [],
+    /* les règles du moteur, côté POC (F016) : elles vivent le temps de la session simulée */
+    filtres: [],
     seq: 0,
 
     /* état d'interface, persisté pour retrouver la session telle qu'on l'a laissée */
@@ -54,6 +56,7 @@
       Object.assign(this.ratt, d.ratt || {});
       (d.crees || []).forEach(m => this.crees.push(m));
       (d.virtuels || []).forEach(v => this.virtuels.push(v));
+      (d.filtres || []).forEach(f => this.filtres.push(f));
       this.seq = d.seq || 0;
       ["folder","filtre","tri","sens","statut","ordreAxes","triAxe","jalon","triFeat","triFeatDesc","epingles"]
         .forEach(k => { if (d.ui && d.ui[k]) this.ui[k] = d.ui[k]; });
@@ -67,7 +70,7 @@
          message lui-même, ce qui ferait échouer la sérialisation en silence */
       const sansPrive = (k, v) => k.startsWith("_") ? undefined : v;
       try { localStorage.setItem(CLE, JSON.stringify({
-        v: VERSION, seq: this.seq, ratt: this.ratt, crees: this.crees, virtuels: this.virtuels,
+        v: VERSION, seq: this.seq, ratt: this.ratt, crees: this.crees, virtuels: this.virtuels, filtres: this.filtres,
         ui: { folder: this.ui.folder, filtre: this.ui.filtre, tri: this.ui.tri,
               sens: this.ui.sens, statut: this.ui.statut,
               ordreAxes: this.ui.ordreAxes, triAxe: this.ui.triAxe, jalon: this.ui.jalon,

@@ -4,18 +4,22 @@
    choix des fournisseurs de la suite. */
 (function (ABX) {
   "use strict";
-  const F = ABX.Fmt, Fx = ABX.Fixtures, P = ABX.Providers;
+  const F = ABX.Fmt, R = ABX.Registry, P = ABX.Providers;
+  const Fx = () => ABX.Fixtures;      // POC seulement : les volets historiques s'en servent encore
 
   const VOLETS = [["boites","Domaines & boîtes"], ["apps","Applications & jetons"],
-                  ["axes","Axes & tags"], ["suite","Suite collaborative"],
-                  ["canaux","Canaux"]];
+                  ["axes","Axes & tags"], ["etat","État & journal"], ["regles","Règles"],
+                  ["suite","Suite collaborative"], ["canaux","Canaux"]];
+  /* Le webmail EST l'interface d'administration (D159) : ces deux volets ne sont pas une
+     seconde application, ce sont des pages gardées par un rôle — en V0 il n'y en a pas
+     encore, tout compte les voit (D072 viendra en V1). */
   const jalon = v => v && v > 1 ? `<span class="jalon v${v}">V${v}</span>` : "";
 
   function boites() {
     return `<div class="box"><h4>Domaines</h4>
       <table class="erpl"><tr><th>Domaine</th><th>Rôle</th><th>Boîtes</th><th>Alias</th>
         <th>Ingestion</th></tr>
-      ${Fx.DOMAINES.map(d => `<tr><td><b>${F.esc(d.nom)}</b></td>
+      ${Fx().DOMAINES.map(d => `<tr><td><b>${F.esc(d.nom)}</b></td>
         <td><span class="st ${d.role === "pilote" ? "ok" : "wait"}">${d.role}</span></td>
         <td class="num">${d.boites}</td><td class="num">${d.alias}</td>
         <td>${F.esc(d.ingestion)}</td></tr>`).join("")}</table>
@@ -25,7 +29,7 @@
 
     <div class="box"><h4>Boîtes</h4>
       <table class="erpl"><tr><th>Adresse</th><th>Type</th><th>Accès</th><th>Messages</th><th></th></tr>
-      ${Fx.BOITES.map(b => `<tr><td><b>${F.esc(b.adresse)}</b></td>
+      ${Fx().BOITES.map(b => `<tr><td><b>${F.esc(b.adresse)}</b></td>
         <td>${b.type === "alias" ? `alias → ${F.esc(b.cible)}` : F.esc(b.type)}</td>
         <td class="num">${b.acces != null ? b.acces + " compte(s)" : "—"}</td>
         <td class="num">${b.msg != null ? b.msg.toLocaleString("fr-FR") : "—"}</td>
@@ -42,7 +46,7 @@
     return `<div class="box"><h4>Applications connectées</h4>
       <table class="erpl"><tr><th>Application</th><th>Axes</th><th>Droits</th><th>Portée</th>
         <th>Jeton</th><th>Vue</th><th></th></tr>
-      ${Fx.APPLICATIONS.map(a => `<tr>
+      ${Fx().APPLICATIONS.map(a => `<tr>
         <td><b>${F.esc(a.label)}</b><br><span class="hash">${F.esc(a.code)}</span></td>
         <td>${a.axes.map(x => `<span class="tag ax">${F.esc(x)}</span>`).join(" ")}</td>
         <td>${F.esc(a.droits)}</td><td>${F.esc(a.portee)}</td>
@@ -65,9 +69,9 @@
   function axes() {
     return `<div class="box"><h4>Axes de tags</h4>
       <table class="erpl"><tr><th>Axe</th><th>Valeurs</th><th>Posé par</th><th>ACL</th><th></th></tr>
-      ${Fx.AXES.map(a => `<tr><td>${a.icon} <b>${F.esc(a.label)}</b>
+      ${Fx().AXES.map(a => `<tr><td>${a.icon} <b>${F.esc(a.label)}</b>
           <br><span class="hash">${F.esc(a.id)}</span></td>
-        <td class="num">${Fx.valeurs[a.id].length}</td>
+        <td class="num">${Fx().valeurs[a.id].length}</td>
         <td>${a.id === "notification" || a.id === "social"
               ? `<span class="tag">filtre AtomBox</span>`
               : `<span class="tag">dolibarr-mmi</span>`}</td>
@@ -143,7 +147,105 @@
         jointure sur le chemin le plus chaud du produit. <b>Q038</b>.</div></div>`;
   }
 
-  const RENDU = { boites, apps, axes, suite, canaux };
+  const RENDU = {
+    etat, regles, boites, apps, axes, suite, canaux };
+
+  /* ---- État & journal (F122, D152) — l'état est CHARGÉ, la page se peint deux fois -------- */
+  const ko = o => o >= 1048576 ? (o / 1048576).toFixed(1) + " Mio" : Math.round(o / 1024) + " Kio";
+  const NIV = { ERROR: "due", WARNING: "pause", INFO: "", DEBUG: "" };
+
+  function etat() {
+    const e = ABX.Views.Admin._etat;
+    if (!e) return `<div class="box"><div class="empty">Chargement de l'état…</div></div>`;
+    const f = e.files, retard = f.retard_secondes;
+    const alerte = f.abandonnes || f.en_echec || retard > 300;
+    return `<div class="box ${alerte ? "due" : ""}"><h4>${alerte ? "⚠" : "✓"} Files d'événements
+        <button class="hbtn" id="etat-recharger" style="margin-left:auto">↻</button></h4>
+      <div class="dmeta">Ce qu'AtomBox n'a pas encore fait, et ce qu'il a renoncé à faire. Un
+        événement abandonné est une action perdue : c'est la ligne à lire en premier (D152).</div>
+      <div class="kpis">
+        ${[["en attente", f.en_attente, ""], ["en échec", f.en_echec, f.en_echec ? "due" : ""],
+           ["abandonnés", f.abandonnes, f.abandonnes ? "due" : ""], ["traités", f.traites, "ok"],
+           ["retard", retard > 60 ? Math.round(retard / 60) + " min" : retard + " s", retard > 300 ? "due" : ""]]
+          .map(([l, v, c]) => `<div class="kpi ${c}"><b>${F.esc(String(v))}</b><span>${l}</span></div>`).join("")}
+      </div>
+      ${(e.en_echec || []).length ? `<table class="erpl" style="margin-top:8px">
+        <tr><th>Événement</th><th>Tentatives</th><th>Raison</th><th>Depuis</th></tr>
+        ${e.en_echec.map(x => `<tr><td>${F.esc(x.type)}</td><td>${x.tentatives}</td>
+          <td class="hint">${F.esc(x.erreur || "")}</td><td class="hash">${F.esc((x.cree_le || "").slice(0, 19).replace("T", " "))}</td></tr>`).join("")}
+        </table>` : ""}</div>
+
+    <div class="box"><h4>Ingestion — le retard, dossier par dossier</h4>
+      <div class="dmeta">C'est déjà une donnée : l'UID connu du serveur contre celui qu'on a ingéré (D043).
+        Un dossier jamais relevé se voit tout de suite.</div>
+      <table class="erpl"><tr><th>Boîte</th><th>Dossier</th><th>Messages</th><th>UID suivant</th><th>État</th></tr>
+      ${(e.ingestion || []).map(d => `<tr><td class="hint">${F.esc(d.boite)}</td><td>${F.esc(d.dossier)}</td>
+        <td>${d.messages}</td><td class="hash">${d.uid_suivant === null ? "—" : d.uid_suivant}</td>
+        <td>${d.jamais_releve ? `<span class="st due">jamais relevé</span>` : `<span class="st ok">à jour</span>`}</td></tr>`).join("")}
+      </table></div>
+
+    <div class="box"><h4>Magasin et contenu</h4>
+      <div class="kpis">
+        ${[["messages", e.contenu.messages, ""], ["pièces jointes", e.contenu.pieces_jointes, ""],
+           ["blobs", e.magasin.blobs, ""], ["stocké", ko(e.magasin.octets_stockes), ""],
+           ["gagné", Math.round(e.magasin.gain * 100) + " %", "ok"],
+           ["orphelins", e.magasin.orphelins, e.magasin.orphelins ? "pause" : ""]]
+          .map(([l, v, c]) => `<div class="kpi ${c}"><b>${F.esc(String(v))}</b><span>${l}</span></div>`).join("")}
+      </div>
+      <div class="hint" style="margin-top:6px">Magasin : <code>${F.esc(e.magasin.chemin)}</code> ·
+        journaux : <code>${F.esc(e.journaux || "")}</code>${e.magasin.orphelins
+        ? ` · <b>${e.magasin.orphelins} blob(s) sans porteur</b> — le ramasse-miettes doit passer (D087)` : ""}</div></div>
+
+    ${(e.regles_muettes || []).length ? `<div class="box pause"><h4>Règles muettes</h4>
+      <div class="dmeta">Elles n'ont jamais rien attrapé. C'est ainsi qu'on trouve un « allof »
+        saisi à la place d'un « anyof » — celui du chapitre 14 dormait depuis des années (D075 § 1).</div>
+      ${e.regles_muettes.map(r => `<div class="kv"><span class="k">${F.esc(r.nom)}</span>
+        <span class="v"><span class="st pause">jamais déclenchée</span></span></div>`).join("")}</div>` : ""}
+
+    <div class="box"><h4>Journal</h4>
+      <div class="frow">
+        <select id="j-domaine">${["atombox", "erreurs", "auth", "api", "imap", "ingestion", "magasin", "filtres", "apps", "schema", "demon", "etat"]
+          .map(d => `<option${d === (ABX.Views.Admin._jd || "atombox") ? " selected" : ""}>${d}</option>`).join("")}</select>
+        <select id="j-niveau">${["DEBUG", "INFO", "WARNING", "ERROR"]
+          .map(n => `<option${n === (ABX.Views.Admin._jn || "INFO") ? " selected" : ""}>${n}</option>`).join("")}</select>
+        <input id="j-filtre" placeholder="un mot à retrouver" value="${F.esc(ABX.Views.Admin._jf || "")}">
+      </div>
+      <div class="journal">${(ABX.Views.Admin._journal || []).length
+        ? ABX.Views.Admin._journal.map(l => `<div class="jl"><span class="hash">${F.esc(l.quand)}</span>
+            <span class="st ${NIV[l.niveau] || ""}">${F.esc(l.niveau)}</span>
+            <span class="jd">${F.esc(l.domaine)}</span> ${F.esc(l.message)}</div>`).join("")
+        : `<div class="hint">Rien à ce niveau pour ce domaine.</div>`}</div>
+      ${R.contexte("etat.journal", {})}</div>`;
+  }
+
+  /* ---- Règles (F016, D074) ---------------------------------------------------------------- */
+  function regles() {
+    const d = ABX.Views.Admin._filtres;
+    if (!d) return `<div class="box"><div class="empty">Chargement des règles…</div></div>`;
+    const f = d.filtres || [];
+    return `<div class="box"><h4>${f.length} règle${f.length > 1 ? "s" : ""}
+        <button class="hbtn on" id="r-nouvelle" style="margin-left:auto">+ Nouvelle règle</button></h4>
+      <div class="dmeta">Elles s'évaluent <b>dans l'ordre</b>, à l'arrivée du message. « Arrêter »
+        interrompt la chaîne, comme le <code>stop</code> de Sieve. Le compteur dit ce qui sert
+        vraiment (D074, D075 § 1).</div>
+      ${f.length ? `<table class="erpl"><tr><th>#</th><th>Règle</th><th>Si…</th><th>Alors</th>
+          <th>Déclenchée</th><th></th></tr>
+        ${f.map(x => `<tr>
+          <td>${x.ordre}</td>
+          <td><b>${F.esc(x.nom)}</b>${x.actif ? "" : ` <span class="st pause">inactive</span>`}</td>
+          <td class="hint">${((x.predicat || {}).criteres || []).map(c =>
+            `${F.esc(c.champ)} <i>${F.esc(c.operateur)}</i> ${F.esc(String(c.valeur ?? ""))}`)
+            .join(((x.predicat || {}).mode === "ou") ? " <b>ou</b> " : " <b>et</b> ")}</td>
+          <td>${F.esc((x.action || {}).type || "")}${(x.action || {}).dossier ? " → " + F.esc(x.action.dossier) : ""}</td>
+          <td>${x.nb_declenchements ? `<span class="st ok">${x.nb_declenchements}×</span>`
+                                    : `<span class="st pause">jamais</span>`}</td>
+          <td><button class="hbtn ic" data-rtoggle="${F.esc(x.id)}" title="${x.actif ? "Désactiver" : "Activer"}">${x.actif ? "⏸" : "▶"}</button>
+              <button class="hbtn ic dgr" data-rdel="${F.esc(x.id)}" title="Supprimer">✕</button></td></tr>`).join("")}
+        </table>` : `<div class="hint">Aucune règle. En V0 le serveur trie encore à la livraison
+          (Sieve) ; les règles existantes seront reprises ici en V1 (D147).</div>`}
+      ${R.contexte("regles", {})}</div>
+    ${ABX.Views.Admin._nouvelle ? R.render("regle.form", { d, form: ABX.Views.Admin._nouvelle }) : ""}`;
+  }
 
   ABX.Views = ABX.Views || {};
   ABX.Views.Admin = {
