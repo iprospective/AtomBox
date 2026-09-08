@@ -745,19 +745,28 @@ const hf = p.doc.getElementById("detail").innerHTML;
 const nFeat = A.Views.Pages.FEATURES.reduce((s, [, l]) => s + l.length, 0);
 vrai(nFeat >= 40, nFeat + " fonctionnalités listées");
 vrai(hf.includes("V4"), "les jalons y figurent");
-vrai(hf.includes("Avancement") && hf.includes("éprouvé"), "l'avancement du CODE est une colonne à part (8 sept. 2026)");
 {
+  /* UNE échelle, pas deux champs : « décidé → maquetté → codé → éprouvé » est une progression */
+  const ECH = ["à trancher", "décidé", "maquetté", "codé", "éprouvé", "en pause", "écarté"];
   const F = A.CDC.dict.fonctionnalites;
-  vrai(F.every(f => ["à faire", "maquetté", "codé", "éprouvé"].includes(f.avancement || "à faire")),
-       "chaque fonctionnalité a un avancement de la liste fermée");
+  vrai(F.every(f => ECH.includes(f.etat)), "chaque fonctionnalité a un état de la liste fermée");
+  vrai(F.every(f => f.avancement === undefined), "un seul champ : « avancement » a disparu");
+  vrai(hf.includes("éprouvé") && hf.includes("une question ouverte la bloque"), "la légende dit l'échelle en entier");
   const v0 = F.filter(f => f.jalon === 0);
-  vrai(v0.filter(f => f.avancement === "éprouvé").length >= 5, "la V0 a des fonctionnalités éprouvées en réel");
-  vrai(v0.every(f => (f.avancement || "à faire") !== "à faire"), "et plus rien « à faire » en V0");
+  vrai(v0.filter(f => f.etat === "éprouvé").length >= 5, "la V0 a des fonctionnalités éprouvées en réel");
+  vrai(v0.every(f => ["maquetté", "codé", "éprouvé"].includes(f.etat)), "et plus rien qui ne soit au moins maquetté");
 }
 vrai(hf.includes("Moteur de filtres"), "le moteur de filtres (D074) est listé");
 vrai(hf.includes("DMARC"), "la délivrabilité DMARC est listée");
 vrai(hf.includes("expéditeur externe"), "l'affichage sûr est listé");
 A.Controllers.Pages.ouvrir("roadmap");
+{
+  const hr = () => p.doc.getElementById("detail").innerHTML;
+  vrai(hr().includes("Avancement :"), "la feuille de route montre l'avancement de chaque jalon");
+  const F = A.CDC.dict.fonctionnalites.filter(f => f.jalon === 0);
+  const n = F.filter(f => f.etat === "éprouvé").length;
+  vrai(hr().includes(">éprouvé</span> " + n), "et ce compte EST celui des fonctionnalités — une donnée, deux vues");
+}
 vrai(A.Views.Pages.ROADMAP.length === A.CDC.dict.jalons.length && A.Views.Pages.ROADMAP.length >= 5,
      A.Views.Pages.ROADMAP.length + " jalons dans la feuille de route — autant que le dictionnaire");
 vrai(p.doc.getElementById("detail").innerHTML.includes("jalon v6"),
