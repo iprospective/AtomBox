@@ -9,6 +9,7 @@ from ..controleurs.messages import MessagesControleur
 from ..controleurs.dossiers import DossiersVirtuelsControleur, ParametresControleur, PiecesJointesControleur
 from ..controleurs.recherche import RechercheControleur
 from ..emission.module import ModuleEmission
+from ..sync.module import ModuleSync
 from ..journal import journal
 
 class ModuleSession(Module):
@@ -32,4 +33,4 @@ class ModuleMessages(Module):
     nom = "messages"; version = "0.1"; description = "référentiels, arborescence, liste, message, fil, rattachement, création — ce que le webmail lit (D141)"; interne = True
     controleurs = [ReferentielsControleur, ArborescenceControleur, MessagesControleur, DossiersVirtuelsControleur, ParametresControleur, PiecesJointesControleur, RechercheControleur]
 
-MODULES_INTERNES = [ModuleSession, ModuleEtat, ModuleIngestion, ModuleMessages, ModuleEmission]
+MODULES_INTERNES = [ModuleSession, ModuleEtat, ModuleIngestion, ModuleMessages, ModuleEmission, ModuleSync]

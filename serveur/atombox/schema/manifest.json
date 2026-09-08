@@ -1,5 +1,5 @@
 {
- "genere": "2026-09-07T02:49:49",
+ "genere": "2026-09-08T02:02:24",
  "tables": {
   "comm": {
    "cle": [
@@ -941,6 +941,11 @@
     {
      "nom": "dossier_origine_id",
      "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "uid_imap",
+     "type": "bigint",
      "obligatoire": false
     },
     {
