@@ -141,18 +141,18 @@
     "Bonjour,\n\nLe document est en pièce jointe. N'hésitez pas si vous avez des questions.\n\nBien à vous,"];
 
   /* Le compte connecté et ses boîtes — l'identité d'envoi est celle d'une BOÎTE (Q026). */
-  const MOI = { nom:"Mathieu Moulin", boites: [
-    { id:"b1", adresse:"mathieu@iprospective.eu",   label:"Perso" },
-    { id:"b2", adresse:"contact@iprospective.eu",   label:"Boîte commune" },
-    { id:"b3", adresse:"commandes@iprospective.eu", label:"Commandes" },
+  const MOI = { nom:"Camille Martin", boites: [
+    { id:"b1", adresse:"moi@exemple.fr",   label:"Perso" },
+    { id:"b2", adresse:"contact@exemple.fr",   label:"Boîte commune" },
+    { id:"b3", adresse:"commandes@exemple.fr", label:"Commandes" },
   ]};
-  const interne = a => /@iprospective\.(eu|fr)$/i.test((a || "").trim());
+  const interne = a => /@exemple\.(fr|net)$/i.test((a || "").trim());
 
   /* Administration : ce qu'un exploitant doit pouvoir régler sans base de données. */
   const DOMAINES = [
-    { nom:"iprospective.eu", role:"pilote", boites:3, alias:7, mx:"mx1.iprospective.fr",
+    { nom:"exemple.fr", role:"pilote", boites:3, alias:7, mx:"mx1.exemple.fr",
       ingestion:"IMAP (lecture seule)", note:"domaine de test, D049" },
-    { nom:"iprospective.fr", role:"recette", boites:9, alias:41, mx:"mx1.iprospective.fr",
+    { nom:"exemple.net", role:"recette", boites:9, alias:41, mx:"mx1.exemple.fr",
       ingestion:"IMAP (lecture seule)", note:"production intacte, D050" },
   ];
   /* D128 (B1) — les domaines sur lesquels une usurpation par nom se pose : le nom
@@ -160,13 +160,13 @@
      eux sont des SOSIES du domaine pilote (règle A8) — la lettre change, pas le
      coup d'œil. */
   const DOMAINES_LIBRES = ["gmail.com", "outlook.fr", "free.fr",
-                           "iprospective-eu.com", "iprospectlve.eu"];
+                           "exemple-fr.com", "exemp1e.fr"];
   const BOITES = [
-    { adresse:"mathieu@iprospective.eu",   type:"personnelle", quota:"12 Go", acces:1, msg:1284 },
-    { adresse:"contact@iprospective.eu",   type:"commune",     quota:"40 Go", acces:4, msg:8210 },
-    { adresse:"commandes@iprospective.eu", type:"commune",     quota:"40 Go", acces:3, msg:5602 },
-    { adresse:"info@iprospective.eu",      type:"alias",       cible:"contact@iprospective.eu" },
-    { adresse:"sav@iprospective.eu",       type:"alias",       cible:"contact@iprospective.eu" },
+    { adresse:"moi@exemple.fr",   type:"personnelle", quota:"12 Go", acces:1, msg:1284 },
+    { adresse:"contact@exemple.fr",   type:"commune",     quota:"40 Go", acces:4, msg:8210 },
+    { adresse:"commandes@exemple.fr", type:"commune",     quota:"40 Go", acces:3, msg:5602 },
+    { adresse:"info@exemple.fr",      type:"alias",       cible:"contact@exemple.fr" },
+    { adresse:"sav@exemple.fr",       type:"alias",       cible:"contact@exemple.fr" },
   ];
   const APPLICATIONS = [
     { code:"dolibarr-mmi",  label:"Dolibarr — MMI Négoce", type:"dolibarr",
@@ -174,7 +174,7 @@
       jeton:"abx_tk_7f3c…", vu:"il y a 4 min" },
     { code:"redmine-ipro",  label:"Redmine — support", type:"redmine",
       axes:["sav","projet","developpement"], droits:"lire, écrire",
-      portee:"sav@iprospective.eu, dev@iprospective.eu",
+      portee:"sav@exemple.fr, dev@exemple.fr",
       jeton:"abx_tk_91ba…", vu:"il y a 2 h" },
     { code:"nextcloud-mmi", label:"Nextcloud — partage", type:"nextcloud",
       axes:["partenaire"], droits:"lire", portee:"tout le domaine",

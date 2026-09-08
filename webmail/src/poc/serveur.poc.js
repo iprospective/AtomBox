@@ -92,7 +92,7 @@
       const brut = [
         ["INFO", "ingestion", "nouveau 01a07b28 : Devis 4521, de jean@tessier-industries.example, 8 pièce(s)"],
         ["DEBUG", "imap", "FETCH uid 42 : 8214 octets, \\Seen"],
-        ["INFO", "auth", "session ouverte pour mathieu (Firefox)"],
+        ["INFO", "auth", "session ouverte pour camille (Firefox)"],
         ["WARNING", "imap", "IDLE refusé : reconnexion dans 60 s"],
         ["ERROR", "apps", "événement message.a_envoyer : tentative 1 en échec — relais injoignable"],
         ["INFO", "api", "GET /api/v1/messages → 200 en 12 ms"],

@@ -61,7 +61,7 @@ const { creerDocument } = require("./fake-dom");
   const v3 = demarrer(v.ls, { session: null }); await drainer(v3);
   vrai(v3.ABX.Corpus === undefined && v3.doc.getElementById("connexion").innerHTML.includes("c_user"), "se déconnecter ramène à la porte, sans rien du POC");
   const w = demarrer(creerStockage(), { session: null }); await drainer(w);
-  w.doc.getElementById("c_user").value = "mathieu"; w.doc.getElementById("c_pass").value = "secret";
+  w.doc.getElementById("c_user").value = "camille"; w.doc.getElementById("c_pass").value = "secret";
   await w.ABX.Controllers.Connexion.soumettre();
   vrai(w.ls.getItem("abx.session") === null && w.doc.getElementById("connexion").innerHTML.includes("indisponible"),
        "d'autres identifiants vont au serveur — indisponible ici, la porte le dit et ne s'ouvre pas");
