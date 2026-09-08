@@ -44,6 +44,9 @@
     affichée en premier, le nom déclaré ensuite — le nom, lui, n'est pas vérifié.</div>`);
 
   ABX.ContexteAide = { points: R.pointsDuMode("aide") };
+  A("envoi", ({ e }) => `<div class="hint">${e && e.relancable
+    ? "Ce message n'est pas encore parti. AtomBox réessaie tout seul, à intervalle croissant ; « Relancer » redemande un essai immédiat."
+    : "Ce message a été remis au serveur d'envoi. La suite (acceptation par le destinataire) est rapportée par les avis de non-remise."}</div>`);
   A("connexion", () => `<div class="hint">Vos identifiants AtomBox — ceux de votre compte, pas ceux
     d'une boîte. Si votre organisation utilise une connexion unique, c'est elle qui s'ouvre.</div>`);
   A("nav.virtuel", () => `<div class="hint">Un dossier virtuel est un filtre : un message y

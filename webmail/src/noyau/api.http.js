@@ -39,6 +39,10 @@
   const ICONES = { "application/pdf": "📄", "image/": "🖼", "application/zip": "🗜", "text/": "📝" };
   const icone = mime => (Object.entries(ICONES).find(([k]) => (mime || "").startsWith(k)) || [0, "📎"])[1];
   const normaliser = m => {
+    /* la LISTE sert un message sans corps ni pièces ; les vues lisent des tableaux — jamais undefined */
+    if (!Array.isArray(m.tags)) m.tags = [];
+    if (!Array.isArray(m.destinataires)) m.destinataires = [];
+    if (m.pieces_jointes === undefined) m.pieces_jointes = [];
     if (typeof m.date_recue === "string") m.date_recue = Date.parse(m.date_recue);
     if (typeof m.sorti_le === "string") m.sorti_le = Date.parse(m.sorti_le);
     if (Array.isArray(m.pieces_jointes)) m.pieces_jointes = m.pieces_jointes.map(p => p.b ? p : {
@@ -46,7 +50,14 @@
       b: { pj_id: p.pj_id, mime: p.mime_detecte, ko: Math.round((p.octets || 0) / 1024), sha: (p.sha256 || "").slice(0, 12), refs: p.partage_par || 1, ic: icone(p.mime_detecte) } });
     return m;
   };
-  const garde = m => { if (m) cache.messages[m.id] = normaliser(m); return m; };
+  /* Le cache FUSIONNE : une réponse enrichit l'objet déjà en cache au lieu de le remplacer —
+     sinon l'état de session posé dessus (_fil chargé, _charge) disparaît à chaque réponse,
+     et le fil se recharge sans fin. Le serveur simulé rendait toujours le même objet : il
+     cachait ce bug du vrai monde. */
+  const garde = m => { if (!m) return m;
+    const n = normaliser(m), c = cache.messages[m.id];
+    if (c && c !== n) { Object.assign(c, n); return c; }
+    cache.messages[m.id] = n; return n; };
 
   const ImplHttp = {
     /* ---- lecture --------------------------------------------------------- */
@@ -58,13 +69,16 @@
     contenu: folder =>
       req("GET", "/messages?" + q_({ dossier: folder.id, kind: folder.kind, axe: folder.axe, tout: 1 }))
         .then(r => ((r && r.messages) || []).map(garde)),
-    message: id => req("GET", "/messages/" + encodeURIComponent(id)).then(garde),
+    /* le détail est COMPLET (corps, pièces) ; la liste ne l'est pas — le contrôleur le sait par _complet */
+    message: id => req("GET", "/messages/" + encodeURIComponent(id)).then(r => { const m = garde(r); if (m) m._complet = true; return m; }),
     fil: m => req("GET", "/messages/" + encodeURIComponent(m.id) + "/fil")
         .then(r => ((r && r.messages) || []).map(garde)),
     compteurs: () => req("GET", "/arborescence").then(r => {
       cache.compteurs = (r && r.compteurs) || {};
       cache.virtuels = (r && r.virtuels) || []; cache.epingles = (r && r.epingles) || [];
       return cache.compteurs; }),
+    envoi: id => req("GET", "/envois/" + encodeURIComponent(id)),
+    relancer: id => req("POST", "/envois/" + encodeURIComponent(id) + "/relancer"),
     rechercher: q => req("GET", "/recherche?" + q_({ q })).then(r => { const l = (r && r.messages) || []; l.forEach(garde); return l; }),
     /* le serveur sert {pj_id, nom, octets, mime_detecte, sha256, partage_par, message:{…}} ; la page
        d'administration lit encore {m, p, i} — même adaptateur que pour un message (la dette du module) */
@@ -82,6 +96,8 @@
     patcher: (id, patch) => req("PATCH", "/messages/" + encodeURIComponent(id) + "/rattachement", patch)
         .then(r => { if (r && r.message) garde(r.message); return r; }),
     creer: m => req("POST", "/messages", m).then(r => { if (r && r.message) garde(r.message); return r; }),
+    reenregistrer: (id, m) => req("PUT", "/messages/" + encodeURIComponent(id), m).then(r => { if (r && r.message) garde(r.message); return r; }),
+    carnet: q => req("GET", "/carnet?" + q_({ q })).then(r => (r && r.carnet) || []),
     detacher: id => req("DELETE", "/messages/" + encodeURIComponent(id) + "/rattachement")
         .then(r => { if (r && r.ok) delete cache.messages[id]; return r; }),
 

@@ -35,12 +35,16 @@ class Releve:
             if not m: continue
             if b"\\Noselect" in m.group("flags"): continue
             nom = m.group("nom").strip().strip(b'"').decode("utf-7" if b"&" in m.group("nom") else "ascii", "replace")
+            # les dossiers virtuels de Dovecot (virtual.All, virtual.Flagged…) sont des vues, pas des boîtes ;
+            # et LIST peut renvoyer un nom deux fois (abonnement + hiérarchie)
+            if nom.lower().startswith("virtual.") or nom in out: continue
             out.append(nom)
         return out
 
-    def selectionner(self, dossier: str) -> tuple[int, int]:
-        """EXAMINE (lecture seule) ; rend (UIDVALIDITY, UIDNEXT)"""
-        typ, _ = self.cnx.select(self._quoter(dossier), readonly=True)
+    def selectionner(self, dossier: str, ecriture: bool = False) -> tuple[int, int]:
+        """EXAMINE (lecture seule) par défaut ; SELECT quand on doit écrire un flag ou déplacer
+        (F113). Rend (UIDVALIDITY, UIDNEXT)."""
+        typ, _ = self.cnx.select(self._quoter(dossier), readonly=not ecriture)
         if typ != "OK":
             log.warning("EXAMINE %s refusé : %s", dossier, typ); raise RuntimeError("EXAMINE %s : %s" % (dossier, typ))
         def statut(nom):
@@ -70,6 +74,66 @@ class Releve:
         drapeaux = f.group(1).decode().split() if f else []
         log.debug("FETCH uid %d : %d octets, %s", uid, len(octets), " ".join(drapeaux) or "-")
         return octets, date, drapeaux
+
+    def drapeaux(self, uids: list[int]) -> dict[int, list[str]]:
+        """les FLAGS des UID demandés — la synchro DESCENDANTE : ce que les autres clients ont fait"""
+        if not uids: return {}
+        typ, data = self.cnx.uid("fetch", ",".join(str(u) for u in uids), "(FLAGS)")
+        if typ != "OK" or not data: return {}
+        out = {}
+        for item in data:
+            ligne = item if isinstance(item, bytes) else (item[0] if item else b"")
+            u = re.search(rb"UID (\d+)", ligne); f = re.search(rb"FLAGS \(([^)]*)\)", ligne)
+            if u and f: out[int(u.group(1))] = f.group(1).decode().split()
+        return out
+
+    def poser_drapeaux(self, uid: int, ajouter: list[str] = (), retirer: list[str] = ()) -> None:
+        """STORE (F113) : le dossier doit être sélectionné EN ÉCRITURE"""
+        for mode, flags in (("+FLAGS.SILENT", ajouter), ("-FLAGS.SILENT", retirer)):
+            if not flags: continue
+            typ, _ = self.cnx.uid("store", str(uid), mode, "(%s)" % " ".join(flags))
+            if typ != "OK":
+                log.warning("STORE %s uid %d %s : %s", mode, uid, flags, typ)
+                raise RuntimeError("STORE %s uid %d : %s" % (mode, uid, typ))
+        log.debug("STORE uid %d : +%s -%s", uid, " ".join(ajouter) or "-", " ".join(retirer) or "-")
+
+    def deplacer(self, uid: int, vers: str) -> int | None:
+        """MOVE (RFC 6851) si le serveur le sait, COPY + \\Deleted + EXPUNGE sinon. Rend le nouvel
+        UID si le serveur le donne (UIDPLUS), None sinon — le prochain passage le retrouvera."""
+        if "MOVE" in (self.cnx.capabilities or ()):
+            typ, data = self.cnx.uid("move", str(uid), self._quoter(vers))
+        else:
+            typ, data = self.cnx.uid("copy", str(uid), self._quoter(vers))
+            if typ == "OK":
+                self.cnx.uid("store", str(uid), "+FLAGS.SILENT", "(\\Deleted)")
+                self.cnx.expunge()
+        if typ != "OK":
+            log.warning("MOVE uid %d → %s : %s", uid, vers, typ); raise RuntimeError("MOVE uid %d → %s : %s" % (uid, vers, typ))
+        neuf = None
+        for item in (data or []):
+            m = re.search(rb"COPYUID \d+ \S+ (\d+)", item if isinstance(item, bytes) else b"")
+            if m: neuf = int(m.group(1))
+        log.info("uid %d déplacé vers %s%s", uid, vers, " (nouvel uid %d)" % neuf if neuf else "")
+        return neuf
+
+    def creer_dossier(self, nom: str) -> None:
+        """CREATE (F013) : tant qu'IMAP est la vérité (D140b), un dossier créé ici doit y exister"""
+        typ, data = self.cnx.create(self._quoter(nom))
+        if typ != "OK" and b"ALREADYEXISTS" not in b" ".join(data or []):
+            log.warning("CREATE %s : %s", nom, typ); raise RuntimeError("CREATE %s : %s" % (nom, typ))
+        self.cnx.subscribe(self._quoter(nom))
+        log.info("dossier %s créé", nom)
+
+    def renommer_dossier(self, ancien: str, neuf: str) -> None:
+        typ, _ = self.cnx.rename(self._quoter(ancien), self._quoter(neuf))
+        if typ != "OK": log.warning("RENAME %s → %s : %s", ancien, neuf, typ); raise RuntimeError("RENAME : %s" % typ)
+        log.info("dossier %s renommé en %s", ancien, neuf)
+
+    def supprimer_dossier(self, nom: str) -> None:
+        self.cnx.unsubscribe(self._quoter(nom))
+        typ, _ = self.cnx.delete(self._quoter(nom))
+        if typ != "OK": log.warning("DELETE %s : %s", nom, typ); raise RuntimeError("DELETE : %s" % typ)
+        log.info("dossier %s supprimé", nom)
 
     def idle(self, secondes: int = 25 * 60) -> bool:
         """attend un changement du dossier sélectionné (RFC 2177) ; rend True si quelque chose est arrivé.

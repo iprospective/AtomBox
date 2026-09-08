@@ -8,21 +8,36 @@
   const Message = {
     peindre(t) {
       const m = ABX.Api.cache.message(t.id);
-      /* pas en cache (onglet restauré, message créé à l'instant) : on le CHARGE par
-         la couche d'accès, on peint l'attente, et on repeint à la réponse — ou
-         « n'existe plus » sur 404 (D141) */
-      if (!m) {
-        if (t._charge) return void D.paint("detail", `<div class="empty">Ce message n'existe plus.</div>`);
-        t._charge = true;
-        ABX.Api.message(t.id).then(r => { if (St.ui.tab === t.key) Message.peindre(t); });
-        return void D.paint("detail", `<div class="empty">Chargement…</div>`);
+      /* pas en cache (onglet restauré, message créé à l'instant), ou en cache depuis la LISTE
+         seulement (sans corps ni pièces) : on CHARGE le détail par la couche d'accès, on
+         peint l'attente, et on repeint à la réponse — ou « n'existe plus » sur 404 (D141) */
+      if (!m || !m._complet) {
+        if (t._charge) { if (!m) return void D.paint("detail", `<div class="empty">Ce message n'existe plus.</div>`); }
+        else {
+          t._charge = true;
+          ABX.Api.message(t.id).then(r => { if (St.ui.tab === t.key) Message.peindre(t); });
+          if (!m) return void D.paint("detail", `<div class="empty">Chargement…</div>`);
+        }
       }
-      t._charge = false;
+      if (m && m._complet) t._charge = false;
+      if (!m) return;
       /* le fil se charge par promesse (D141) : on peint sans, puis on repeint avec —
          l'utilisateur voit le message tout de suite, le fil arrive ensuite */
-      if (!m._fil) ABX.Api.fil(m).then(fil => { m._fil = fil; if (St.ui.tab === t.key) Message.peindre(t); });
+      /* le suivi d'envoi (D099) : chargé comme le fil, par promesse, une seule fois */
+      if (m.sens === "out" && m._envoi === undefined && !m._envoiEnCours) { m._envoiEnCours = true;
+        ABX.Api.envoi(m.id).then(e => { m._envoi = e || null; m._envoiEnCours = false; if (St.ui.tab === t.key) Message.peindre(t); },
+                                 () => { m._envoi = null; m._envoiEnCours = false; }); }
+      if (!m._fil && !m._filEnCours) { m._filEnCours = true;
+        ABX.Api.fil(m).then(fil => { m._fil = fil; m._filEnCours = false; if (St.ui.tab === t.key) Message.peindre(t); }, () => { m._filEnCours = false; }); }
       const el = D.paint("detail", ABX.Views.Message.render(m, St.ui));
       App().bindRetour(el);
+
+      const relancer = el.querySelector("#relancer");
+      if (relancer) relancer.onclick = () => {
+        relancer.disabled = true; relancer.textContent = "↻ Relance…";
+        ABX.Api.relancer(m.id).then(() => ABX.Api.envoi(m.id)).then(e => { m._envoi = e || null; Message.peindre(t); },
+                                                                    () => { relancer.disabled = false; relancer.textContent = "↻ Relancer l'envoi"; });
+      };
 
       const suivre = el.querySelector("#suivre");
       if (suivre) suivre.onclick = () => ABX.Controllers.Tabs.ouvrir({ type:"msg", id:m.reference }, false);
@@ -61,7 +76,7 @@
       const liste = el.querySelector("#t_vals");
       if (!axe || !val) return;
       const proposer = () => {
-        const vals = (ABX.Fixtures.valeurs[axe.value] || []).slice(0, 200);
+        const vals = ((ABX.Ref.valeurs || {})[axe.value] || []).slice(0, 200);
         liste.innerHTML = vals.map(v => `<option value="${F.esc(v.label)}">`).join("");
       };
       axe.onchange = proposer;

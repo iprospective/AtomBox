@@ -199,6 +199,7 @@ class Rattachement(BaseModel):
     restaurable_jusqu_au: datetime.datetime | None = None
     dossier_id: uuid.UUID | None = None
     dossier_origine_id: uuid.UUID | None = None
+    uid_imap: int | None = None
     personnel: bool
     reveil_le: datetime.datetime | None = None
     echeance_le: datetime.datetime | None = None

@@ -146,15 +146,26 @@
   })();
   const FEAT_ID = {}; (ABX.CDC.dict.fonctionnalites || []).forEach(f => FEAT_ID[f.libelle] = f.id);
 
-  const ETATS = { "maquetté":"ok", "décidé":"wait", "à trancher":"due", "à venir":"",
+  /* UNE SEULE ÉCHELLE, ordonnée (8 septembre 2026) : on ne code pas ce qui n'est pas décidé, et
+     une fonctionnalité ne recule pas. Deux champs auraient été deux vérités à tenir d'accord. */
+  const ECHELLE = ["à trancher", "décidé", "maquetté", "codé", "éprouvé"];
+  const ETATS = { "éprouvé":"ok", "codé":"wait", "maquetté":"", "décidé":"", "à trancher":"due",
                   "en pause":"pause", "écarté":"" };
+  /* L'AVANCEMENT d'un lot : la même donnée, comptée. La feuille de route et la page
+     Fonctionnalités en sont deux vues — jamais deux comptes. */
+  function avancement(feats) {
+    const n = {};
+    feats.forEach(f => { n[f.etat] = (n[f.etat] || 0) + 1; });
+    return ECHELLE.slice().reverse().concat(["en pause", "écarté"])
+      .filter(k => n[k]).map(k => `<span class="st ${ETATS[k] || ""}">${k}</span> ${n[k]}`).join(" · ");
+  }
 
   /* Une seule table, TRIABLE par colonne — le regroupement par domaine n'est
      qu'un tri parmi d'autres. L'ordre de codage (rang topologique) en est un
      aussi : c'est lui qui rend la liste utile au moment de coder. */
   const COLS_F = [["rang","Ordre"], ["id","#"], ["libelle","Fonctionnalité"], ["domaine","Domaine"],
                   ["jalon","Jalon"], ["etat","État"], ["depend_de","Dépend de"], ["refs","Réf."]];
-  const ORDRE_ETAT = { "maquetté":0, "décidé":1, "à trancher":2, "à venir":3, "en pause":4 };
+  const ORDRE_ETAT = { "éprouvé":0, "codé":1, "maquetté":2, "décidé":3, "à trancher":4, "en pause":5, "écarté":6 };
   function features() {
     const ui = ABX.Store.ui, tri = ui.triFeat || "domaine", desc = !!ui.triFeatDesc;
     const feats = (ABX.CDC.dict.fonctionnalites || []).map(f => ({ ...f, rang: RANG[f.id] || null,
@@ -174,11 +185,13 @@
       : `<span class="jalon${v > 1 ? " v" + v : v === 0 ? " v0" : ""}">V${v}</span>`;
     return `<div class="box"><h4>${feats.length} fonctionnalités — triées par ${F.esc((COLS_F.find(c => c[0] === tri) || [])[1] || tri)}${desc ? " ↓" : " ↑"}</h4>
       <div class="hint">Cliquez un en-tête pour trier ; un second clic inverse. La même liste que la feuille de route, organisée autrement.
-        <span class="st ok">maquetté</span> visible dans ce POC ·
-        <span class="st wait">décidé</span> tranché au CDC ·
-        <span class="st due">à trancher</span> question ouverte ·
-        <span class="st">à venir</span> jalon ultérieur ·
-        <span class="st pause">en pause</span> écarté volontairement ·
+        <b>Une seule échelle</b>, de l'idée au réel :
+        <span class="st due">à trancher</span> une question ouverte la bloque ·
+        <span class="st">décidé</span> tranché au CDC ·
+        <span class="st">maquetté</span> l'interface le montre, aucun serveur derrière ·
+        <span class="st wait">codé</span> écrit et testé, jamais confronté au réel ·
+        <span class="st ok">éprouvé</span> a tourné pour de vrai — vraie base, vraie boîte, vrai relais ·
+        <span class="st pause">en pause</span> hors chaîne ·
         <span class="jalon v0">V0</span> la V1 réduite à l'essentiel (D140b)</div></div>
     <div class="box"><table class="erpl">
       <tr>${COLS_F.map(([k, l]) => `<th class="trih${k === tri ? " on" : ""}" data-trif="${k}">${l}${k === tri ? (desc ? " ↓" : " ↑") : ""}</th>`).join("")}</tr>
@@ -358,6 +371,8 @@
     ${ROADMAP.map(r => `<div class="box"><h4>
       <span class="jalon${r.v > 1 ? " v" + r.v : ""}">V${r.v}</span>
       ${F.esc(r.titre)} — <span class="st ${r.v === 1 ? "wait" : ""}">${r.etat}</span></h4>
+      <div class="hint"><b>Avancement :</b> ${avancement(r.feats)} — la même donnée que la page
+        Fonctionnalités, comptée par jalon.</div>
       <div class="hint">${F.esc(r.note)}</div>
       ${r.intention.length ? `<div class="hint" style="margin-top:6px"><i>Intention :</i> ${r.intention.map(F.esc).join(" · ")}</div>` : ""}
       <table class="erpl" style="margin-top:8px"><tr><th>Ordre</th><th>#</th><th>Fonctionnalité</th><th>Domaine</th><th>État</th><th>Dépend de</th></tr>

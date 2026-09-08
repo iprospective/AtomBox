@@ -182,6 +182,30 @@ def ordre_realisation(feats):
 # ---- jalons : la feuille de route DÉRIVÉE des fonctionnalités ----
 # Deux vues des mêmes F… : ici par jalon, dans l'ordre de réalisation ; en 16.13 par domaine.
 # Le « contenu » libre de jalons.yml devient une note d'intention ; la liste est calculée.
+ECHELLE = ["à trancher", "décidé", "maquetté", "codé", "éprouvé"]
+w("\n\n---\n\n## 16.10b — L'état d'une fonctionnalité\n")
+w("**Une seule échelle**, ordonnée : on ne code pas ce qui n'est pas décidé, et une fonctionnalité "
+  "ne recule pas. Deux champs auraient été deux vérités à tenir d'accord.\n")
+w("| État | ce que ça veut dire |\n|---|---|")
+for v, sens in (("à trancher", "une question ouverte la bloque — elle est dans `questions`"),
+                ("décidé", "tranché au CDC : la règle est écrite, rien n'est construit"),
+                ("maquetté", "l'interface le montre, aucun serveur derrière"),
+                ("codé", "écrit et testé des deux côtés, jamais confronté au réel"),
+                ("éprouvé", "a tourné **pour de vrai** — vraie base, vraie boîte, vrai relais. Le seul statut qui vaille une promesse à un client"),
+                ("en pause", "*hors chaîne* : écarté pour l'instant, avec sa condition de reprise (⏸)"),
+                ("écarté", "*hors chaîne* : abandon ou doublon ; la ligne reste, jalon `null`, l'identifiant n'est jamais réattribué")):
+    w("| **%s** | %s |" % (v, sens))
+w("")
+
+def avancement(feats):
+    """la répartition d'un lot de F… sur l'échelle — la MÊME donnée, comptée"""
+    n = {}
+    for f in feats: n[f["etat"]] = n.get(f["etat"], 0) + 1
+    ordre = ECHELLE[::-1] + ["en pause", "écarté"]
+    return " · ".join("**%s** %d" % (k, n[k]) for k in ordre if n.get(k))
+
+w("Tous jalons confondus : " + avancement(FEA) + ".\n")
+
 w("\n\n---\n\n## 16.11 — Feuille de route\n")
 w("Chaque jalon liste **toutes** ses fonctionnalités (`F…`), **dans l'ordre de réalisation** (16.12). "
   "C'est la même donnée que 16.13, organisée par jalon plutôt que par domaine — aucune fonctionnalité "
@@ -192,6 +216,7 @@ for j in JAL:
     v = int(j["id"].lstrip("V"))
     feats = sorted([f for f in FEA if f.get("jalon") == v], key=lambda f: (_rang.get(f["id"], 10**6), f["id"]))
     w("\n### %s — %s *(%s)* — %d fonctionnalités\n" % (j["id"], j["titre"], j.get("etat", ""), len(feats)))
+    if feats: w("**Avancement** : " + avancement(feats) + ".\n")
     if j.get("note"): w("> %s\n" % j["note"])
     if j.get("contenu"):
         w("*Intention :* " + " · ".join(j["contenu"]) + "\n")

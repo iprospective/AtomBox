@@ -47,6 +47,10 @@
     /* l'arborescence de l'utilisateur : compteurs en UNE passe (D078), dossiers
        virtuels personnels (D143), épingles (D144) — GET /arborescence */
     compteurs:  () => appelle("compteurs", []),
+    /* le suivi d'un message émis (D099) : état, destinataires, tentatives — GET /envois/{id} */
+    envoi: id => appelle("envoi", [id]),
+    /* relancer un envoi qui n'est pas parti — POST /envois/{id}/relancer (idempotent) */
+    relancer: id => appelle("relancer", [id]),
     /* recherche plein texte, portée du jeton, zone active par défaut — GET /recherche */
     rechercher: q => appelle("rechercher", [q]),
     /* toutes les pièces jointes (page d'administration des blobs) */
@@ -64,6 +68,10 @@
     /* ---- écriture : ce qui touche le RATTACHEMENT (D036) ------------------- */
     /* PATCH /messages/{id}/rattachement */
     patcher:    (id, patch) => appelle("patcher", [id, patch]),
+    /* PUT /messages/{id} — réenregistrer un brouillon SANS changer son identité (D089) */
+    reenregistrer: (id, m) => appelle("reenregistrer", [id, m]),
+    /* le carnet auto-collecté des destinataires écrits (D109) — GET /carnet */
+    carnet: q => appelle("carnet", [q]),
     /* POST /messages — un message écrit ici (envoyé, brouillon) */
     creer:      m => appelle("creer", [m]),
     /* suppression définitive = détachement (D118) */

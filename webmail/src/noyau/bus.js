@@ -7,6 +7,10 @@
      query-log.js, quand il est chargé, la remplace par un vrai journal. Sans lui,
      un geste qui "logue" ne fait rien — et surtout ne casse pas. */
   ABX.log = ABX.log || function () {};
+  /* Traces (api-trace.js, POC) documente chaque geste dans le journal des requêtes. Le produit
+     l'appelle aux mêmes endroits ; sans le POC, chaque méthode est un geste vide — un Proxy le
+     dit une fois pour toutes, et le POC le remplace quand il se charge (D157). */
+  ABX.Traces = ABX.Traces || new Proxy({ _neutre: true }, { get: (o, k) => (k in o ? o[k] : () => undefined) });
 
   ABX.Bus = {
     on:   (evt, fn) => { (abonnes[evt] = abonnes[evt] || []).push(fn); },

@@ -76,7 +76,10 @@ SELECT application_id, 'message.traite', :json, 'a_emettre', now()
       "motif_sortie distingue traité / archivé (D030) ; les vues « Traités » et « Archives » " +
       "n'en sont que la lecture (D051)"]),
 
-    refile: m => appliquer(m, { motif_sortie:null, sorti_le:null }, ["Remettre dans la file",
+    /* Remettre dans la file : la sortie s'efface, ET le statut cesse d'être « traité » — un message
+       qui revient dans la file en portant « traité » est un message qu'on ne retraitera jamais. */
+    refile: m => appliquer(m, { motif_sortie:null, sorti_le:null,
+                                ...(m.statut === "traite" ? { statut: "a_faire" } : {}) }, ["Remettre dans la file",
 `UPDATE rattachement SET sorti_le = NULL, motif_sortie = NULL
  WHERE comm_id = :id AND compte_id = :moi;`,
       "⚠ retour de partition : c'est exactement Q009 (« un email sorti peut-il revenir ? »). " +
@@ -167,7 +170,8 @@ VALUES (:id, 'ham', :moi, now());` },
     /* Le workflow de traitement. « Traité » sort de la file — les autres états
        sont des positions DANS la file, pas des sorties. */
     statuer(m, id) {
-      const st = ABX.Fixtures.statut(id);
+      const st = (ABX.Ref.statuts || []).find(s => s.id === id) || { id, label: id };
+      st.sortie = st.sortie || (id === "traite" ? "traite" : null);   // « traité » sort de la file (D093, D014)
       const patch = { statut: id };
       if (st.sortie) { patch.motif_sortie = st.sortie; patch.sorti_le = Date.now(); }
       else if (m.motif_sortie === "traite") { patch.motif_sortie = null; patch.sorti_le = null; }

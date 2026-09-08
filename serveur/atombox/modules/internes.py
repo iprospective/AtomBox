@@ -9,6 +9,9 @@ from ..controleurs.messages import MessagesControleur
 from ..controleurs.dossiers import DossiersVirtuelsControleur, ParametresControleur, PiecesJointesControleur
 from ..controleurs.recherche import RechercheControleur
 from ..emission.module import ModuleEmission
+from ..sync.module import ModuleSync
+from ..controleurs.filtres import FiltresControleur
+from ..controleurs.dossiers_util import CarnetControleur, DossiersControleur, IdentitesControleur
 from ..journal import journal
 
 class ModuleSession(Module):
@@ -20,7 +23,8 @@ class ModuleEtat(Module):
     controleurs = [EtatControleur]
 
 class ModuleIngestion(Module):
-    nom = "ingestion"; version = "0.1"; description = "relève IMAP, analyse, magasin (F001, F002) — émet message.avant_ingestion et message.ingere"; interne = True
+    nom = "ingestion"; version = "0.1"; description = "relève IMAP, analyse, magasin, moteur de filtres (F001, F002, F016)"; interne = True
+    controleurs = [FiltresControleur]
     log = journal("ingestion")
 
     @accroche("message.ingere", priorite=1000)
@@ -30,6 +34,8 @@ class ModuleIngestion(Module):
 
 class ModuleMessages(Module):
     nom = "messages"; version = "0.1"; description = "référentiels, arborescence, liste, message, fil, rattachement, création — ce que le webmail lit (D141)"; interne = True
-    controleurs = [ReferentielsControleur, ArborescenceControleur, MessagesControleur, DossiersVirtuelsControleur, ParametresControleur, PiecesJointesControleur, RechercheControleur]
+    controleurs = [ReferentielsControleur, ArborescenceControleur, MessagesControleur, DossiersVirtuelsControleur,
+                   ParametresControleur, PiecesJointesControleur, RechercheControleur,
+                   DossiersControleur, IdentitesControleur, CarnetControleur]
 
-MODULES_INTERNES = [ModuleSession, ModuleEtat, ModuleIngestion, ModuleMessages, ModuleEmission]
+MODULES_INTERNES = [ModuleSession, ModuleEtat, ModuleIngestion, ModuleMessages, ModuleEmission, ModuleSync]

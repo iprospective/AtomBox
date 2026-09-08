@@ -36,11 +36,15 @@ class Magasin:
     def existe(self, identifiant) -> bool:
         return os.path.exists(self.chemin(identifiant))
 
-    def ecrire(self, identifiant, octets: bytes, compresser: bool | None = None) -> dict:
+    def ecrire(self, identifiant, octets: bytes, compresser: bool | None = None, remplacer: bool = False) -> dict:
         """Écrit si absent ; rend {compression, taille_octets, taille_stockee, nouveau}.
-        compresser=None : conditionnel (D069) ; True/False : forcé."""
+        compresser=None : conditionnel (D069) ; True/False : forcé.
+
+        `remplacer` n'existe que pour un BROUILLON, qui n'est pas encore un fait : tant qu'il
+        n'est pas parti, son contenu bouge. Un message reçu ou envoyé, lui, ne se réécrit jamais
+        (D025), et un blob est adressé par son empreinte — le remplacer n'aurait aucun sens."""
         chemin = self.chemin(identifiant)
-        if os.path.exists(chemin):
+        if os.path.exists(chemin) and not remplacer:
             return { "compression": self._compression_de(chemin), "taille_octets": len(octets),
                      "taille_stockee": os.path.getsize(chemin), "nouveau": False }
         zst = self._c.compress(octets)

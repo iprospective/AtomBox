@@ -87,17 +87,24 @@
        ${R.render("statut.chip", { m })}
        ${m.tags.map(tag => R.render("tag.chip", { tag })).join("")}</div>`);
 
+  /* Les actions au survol d'une carte. Elles disent la MÊME chose que la barre du message
+     ouvert (D030) : ce qui est sorti de la file propose d'y revenir, jamais d'en sortir encore. */
   R.define("message.card.actions", ({ m }) => {
     const ou = m.dossier || m.dossier_origine;
+    const jetables = `<button data-act="junk" title="Indésirable">🚫</button>
+           <button data-act="corbeille" title="Mettre à la corbeille">🗑</button>`;
     const boutons = ou === "trash"
       ? `<button data-act="restaurer" title="Restaurer">↩</button>`
       : ou === "junk"
         ? `<button data-act="nonJunk" title="Ce n'est pas un indésirable">✓ ham</button>
            <button data-act="corbeille" title="Mettre à la corbeille">🗑</button>`
-        : `<button data-act="traiter" title="Marquer traité">✓</button>
+        : m.motif_sortie
+          ? `<button data-act="refile" title="${m.motif_sortie === "archive"
+               ? "Désarchiver — le remettre dans la file" : "Marquer non traité — il redevient à faire"}">↺</button>
+           ${jetables}`
+          : `<button data-act="traiter" title="Marquer traité">✓</button>
            <button data-act="archiver" title="Archiver">🗄</button>
-           <button data-act="junk" title="Indésirable">🚫</button>
-           <button data-act="corbeille" title="Mettre à la corbeille">🗑</button>`;
+           ${jetables}`;
     return `<div class="mact">${boutons}</div>`;
   });
 
@@ -178,7 +185,7 @@
   /* ---- tags : la seule partie du message que l'utilisateur écrit ---------- */
   R.define("message.tags", ({ m }) => {
     if (ABX.V0()) return "";
-    const AXES = ABX.Fixtures.AXES.map(a => a.id).concat(["projet", "type"]);
+    const AXES = (ABX.Ref.axes || []).map(a => a.id).concat(["projet", "type"]);
     return `<div class="box"><h4>Tags — plusieurs applications, sans écrasement (D017/D020)</h4>
       ${m.tags.length ? m.tags.map((t, i) => `<div class="kv">
           <span class="k">${F.esc(t.axe)}</span>
@@ -197,6 +204,25 @@
       <div class="hint">Un tag posé à la main appartient à l'utilisateur ; un tag posé par un
         connecteur lui appartient (D019/D021) — le retirer ici ne l'empêche pas d'être reposé.</div>
     </div>`;
+  });
+
+  /* Le SUIVI D'UN ENVOI (D099) — sous un message émis : où il en est, destinataire par
+     destinataire, et le bouton qui le relance quand il n'est pas parti. Un message « envoyé »
+     qui n'est jamais parti est le pire mensonge d'un webmail : cet encart existe pour ça. */
+  const ENVOI_ETATS = { remis: ["ok", "✓", "Remis au relais"], livre: ["ok", "✓", "Livré"],
+    accepte: ["ok", "✓", "Accepté"], en_attente: ["wait", "⏳", "En attente d'envoi"],
+    en_echec: ["due", "⚠", "Envoi en échec"], rejete: ["due", "✗", "Rejeté"],
+    abandonne: ["due", "✗", "Envoi abandonné"], differe: ["wait", "⏳", "Différé"] };
+  R.define("message.envoi", ({ e }) => {
+    if (!e) return "";
+    const [cls, ic, titre] = ENVOI_ETATS[e.etat] || ["", "·", e.etat];
+    return `<div class="box envoi ${cls}"><h4>${ic} ${F.esc(titre)}
+        ${e.relancable ? `<button class="hbtn" id="relancer" title="Remettre cet envoi dans la file">↻ Relancer l'envoi</button>` : ""}</h4>
+      <div class="dmeta">${F.esc(e.detail || "")}</div>
+      ${(e.destinataires || []).map(d => `<div class="kv"><span class="k">${F.esc(d.adresse)}</span>
+        <span class="v"><span class="st ${(ENVOI_ETATS[d.etat] || [""])[0]}">${F.esc((ENVOI_ETATS[d.etat] || [0, 0, d.etat])[2])}</span>
+        ${d.code ? `<span class="dmeta">${F.esc(d.code)}</span>` : ""}</span></div>`).join("")}
+      ${R.contexte("envoi", { e })}</div>`;
   });
 
   /* ---- arborescence ------------------------------------------------------ */

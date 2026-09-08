@@ -13,7 +13,8 @@ import asyncio, os
 from ..journal import journal
 from sqlalchemy import select
 from ..db import session as ouvrir_session
-from ..schema.modeles import Adresse, Boite, Dossier
+from ..schema.modeles import Adresse, Boite, Dossier, Evenement, Rattachement
+from ..sync.sync import appliquer_descendante
 from ..magasin import Magasin
 from ..uuid7 import uuid7
 from .imap import Releve
@@ -45,7 +46,8 @@ def relever_boite(s, magasin: Magasin, releve: Releve, boite_id, adresse: str) -
         for uid in releve.nouveaux(depuis):
             try:
                 octets, date, drapeaux = releve.lire(uid)
-                r = ingerer(s, magasin, boite_id, octets, uid=uid, uid_validity=validity, dossier_id=d.dossier_id, date_recue=date)
+                r = ingerer(s, magasin, boite_id, octets, uid=uid, uid_validity=validity, dossier_id=d.dossier_id,
+                            date_recue=date, dossier_alias=d.alias_imap)
                 n += 1
                 log.debug("%s/%s uid %d → %s (%s)", adresse, alias, uid, "nouveau" if r["nouveau"] else "rattaché", r["nature"])
             except Exception as e:
@@ -55,14 +57,51 @@ def relever_boite(s, magasin: Magasin, releve: Releve, boite_id, adresse: str) -
                 d.uid_validity, d.uid_suivant = validity, uid + 1; s.commit()
         if not releve.nouveaux(depuis):
             d.uid_validity, d.uid_suivant = validity, max(depuis, uidnext); s.commit()
+        # ce que les AUTRES clients ont changé descend maintenant (F113)
+        try: synchroniser_descendante(s, releve, boite_id, adresse, d)
+        except Exception as e:
+            s.rollback(); log.error("%s/%s : synchronisation descendante en échec — %s", adresse, alias, e)
     if n: log.info("%s : %d message(s) ingéré(s)", adresse, n)
+    return n
+
+
+def synchroniser_descendante(s, releve: Releve, boite_id, adresse: str, dossier, lot: int = 500) -> int:
+    """IMAP → AtomBox (F113) : ce que les AUTRES clients ont fait (lu dans Thunderbird, drapeau posé
+    depuis le téléphone) descend dans le rattachement. On ne relit que les UID qu'on connaît : un
+    message inconnu n'est pas un changement d'état, c'est une ingestion."""
+    ratts = list(s.scalars(select(Rattachement).where(Rattachement.boite_id == boite_id,
+                                                      Rattachement.dossier_id == dossier.dossier_id,
+                                                      Rattachement.uid_imap.isnot(None)).limit(lot)))
+    if not ratts: return 0
+    # Ne JAMAIS écraser un état dont l'ordre montant n'est pas encore parti : entre le clic et le
+    # STORE, IMAP ignore ce que l'utilisateur vient de faire — appliquer « IMAP fait foi » à cet
+    # instant-là rendrait ses messages non lus à chaque relève (F113).
+    en_vol = {str(e.charge.get("comm_id")) for e in s.scalars(
+        select(Evenement).where(Evenement.type == "rattachement.change", Evenement.traite_le.is_(None)))}
+    if en_vol:
+        gardes = [r for r in ratts if str(r.comm_id) in en_vol]
+        if gardes: log.debug("%s : %d état(s) en vol vers IMAP — non écrasés", dossier.alias_imap, len(gardes))
+        ratts = [r for r in ratts if str(r.comm_id) not in en_vol]
+    par_uid = {r.uid_imap: r for r in ratts}
+    n = 0
+    for uid, f in releve.drapeaux(sorted(par_uid)).items():
+        r = par_uid.get(uid)
+        if r is None: continue
+        change = appliquer_descendante(s, r, f)
+        if change:
+            n += 1
+            log.info("%s/%s uid %d : %s (venu d'IMAP)", adresse, dossier.alias_imap, uid, ", ".join(change))
+    if n: s.commit()
     return n
 
 async def surveiller_boite(boite_id, adresse: str, config: dict):
     while True:
         try:
             s = ouvrir_session(); magasin = Magasin(config["magasin"])
-            releve = Releve(config["hote"], config["port"]).ouvrir("%s*%s" % (adresse, config["master"]), config["mot_de_passe"])
+            # compte master (chapitre 06) : « boite*master » ; sans master, ou si le master EST la boîte, le login est l'adresse
+            master = (config.get("master") or "").strip()
+            login = adresse if not master or master.lower() == adresse.lower() else "%s*%s" % (adresse, master)
+            releve = Releve(config["hote"], config["port"]).ouvrir(login, config["mot_de_passe"])
             try:
                 while True:
                     await asyncio.to_thread(relever_boite, s, magasin, releve, boite_id, adresse)

@@ -745,10 +745,28 @@ const hf = p.doc.getElementById("detail").innerHTML;
 const nFeat = A.Views.Pages.FEATURES.reduce((s, [, l]) => s + l.length, 0);
 vrai(nFeat >= 40, nFeat + " fonctionnalités listées");
 vrai(hf.includes("V4"), "les jalons y figurent");
+{
+  /* UNE échelle, pas deux champs : « décidé → maquetté → codé → éprouvé » est une progression */
+  const ECH = ["à trancher", "décidé", "maquetté", "codé", "éprouvé", "en pause", "écarté"];
+  const F = A.CDC.dict.fonctionnalites;
+  vrai(F.every(f => ECH.includes(f.etat)), "chaque fonctionnalité a un état de la liste fermée");
+  vrai(F.every(f => f.avancement === undefined), "un seul champ : « avancement » a disparu");
+  vrai(hf.includes("éprouvé") && hf.includes("une question ouverte la bloque"), "la légende dit l'échelle en entier");
+  const v0 = F.filter(f => f.jalon === 0);
+  vrai(v0.filter(f => f.etat === "éprouvé").length >= 5, "la V0 a des fonctionnalités éprouvées en réel");
+  vrai(v0.every(f => ["maquetté", "codé", "éprouvé"].includes(f.etat)), "et plus rien qui ne soit au moins maquetté");
+}
 vrai(hf.includes("Moteur de filtres"), "le moteur de filtres (D074) est listé");
 vrai(hf.includes("DMARC"), "la délivrabilité DMARC est listée");
 vrai(hf.includes("expéditeur externe"), "l'affichage sûr est listé");
 A.Controllers.Pages.ouvrir("roadmap");
+{
+  const hr = () => p.doc.getElementById("detail").innerHTML;
+  vrai(hr().includes("Avancement :"), "la feuille de route montre l'avancement de chaque jalon");
+  const F = A.CDC.dict.fonctionnalites.filter(f => f.jalon === 0);
+  const n = F.filter(f => f.etat === "éprouvé").length;
+  vrai(hr().includes(">éprouvé</span> " + n), "et ce compte EST celui des fonctionnalités — une donnée, deux vues");
+}
 vrai(A.Views.Pages.ROADMAP.length === A.CDC.dict.jalons.length && A.Views.Pages.ROADMAP.length >= 5,
      A.Views.Pages.ROADMAP.length + " jalons dans la feuille de route — autant que le dictionnaire");
 vrai(p.doc.getElementById("detail").innerHTML.includes("jalon v6"),
@@ -817,6 +835,63 @@ console.log("— dossiers virtuels personnels (D143) et épingles (D144) ——"
   A.Store.ui.jalon = 0; A.Controllers.Nav.peindre(); hn = p.doc.getElementById("nav").innerHTML;
   vrai(!hn.includes("Mes dossiers") && !hn.includes("data-pin"), "en V0, ni dossiers virtuels ni épingles (D140b)");
   A.Store.ui.jalon = null; A.Controllers.Nav.peindre();
+}
+
+console.log("— sortir de la file, et y revenir (D030) ——————————");
+{
+  const m = A.Corpus.tous.find(x => !x.motif_sortie && x.dossier !== "trash" && x.sens === "in");
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: m.id }); await tick(); await tick();
+  const detail = () => p.doc.getElementById("detail").innerHTML;
+  vrai(detail().includes('id="stat"'), "tant qu'il est dans la file, le sélecteur de statut");
+  await A.MessageService.statuer(m, "traite"); await tick();
+  eq(m.motif_sortie, "traite", "« traité » sort de la file (D014)");
+  A.Controllers.Message.peindre(A.Store.ui.tabs.find(t => t.id === m.id)); await tick();
+  vrai(detail().includes("Marquer non traité"), "un message traité propose de redevenir non traité");
+  vrai(!detail().includes('id="stat"'), "et le sélecteur laisse la place au retour");
+  vrai(!detail().includes("Archiver sans traiter"), "on n'archive pas ce qui est déjà sorti");
+  clic(p.doc.getElementById("detail").querySelector('[data-x="refile"]')); await tick(); await tick();
+  eq(m.motif_sortie, null, "il revient dans la file");
+  eq(m.statut, "a_faire", "et il n'y revient pas « traité » : il redevient à faire");
+  /* la CARTE de la liste dit la même chose que le message ouvert : ce qui est sorti propose d'y revenir */
+  await A.MessageService.statuer(m, "traite"); await tick();
+  const carte = A.Registry.render("message.card.actions", { m });
+  vrai(carte.includes('data-act="refile"') && carte.includes("Marquer non traité"),
+       "dans la liste aussi, un message traité propose d'y revenir");
+  vrai(!carte.includes('data-act="traiter"') && !carte.includes('data-act="archiver"'),
+       "et ne propose plus de sortir de la file");
+  vrai(carte.includes('data-act="corbeille"'), "la corbeille reste, elle");
+  const dOrigine = { id: m.dossier_origine, kind: m.dossier_origine.includes(":") ? "virtuel" : "special", label: m.dossier_origine };
+  A.Store.ui.folder = dOrigine; A.Store.ui.filtre = "sortis";
+  await A.Controllers.List.charger(); A.Controllers.List.peindre();
+  vrai(p.doc.getElementById("list").innerHTML.includes('data-act="refile"'), "et la liste « traités / archivés » le montre");
+  A.Store.ui.filtre = "file"; await A.Controllers.List.charger();
+  const cArchive = A.Registry.render("message.card.actions", { m: { ...m, motif_sortie: "archive" } });
+  vrai(cArchive.includes("Désarchiver"), "un archivé propose de désarchiver");
+  await A.MessageService.refile(m); await tick();
+  await A.MessageService.archiver(m); await tick();
+  A.Controllers.Message.peindre(A.Store.ui.tabs.find(t => t.id === m.id)); await tick();
+  vrai(detail().includes("Désarchiver"), "un message archivé propose de désarchiver");
+  clic(p.doc.getElementById("detail").querySelector('[data-x="refile"]')); await tick(); await tick();
+  eq(m.motif_sortie, null, "désarchivé, il est de retour dans la file");
+}
+
+console.log("— suivi d'envoi et relance (D099) ————————————————");
+{
+  const envoye = A.Corpus.tous.find(m => m.sens === "out" && m.dossier !== "trash");
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: envoye.id }); await tick(); await tick();
+  let h = p.doc.getElementById("detail").innerHTML;
+  vrai(h.includes("Remis au relais"), "un message émis montre où en est son envoi");
+  vrai(!h.includes('id="relancer"'), "rien à relancer quand c'est remis");   // le mot est aussi dans la voix CDC : on cherche le BOUTON
+  A.Store.envois = {}; A.Store.envois[envoye.id] = "en_echec";
+  const m = A.Api.cache.message(envoye.id); m._envoi = undefined;
+  A.Controllers.Message.peindre(A.Store.ui.tabs.find(t => t.id === envoye.id)); await tick(); await tick();
+  h = p.doc.getElementById("detail").innerHTML;
+  vrai(h.includes("Envoi en échec") && h.includes("nouvelle tentative"), "un envoi en échec le dit, avec la prochaine tentative");
+  vrai(h.includes('id="relancer"'), "et propose de relancer");
+  clic(p.doc.getElementById("detail").querySelector("#relancer")); await tick(); await tick(); await tick();
+  h = p.doc.getElementById("detail").innerHTML;
+  vrai(h.includes("Remis au relais") && !h.includes('id="relancer"'), "après relance, l'envoi est reparti");
+  eq(A.Store.envois[envoye.id], "remis", "la relance a bien touché le serveur");
 }
 
 console.log("— recherche plein texte (F104) ————————————————————");

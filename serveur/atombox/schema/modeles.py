@@ -1,4 +1,4 @@
-"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-06T19:08:35 depuis le dictionnaire (D158).
+"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-08T02:02:24 depuis le dictionnaire (D158).
 NE PAS ÉDITER : corriger .mmi-pm/docs/dict/*.yml, régénérer. Les tables sont celles de schema.sql (F114)."""
 from __future__ import annotations
 import datetime, decimal, uuid
@@ -124,7 +124,7 @@ class CommPieceJointe(Base):
     renomme_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     comm: Mapped[Comm | None] = relationship("Comm", foreign_keys=[comm_id])
     piece_jointe: Mapped[PieceJointe | None] = relationship("PieceJointe", foreign_keys=[piece_jointe_id])
-    __table_args__ = (PrimaryKeyConstraint("comm_id", "piece_jointe_id", name="pk_comm_piece_jointe"),)
+    __table_args__ = (PrimaryKeyConstraint("comm_id", "ordre", name="pk_comm_piece_jointe"),)
 
 class Blob(Base):
     """Un contenu binaire adressé par empreinte, compressé zstd, hors base. Compteur de références pour le ramasse-miettes ; un"""
@@ -253,6 +253,7 @@ class Rattachement(Base):
     restaurable_jusqu_au: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dossier_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("dossier.dossier_id", name="fk_rattachement_dossier_id"), nullable=True)
     dossier_origine_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("dossier.dossier_id", name="fk_rattachement_dossier_origine_id"), nullable=True)
+    uid_imap: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     personnel: Mapped[bool] = mapped_column(Boolean, nullable=False)
     reveil_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     echeance_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

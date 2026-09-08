@@ -49,6 +49,11 @@ def traiter(session, e: Evenement) -> bool:
         e.traite_le = datetime.now(timezone.utc); e.erreur = None
         return True
     except Exception as ex:
+        # la transaction peut être cassée (contrainte violée) : sans ce rollback, écrire la
+        # tentative échoue à son tour et l'exception remonte jusqu'à tuer le processus
+        if session is not None:
+            try: session.rollback(); e = session.get(Evenement, e.evenement_id) or e
+            except Exception: pass
         e.tentatives += 1; e.erreur = str(ex)[:500]
         if e.tentatives > len(DELAIS):
             e.traite_le = datetime.now(timezone.utc); e.abandonne = True
