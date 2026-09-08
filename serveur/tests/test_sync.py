@@ -61,3 +61,58 @@ def test_le_module_est_charge_et_abonne():
     charges = chargement.charger(tiers=False)
     assert "sync" in [m.nom for m in charges]
     assert abonnes.pour("rattachement.change") and abonnes.pour("rattachement.change")[0][0] == "sync"
+
+def test_la_descendante_n_ecrase_pas_un_etat_en_vol(monkeypatch, tmp_path):
+    """Le défaut vu en production le 8 septembre : marquer lu dans AtomBox, redémarrer, et tout
+    redevenait non lu — la relève lisait des FLAGS qui ne portaient pas encore notre \\Seen."""
+    import os, re as _re, uuid as _uuid
+    if not os.environ.get("DATABASE_URL"): pytest.skip("DATABASE_URL absent")
+    import psycopg
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from atombox.db import session as ouvrir
+    from atombox.ingestion.demon import synchroniser_descendante
+    from atombox.modules import evenements
+    from atombox.schema.modeles import Adresse, Boite, Dossier, Evenement
+    from atombox.ingestion.ingestion import adresse as adresse_de
+    from atombox.uuid7 import uuid7
+
+    nom = "atombox_sync_" + _uuid.uuid4().hex[:8]
+    admin = psycopg.connect(os.environ["DATABASE_URL"], autocommit=True); admin.execute('CREATE DATABASE "%s"' % nom)
+    u = _re.sub(r"/[^/?]*(\?|$)", "/" + nom + r"\1", os.environ["DATABASE_URL"], count=1)
+    ici = os.path.dirname(os.path.abspath(__file__))
+    with psycopg.connect(u) as c: c.execute(open(os.path.join(ici, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read()); c.commit()
+    s = ouvrir(u)
+    try:
+        a = adresse_de(s, "boite@exemple.fr")
+        b = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="personnelle"); s.add(b)
+        d = Dossier(dossier_id=uuid7(), boite_id=b.boite_id, nom="INBOX", alias_imap="INBOX", protege=True); s.add(d)
+        from atombox.schema.modeles import Comm
+        cid = uuid7()
+        s.add(Comm(comm_id=cid, type="email", date_recue=datetime.now(timezone.utc), date_ingestion=datetime.now(timezone.utc),
+                   sens="in", nature="humain", from_adresse="x@y.fr", taille=1, nb_pieces_jointes=0, est_chiffre=False, est_signe=False))
+        r = Rattachement(comm_id=cid, boite_id=b.boite_id, drapeau=False, statut="nouveau", personnel=False, gele=False,
+                         dossier_id=d.dossier_id, uid_imap=7, lu_le=datetime.now(timezone.utc))   # lu dans AtomBox
+        s.add(r); s.commit()
+
+        class FausseReleve:
+            def drapeaux(self, uids): return {u: [] for u in uids}      # IMAP ne porte PAS encore \Seen
+        # sans ordre en vol : IMAP fait foi, le message redevient non lu
+        synchroniser_descendante(s, FausseReleve(), b.boite_id, "boite@exemple.fr", d)
+        assert r.lu_le is None, "sans ordre en attente, IMAP fait foi (D140b)"
+
+        r.lu_le = datetime.now(timezone.utc)
+        evenements.emettre(s, "rattachement.change", {"comm_id": str(cid), "boite_id": str(b.boite_id)})
+        s.commit()
+        synchroniser_descendante(s, FausseReleve(), b.boite_id, "boite@exemple.fr", d)
+        assert r.lu_le is not None, "un ordre en vol protège l'état local — c'était le bug du 8 septembre"
+
+        ev = s.scalar(select(Evenement).where(Evenement.type == "rattachement.change"))
+        ev.traite_le = datetime.now(timezone.utc); s.commit()
+        synchroniser_descendante(s, FausseReleve(), b.boite_id, "boite@exemple.fr", d)
+        assert r.lu_le is None, "une fois l'ordre parti, IMAP redevient la vérité"
+    finally:
+        s.close()
+        import atombox.db as db; db.moteur(u).dispose(); db._sync.clear()
+        admin.execute("select pg_terminate_backend(pid) from pg_stat_activity where datname=%s and pid<>pg_backend_pid()", (nom,))
+        admin.execute('DROP DATABASE "%s"' % nom); admin.close()

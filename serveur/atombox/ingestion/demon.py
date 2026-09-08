@@ -13,7 +13,7 @@ import asyncio, os
 from ..journal import journal
 from sqlalchemy import select
 from ..db import session as ouvrir_session
-from ..schema.modeles import Adresse, Boite, Dossier, Rattachement
+from ..schema.modeles import Adresse, Boite, Dossier, Evenement, Rattachement
 from ..sync.sync import appliquer_descendante
 from ..magasin import Magasin
 from ..uuid7 import uuid7
@@ -46,7 +46,8 @@ def relever_boite(s, magasin: Magasin, releve: Releve, boite_id, adresse: str) -
         for uid in releve.nouveaux(depuis):
             try:
                 octets, date, drapeaux = releve.lire(uid)
-                r = ingerer(s, magasin, boite_id, octets, uid=uid, uid_validity=validity, dossier_id=d.dossier_id, date_recue=date)
+                r = ingerer(s, magasin, boite_id, octets, uid=uid, uid_validity=validity, dossier_id=d.dossier_id,
+                            date_recue=date, dossier_alias=d.alias_imap)
                 n += 1
                 log.debug("%s/%s uid %d → %s (%s)", adresse, alias, uid, "nouveau" if r["nouveau"] else "rattaché", r["nature"])
             except Exception as e:
@@ -72,6 +73,15 @@ def synchroniser_descendante(s, releve: Releve, boite_id, adresse: str, dossier,
                                                       Rattachement.dossier_id == dossier.dossier_id,
                                                       Rattachement.uid_imap.isnot(None)).limit(lot)))
     if not ratts: return 0
+    # Ne JAMAIS écraser un état dont l'ordre montant n'est pas encore parti : entre le clic et le
+    # STORE, IMAP ignore ce que l'utilisateur vient de faire — appliquer « IMAP fait foi » à cet
+    # instant-là rendrait ses messages non lus à chaque relève (F113).
+    en_vol = {str(e.charge.get("comm_id")) for e in s.scalars(
+        select(Evenement).where(Evenement.type == "rattachement.change", Evenement.traite_le.is_(None)))}
+    if en_vol:
+        gardes = [r for r in ratts if str(r.comm_id) in en_vol]
+        if gardes: log.debug("%s : %d état(s) en vol vers IMAP — non écrasés", dossier.alias_imap, len(gardes))
+        ratts = [r for r in ratts if str(r.comm_id) not in en_vol]
     par_uid = {r.uid_imap: r for r in ratts}
     n = 0
     for uid, f in releve.drapeaux(sorted(par_uid)).items():

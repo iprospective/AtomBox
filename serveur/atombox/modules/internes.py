@@ -10,6 +10,7 @@ from ..controleurs.dossiers import DossiersVirtuelsControleur, ParametresControl
 from ..controleurs.recherche import RechercheControleur
 from ..emission.module import ModuleEmission
 from ..sync.module import ModuleSync
+from ..controleurs.filtres import FiltresControleur
 from ..journal import journal
 
 class ModuleSession(Module):
@@ -21,7 +22,8 @@ class ModuleEtat(Module):
     controleurs = [EtatControleur]
 
 class ModuleIngestion(Module):
-    nom = "ingestion"; version = "0.1"; description = "relève IMAP, analyse, magasin (F001, F002) — émet message.avant_ingestion et message.ingere"; interne = True
+    nom = "ingestion"; version = "0.1"; description = "relève IMAP, analyse, magasin, moteur de filtres (F001, F002, F016)"; interne = True
+    controleurs = [FiltresControleur]
     log = journal("ingestion")
 
     @accroche("message.ingere", priorite=1000)
