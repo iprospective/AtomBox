@@ -120,6 +120,56 @@ def test_parcours_du_webmail(monde):
     assert r["ok"] and r["relance"] == 1 and r["destinataires"] == ["jean@x.fr"], r
     assert c.post("/api/v1/envois/%s/relancer" % envoye, headers=h).json()["ok"], "relancer deux fois ne casse rien"
     assert c.get("/api/v1/envois/" + str(monde["ids"][0]), headers=h).status_code == 404, "un message reçu n'a pas d'envoi"
+
+    # F013 — un dossier utilisateur, créé ici (et côté IMAP quand il est configuré)
+    d = c.post("/api/v1/dossiers", json={"nom": "Devis 2026"}, headers=h).json()
+    assert d["ok"] and d["dossier"]["nom"] == "Devis 2026" and not d["dossier"]["protege"]
+    did = d["dossier"]["id"]
+    assert c.post("/api/v1/dossiers", json={"nom": "Devis 2026"}, headers=h).status_code == 400, "deux fois le même : refusé"
+    assert c.patch("/api/v1/dossiers/" + did, json={"nom": "Devis"}, headers=h).json()["dossier"]["nom"] == "Devis"
+    assert c.get("/api/v1/referentiels", headers=h).json()["util"][0]["label"] == "Devis", "il apparaît dans l'arborescence"
+    proteges = [x for x in c.get("/api/v1/referentiels", headers=h).json()["speciaux"]]
+    assert proteges, "les spéciaux restent"
+    assert c.delete("/api/v1/dossiers/" + did, headers=h).json()["supprimes"] == 1
+
+    # F032 — les identités d'expédition
+    premiere = c.post("/api/v1/identites", json={"nom_affiche": "Mathieu", "par_defaut": True}, headers=h).json()
+    assert premiere["ok"] and premiere["identite"]["par_defaut"] is True
+    i = c.post("/api/v1/identites", json={"nom_affiche": "Service commercial", "signature": "-- \nL'équipe", "par_defaut": True}, headers=h).json()
+    assert i["ok"] and i["identite"]["signature"].endswith("L'équipe")
+    apres = c.get("/api/v1/identites", headers=h).json()["identites"]
+    assert len(apres) == 2 and sum(1 for x in apres if x["par_defaut"]) == 1, "une seule identité par défaut"
+    autre = next(x for x in apres if not x["par_defaut"])
+    assert c.delete("/api/v1/identites/" + autre["id"], headers=h).json()["supprimes"] == 1
+    seule = c.get("/api/v1/identites", headers=h).json()["identites"][0]
+    assert c.delete("/api/v1/identites/" + seule["id"], headers=h).status_code == 409, "jamais la dernière"
+
+    # F106 — un brouillon garde son identité quand on le réenregistre (D089)
+    br = c.post("/api/v1/messages", json={"destinataires": ["jean@x.fr"], "sujet": "Ébauche",
+                                          "corps": "début", "composition": {"a": "jean@x.fr"}}, headers=h).json()["message"]
+    assert br["dossier_origine"] == "drafts"
+    maj = c.put("/api/v1/messages/" + br["id"], json={"destinataires": ["jean@x.fr", "paul@x.fr"],
+                                                      "sujet": "Ébauche revue", "corps": "suite"}, headers=h).json()
+    assert maj["ok"] and maj["message"]["id"] == br["id"], "le brouillon garde son identifiant"
+    relu = c.get("/api/v1/messages/" + br["id"], headers=h).json()
+    assert relu["sujet"] == "Ébauche revue" and "suite" in relu["corps"] and len(relu["destinataires"]) == 2
+    assert c.put("/api/v1/messages/" + str(monde["ids"][0]), json={"sujet": "x"}, headers=h).status_code == 404, \
+        "un message reçu n'est pas un brouillon : il ne se réécrit pas (D029)"
+
+    # F108 — le carnet auto-collecté
+    carnet = c.get("/api/v1/carnet", headers=h).json()["carnet"]
+    assert any(x["adresse"] == "jean@x.fr" for x in carnet), "les destinataires écrits nourrissent le carnet (D109)"
+    assert c.get("/api/v1/carnet", params={"q": "paul"}, headers=h).json()["carnet"][0]["adresse"] == "paul@x.fr"
+
+    # F016 — une règle qui classe, et son compteur
+    f = c.post("/api/v1/filtres", json={"nom": "Tessier au dossier", "portee": "compte",
+                                        "predicat": {"mode": "et", "criteres": [{"champ": "from", "operateur": "contient", "valeur": "tessier"}]},
+                                        "action": {"type": "drapeau"}}, headers=h).json()
+    assert f["ok"] and f["filtre"]["muette"] is True, "une règle neuve n'a jamais servi"
+    l = c.get("/api/v1/filtres", headers=h).json()
+    assert l["total"] == 1 and "contient" in l["operateurs"] and "classer" in l["actions"]
+    assert c.patch("/api/v1/filtres/" + f["filtre"]["id"], json={"actif": False}, headers=h).json()["filtre"]["actif"] is False
+    assert c.delete("/api/v1/filtres/" + f["filtre"]["id"], headers=h).json()["supprimes"] == 1
     assert c.delete("/api/v1/messages/" + mid + "/rattachement", headers=h).json()["detache"]
     assert c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=h).json()["total"] == 2
     assert c.get("/api/v1/messages/" + str(uuid.uuid4()), headers=h).status_code == 404

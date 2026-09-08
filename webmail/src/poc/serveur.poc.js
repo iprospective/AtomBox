@@ -84,6 +84,20 @@
       St.patch(x, corps || {}); St.save();
       return ok({ modifies: 1, message: rep(x, false) }); }],
 
+    /* réenregistrer un brouillon : le POC garde l'objet et le met à jour, comme le serveur (D089) */
+    ["PUT", /^\/messages\/([^/]+)$/, (m, _, corps) => { const x = C.par(dec(m[1])); if (!x) return null;
+      Object.assign(x, corps || {}); St.save();
+      return ok({ modifies: 1, message: rep(x, true) }); }],
+
+    ["GET", /^\/carnet$/, (_, p) => { const q = (p.q || "").toLowerCase();
+      const compte = {};
+      C.tous.filter(x => x.sens === "out").forEach(x => (x.destinataires || []).forEach(a => {
+        if (q && !a.toLowerCase().includes(q)) return;
+        compte[a] = compte[a] || { adresse: a, nom: null, echanges: 0, dernier: null };
+        compte[a].echanges++; compte[a].dernier = new Date(x.date_recue).toISOString(); }));
+      const l = Object.values(compte).sort((a, b) => b.echanges - a.echanges).slice(0, 50);
+      return { carnet: l, total: l.length }; }],
+
     ["POST", /^\/messages$/, (_, __, corps) => {
       C.ajoute(corps); St.crees.push(corps); St.save();
       return ok({ crees: 1, message: rep(corps, false) }); }],

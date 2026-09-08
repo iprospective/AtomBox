@@ -96,6 +96,8 @@
     patcher: (id, patch) => req("PATCH", "/messages/" + encodeURIComponent(id) + "/rattachement", patch)
         .then(r => { if (r && r.message) garde(r.message); return r; }),
     creer: m => req("POST", "/messages", m).then(r => { if (r && r.message) garde(r.message); return r; }),
+    reenregistrer: (id, m) => req("PUT", "/messages/" + encodeURIComponent(id), m).then(r => { if (r && r.message) garde(r.message); return r; }),
+    carnet: q => req("GET", "/carnet?" + q_({ q })).then(r => (r && r.carnet) || []),
     detacher: id => req("DELETE", "/messages/" + encodeURIComponent(id) + "/rattachement")
         .then(r => { if (r && r.ok) delete cache.messages[id]; return r; }),
 

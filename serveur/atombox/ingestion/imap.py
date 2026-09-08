@@ -116,6 +116,25 @@ class Releve:
         log.info("uid %d déplacé vers %s%s", uid, vers, " (nouvel uid %d)" % neuf if neuf else "")
         return neuf
 
+    def creer_dossier(self, nom: str) -> None:
+        """CREATE (F013) : tant qu'IMAP est la vérité (D140b), un dossier créé ici doit y exister"""
+        typ, data = self.cnx.create(self._quoter(nom))
+        if typ != "OK" and b"ALREADYEXISTS" not in b" ".join(data or []):
+            log.warning("CREATE %s : %s", nom, typ); raise RuntimeError("CREATE %s : %s" % (nom, typ))
+        self.cnx.subscribe(self._quoter(nom))
+        log.info("dossier %s créé", nom)
+
+    def renommer_dossier(self, ancien: str, neuf: str) -> None:
+        typ, _ = self.cnx.rename(self._quoter(ancien), self._quoter(neuf))
+        if typ != "OK": log.warning("RENAME %s → %s : %s", ancien, neuf, typ); raise RuntimeError("RENAME : %s" % typ)
+        log.info("dossier %s renommé en %s", ancien, neuf)
+
+    def supprimer_dossier(self, nom: str) -> None:
+        self.cnx.unsubscribe(self._quoter(nom))
+        typ, _ = self.cnx.delete(self._quoter(nom))
+        if typ != "OK": log.warning("DELETE %s : %s", nom, typ); raise RuntimeError("DELETE : %s" % typ)
+        log.info("dossier %s supprimé", nom)
+
     def idle(self, secondes: int = 25 * 60) -> bool:
         """attend un changement du dossier sélectionné (RFC 2177) ; rend True si quelque chose est arrivé.
         Les serveurs coupent un IDLE après ~30 min : on renouvelle avant."""

@@ -53,6 +53,12 @@ class MessagesControleur(Controleur):
         if not await svc.detacher(s, compte, _uuid(id)): raise HTTPException(404, "message inconnu")
         return {"ok": True, "modifies": 1, "detache": True}
 
+    @action("PUT", "/{id}")
+    async def reenregistrer(self, id: str, request: Request, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
+        m = await svc.remplacer_brouillon(s, compte, _uuid(id), await request.json() or {}, magasin())
+        if m is None: raise HTTPException(404, "aucun brouillon à ce nom")
+        return {"ok": True, "modifies": 1, "message": m}
+
     @action("POST", "")
     async def creer(self, request: Request, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
         corps = await request.json()
