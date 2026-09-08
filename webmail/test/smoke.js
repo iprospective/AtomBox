@@ -459,7 +459,7 @@ vrai(!!t, "onglet de composition ouvert");
 eq(t.data.de, src.boite, "l'identité d'envoi est celle de la boîte qui a reçu (Q026)");
 vrai(t.data.sujet.startsWith("Re: "), "sujet préfixé");
 vrai(t.data.corps.includes("> "), "corps cité");
-t.data.a = "collegue@iprospective.eu, client@exemple.fr";
+t.data.a = "collegue@exemple.fr, client@societe-cliente.fr";
 A.ComposeService.joindre(t.data);
 eq(t.data.pieces_jointes.length, 1, "pièce jointe ajoutée");
 const avant = A.Corpus.dossiers.sent.length;
@@ -480,7 +480,7 @@ console.log("— transfert par référence ————————————�
 A.Controllers.Compose.demarrer("tr", src);
 t = A.Store.ui.tabs.find(x => x.type === "compo");
 eq(t.data.reference, true, "transfert par référence par défaut");
-t.data.a = "collegue@iprospective.eu";
+t.data.a = "collegue@exemple.fr";
 A.Controllers.Compose.finir(t, true);
 await tick(p);
 
