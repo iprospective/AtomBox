@@ -940,6 +940,63 @@ console.log("— recherche plein texte (F104) ———————————�
   eq(A.Store.ui.folder.kind, "recherche", "Entrée dans la recherche globale ouvre le dossier de recherche");
 }
 
+console.log("— raccourcis clavier (F111) ————————————————————————");
+{
+  const K = A.Controllers.Raccourcis;
+  A.Controllers.List.ouvrir({ id: "inbox", label: "Boîte de réception", kind: "special" }); await tick();
+  A.Store.ui.tabs.filter(x => x.type === "msg").forEach(x => A.Controllers.Tabs.fermer(x.key));
+  const liste = A.Controllers.List.messages();
+  vrai(liste.length > 2, "la liste expose ce qu'elle affiche (" + liste.length + ") — les raccourcis la parcourent, pas le DOM");
+
+  const touche = (key, target) => K.traiter({ key, target: target || { tagName: "BODY" }, preventDefault() {} });
+  vrai(!touche("e", { tagName: "INPUT" }), "pendant une saisie, rien n'est capté — écrire « ce serait » n'archive rien");
+  vrai(K.traiter({ key: "e", target: { tagName: "INPUT" }, ctrlKey: true, preventDefault() {} }) === false,
+       "Ctrl reste au navigateur");
+  vrai(!touche("z"), "une touche sans raccourci ne fait rien, en silence");
+
+  vrai(touche("j"), "j est un raccourci"); await tick();
+  const t1 = A.Store.ui.tabs.find(x => x.key === A.Store.ui.tab);
+  eq(t1 && t1.id, liste[0].id, "j ouvre le premier message de la liste");
+  vrai(t1.prov, "en onglet PROVISOIRE : parcourir vingt messages ne laisse pas vingt onglets");
+  touche("j"); await tick();
+  eq(A.Store.ui.tabs.find(x => x.key === A.Store.ui.tab).id, liste[1].id, "j encore : le suivant");
+  touche("k"); await tick();
+  eq(A.Store.ui.tabs.find(x => x.key === A.Store.ui.tab).id, liste[0].id, "k revient au précédent");
+
+  const vise = A.Api.cache.message(liste[0].id);
+  touche("e"); await tick();
+  eq(A.Api.cache.message(vise.id).motif_sortie, "traite", "e marque traité le message ouvert");
+  touche("u"); await tick();
+  eq(A.Api.cache.message(vise.id).motif_sortie, null, "u le remet dans la file");
+
+  touche("?");
+  vrai(K.ouverte, "? ouvre l'aide");
+  const aide = p.doc.getElementById("raccourcis").innerHTML;
+  const manquants = K.TABLE.filter(r => !aide.includes(r.libelle));
+  eq(manquants.length, 0, "l'aide est ENGENDRÉE de la table : chacun des " + K.TABLE.length +
+     " raccourcis y figure" + (manquants.length ? " — manquent : " + manquants.map(r => r.touche).join(", ") : ""));
+  touche("Escape");
+  vrai(!K.ouverte, "Échap la referme");
+}
+
+console.log("— responsive : trois vues sur un petit écran (F044, D112) ————");
+{
+  const App = A.Controllers.App, vrai_mobile = App.MOBILE;
+  App.MOBILE = () => true;                       // le harnais n'a pas d'écran : on le déclare petit
+  const main = p.doc.getElementById("main");
+  App.setVue("liste");
+  eq(main.dataset.vue, "liste", "on part de la liste");
+  const m = A.Controllers.List.messages()[0];
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: m.id }, true);
+  if (App.MOBILE()) App.setVue("detail");
+  eq(main.dataset.vue, "detail", "ouvrir un message montre le détail — sur un petit écran les trois colonnes ne tiennent pas");
+  App.ouvrirNav();
+  vrai(main.classList.contains("navopen"), "le tiroir de navigation s'ouvre par-dessus");
+  App.setVue("liste");
+  vrai(!main.classList.contains("navopen"), "et se referme dès qu'on change de vue : un tiroir oublié masque l'écran");
+  App.MOBILE = vrai_mobile;
+}
+
 console.log("— déterminisme ————————————————————————————————");
 const p3 = demarrer(creerStockage()); await drainer(p3);   // stockage vierge
 const C = p3.ABX;

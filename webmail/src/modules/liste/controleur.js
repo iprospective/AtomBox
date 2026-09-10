@@ -54,6 +54,8 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
        immédiate) puis se PEINT depuis ce qui a été chargé. Une clé de requête évite
        de peindre une réponse périmée quand l'utilisateur a déjà changé de dossier. */
     _cache: [], _cle: null,
+    /* ce que la liste affiche — les raccourcis (F111) parcourent CETTE liste, jamais le DOM */
+    messages() { return List._cache; },
     charger() {
       const ui = St.ui, cle = [ui.folder.id, ui.filtre, ui.tri, ui.sens, ui.statut].join("|");
       List._cle = cle;
