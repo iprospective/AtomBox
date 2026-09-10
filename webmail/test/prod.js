@@ -111,6 +111,54 @@ const { creerDocument } = require("./fake-dom");
   console.log("  déballages _m hors serveur simulé : " + total + " (" + deballages.map(([f, n]) => f.replace("js/", "") + "×" + n).join(", ") + ")");
   eq(total, 0, "la dette _m est SOLDÉE : les vues lisent le contrat, aucun déballage (" + total + ")");
 
+  console.log("— envoyer en prod : c'est le SERVEUR qui nomme ————————————");
+  /* Le serveur simulé du POC acceptait l'identifiant fabriqué par le client ; le vrai
+     serveur donne le sien (UUID). En le jetant, l'onglet ouvert après l'envoi pointait
+     sur un message que le serveur n'avait jamais eu — « ça part, mais rien ne change ». */
+  {
+    const vus = [];
+    const rep = o => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(o) });
+    const faux = (url, init) => {
+      const m = (init && init.method) || "GET", chemin = url.replace("/api/v1", "");
+      vus.push(m + " " + chemin.split("?")[0]);
+      if (m === "POST" && chemin === "/messages") {
+        const envoye = JSON.parse(init.body);
+        vrai(envoye.cc !== undefined, "le Cc part au serveur — sinon un brouillon repris perd ses copies");
+        return rep({ ok: true, crees: 1, message: Object.assign({}, envoye, { id: "srv-4242" }) });
+      }
+      if (chemin.startsWith("/messages/srv-4242")) return rep(Object.assign({ id: "srv-4242", sujet: "Essai" }));
+      if (chemin.startsWith("/messages/br-1")) return rep({ id: "br-1", sujet: "À finir", dossier_origine: "drafts",
+        destinataires: ["jean@exemple.fr"], corps: "début",
+        composition: { mode: "new", src: null, de: "moi@exemple.fr", a: "jean@exemple.fr", cc: "paul@exemple.fr",
+                       sujet: "À finir", corps: "début", pieces_jointes: [], reference: false } });
+      if (chemin.startsWith("/messages")) return rep({ messages: [], total: 0 });
+      if (chemin.startsWith("/arborescence")) return rep({ compteurs: {}, util: [], speciaux: [] });
+      if (chemin.startsWith("/referentiels")) return rep({ moi: { nom: "x", boites: [{ adresse: "moi@exemple.fr" }] }, speciaux: [], util: [], axes: [] });
+      return rep({ ok: true });
+    };
+    const e = demarrer(creerStockage(), { session: "api", fetch: faux });
+    await drainer(e);
+    const C = e.ABX.Controllers.Compose;
+    C.demarrer("new", null);
+    const t0 = e.ABX.Store.ui.tabs.find(x => x.type === "compo");
+    vrai(!!t0, "l'onglet de composition est ouvert");
+    Object.assign(t0.data, { a: "jean@exemple.fr", cc: "paul@exemple.fr", sujet: "Essai", corps: "texte" });
+    await C.finir(t0, true);
+    const ouvert = e.ABX.Store.ui.tabs.find(x => x.type === "msg");
+    vrai(!!ouvert, "un onglet de message s'ouvre après l'envoi");
+    eq(ouvert && ouvert.id, "srv-4242", "et il porte l'identifiant DU SERVEUR, pas celui fabriqué ici");
+    vrai(!e.ABX.Store.ui.tabs.some(x => x.key === t0.key), "l'onglet de composition est refermé");
+
+    /* La LISTE ne porte pas la composition (une seule passe, D078) : c'est le DÉTAIL qui la
+       rapporte. Sans ce détour, un brouillon s'ouvrait en lecture et ne se reprenait plus. */
+    const br = await e.ABX.Api.message("br-1");
+    vrai(br && br.composition, "le détail d'un brouillon rapporte sa composition");
+    e.ABX.Controllers.Compose.rouvrir(br);
+    const repris = e.ABX.Store.ui.tabs.find(x => x.type === "compo");
+    vrai(!!repris && repris.brouillon === "br-1", "il se rouvre en composition, sur le même brouillon");
+    eq(repris && repris.data.cc, "paul@exemple.fr", "avec ses copies — le Cc a survécu à l'aller-retour");
+  }
+
   console.log("— bundle produit ————————————————————————————————");
   const BUNDLE = path.join(RACINE, "dist", "prod.html");
   vrai(fs.existsSync(BUNDLE), "dist/prod.html existe");

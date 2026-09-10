@@ -147,14 +147,30 @@ def serialiser(r: Rattachement, c: Comm, ds: dict, boite_adresse: str | None, co
     if extra: o.update(extra)
     return o
 
+def _composition(r: Rattachement, c: Comm, ds: dict, adresse: str, dest: list, copies: list, corps: str, e) -> dict | None:
+    """Un brouillon se rouvre dans l'état où il a été laissé — reconstruit du MESSAGE, jamais
+    d'une copie d'écran gardée à côté : un brouillon EST un message marqué (D089), et une
+    seconde source d'écriture aurait divergé dès le premier réenregistrement."""
+    if dossier_id_court(ds.get(r.dossier_id)) != "drafts":
+        return None
+    ref = None
+    for ligne in (e.headers or "").splitlines() if e is not None else []:
+        if ligne.lower().startswith("x-atombox-reference:"):
+            ref = ligne.split(":", 1)[1].strip() or None
+    return {"mode": "tr" if ref else "new", "src": ref, "de": adresse,
+            "a": ", ".join(dest), "cc": ", ".join(copies), "sujet": c.sujet or "",
+            "corps": corps, "pieces_jointes": [], "reference": bool(ref)}
+
 async def detail(s: AsyncSession, compte: Compte, comm_id, magasin=None) -> dict | None:
     boites = [b.boite_id for b in await boites_du_compte(s, compte)]
     r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, _portee(boites)).limit(1))
     if not r: return None
     c = await s.get(Comm, comm_id); e = await s.get(CommEmail, comm_id); ds = await _dossiers_par_id(s, boites)
     boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
-    dest = (await s.execute(select(Adresse.adresse_complete).join(Participant, Participant.adresse_id == Adresse.adresse_id)
-                            .where(Participant.comm_id == comm_id, Participant.role.in_(("to", "cc"))).order_by(Participant.ordre))).scalars().all()
+    lignes = (await s.execute(select(Participant.role, Adresse.adresse_complete).join(Adresse, Participant.adresse_id == Adresse.adresse_id)
+                              .where(Participant.comm_id == comm_id, Participant.role.in_(("to", "cc"))).order_by(Participant.ordre))).all()
+    dest = [a for role, a in lignes if role == "to"]
+    copies = [a for role, a in lignes if role == "cc"]
     pjs = (await s.execute(select(CommPieceJointe, PieceJointe).join(PieceJointe, PieceJointe.piece_jointe_id == CommPieceJointe.piece_jointe_id)
                            .where(CommPieceJointe.comm_id == comm_id).order_by(CommPieceJointe.ordre))).all()
     corps = ""
@@ -164,7 +180,8 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, magasin=None) -> dict
             corps = analyser(magasin.lire(str(comm_id))).corps_texte
         except Exception as ex: log.warning("corps de %s illisible : %s", comm_id, ex)
     return serialiser(r, c, ds, adresse, True, {
-        "destinataires": list(dest), "corps": corps, "reponse_possible": e.reponse_possible if e else None, "list_id": e.list_id if e else None,
+        "destinataires": list(dest) + list(copies), "composition": _composition(r, c, ds, adresse, dest, copies, corps, e),
+        "corps": corps, "reponse_possible": e.reponse_possible if e else None, "list_id": e.list_id if e else None,
         "pieces_jointes": [ {"pj_id": str(p.piece_jointe_id), "ordre": l.ordre, "nom": l.nom_declare or ("piece-%d" % l.ordre), "octets": p.taille_octets,
                              "mime_declare": l.type_declare, "mime_detecte": p.type_detecte, "sha256": p.blob_ref, "partage_par": p.nb_references,
                              "content_id": l.content_id, "disposition": l.disposition} for l, p in pjs ] })
@@ -215,9 +232,9 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
     # insérer une ligne pendant le flush d'une autre est un piège (D158, D161).
     if n and not sync.descendante() and any(k in (patch or {}) for k in ("lu", "drapeau", "dossier", "suppr")):
         from ..modules import evenements
-        evenements.emettre(s, "rattachement.change",
-                           {"comm_id": str(comm_id), "boite_id": str(r.boite_id),
-                            "dossier_avant": str(dossier_avant) if dossier_avant else None})
+        await evenements.emettre_async(s, "rattachement.change",
+                                       {"comm_id": str(comm_id), "boite_id": str(r.boite_id),
+                                        "dossier_avant": str(dossier_avant) if dossier_avant else None})
     await s.commit()
     c = await s.get(Comm, comm_id); boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
     return {"modifies": n, "message": serialiser(r, c, ds, adresse)}
@@ -251,6 +268,35 @@ def entetes_de_relais(m: email.message.EmailMessage, comm_id, expediteur: str, q
     m["Received"] = recu
     for cle, valeur in anciens: m[cle] = valeur
 
+def _composer(compte: Compte, adresse: str, corps: dict, comm_id, quand, ip_client: str | None = None) -> bytes:
+    """Les octets d'un message écrit dans le webmail — brouillon ou envoi, même chemin.
+
+    Il y en avait deux, presque identiques : l'un posait les destinataires en base et pas
+    l'autre, l'un portait le Cc et pas l'autre. Deux chemins pour un même objet finissent
+    toujours par diverger — celui-ci est le seul."""
+    m = email.message.EmailMessage(policy=email.policy.SMTP)
+    m["From"] = "%s <%s>" % (compte.nom, adresse)
+    m["To"] = ", ".join(corps.get("destinataires") or [])
+    cc = [a.strip() for a in (corps.get("cc") or "").split(",") if a.strip()] if isinstance(corps.get("cc"), str) else list(corps.get("cc") or [])
+    if cc: m["Cc"] = ", ".join(cc)      # sans ça, un brouillon repris perdait ses copies
+    m["Subject"] = corps.get("sujet") or "(sans sujet)"
+    m["Date"] = email.utils.formatdate(localtime=True)
+    m["Message-ID"] = email.utils.make_msgid(domain=adresse.split("@")[-1])
+    if corps.get("reference"): m["X-AtomBox-Reference"] = str(corps["reference"])
+    m.set_content(corps.get("corps") or "")
+    entetes_de_relais(m, comm_id, adresse, quand, ip_client)   # D162
+    return m.as_bytes()
+
+async def _poser_participants(s: AsyncSession, comm_id, participants) -> None:
+    """Les destinataires sont une DONNÉE du message, pas un écho de la requête : sans eux,
+    un message envoyé se relit sans destinataire (et un brouillon sans personne à qui écrire)."""
+    for p in await s.scalars(select(Participant).where(Participant.comm_id == comm_id)):
+        await s.delete(p)
+    await s.flush()
+    for role, nom, adr, ordre in participants:
+        s.add(Participant(comm_id=comm_id, role=role, adresse_id=(await _adresse(s, adr)).adresse_id, nom_affiche=nom, ordre=ordre))
+
+
 async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: dict, magasin=None) -> dict | None:
     """Un brouillon réenregistré GARDE son identité (D089 : un brouillon est un message marqué).
     Le webmail supprimait puis recréait : le message changeait d'identifiant à chaque frappe
@@ -262,13 +308,7 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
     if c is None or c.sens != "out" or dossier_id_court(ds.get(r.dossier_id)) != "drafts":
         return None                       # on ne réécrit QUE des brouillons : un message est un fait (D029)
     boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
-    m = email.message.EmailMessage(policy=email.policy.SMTP)
-    m["From"] = "%s <%s>" % (compte.nom, adresse); m["To"] = ", ".join(corps.get("destinataires") or [])
-    m["Subject"] = corps.get("sujet") or "(sans sujet)"; m["Date"] = email.utils.formatdate(localtime=True)
-    m["Message-ID"] = email.utils.make_msgid(domain=adresse.split("@")[-1])
-    m.set_content(corps.get("corps") or "")
-    entetes_de_relais(m, comm_id, adresse, datetime.now(timezone.utc))
-    octets = m.as_bytes()
+    octets = _composer(compte, adresse, corps, comm_id, datetime.now(timezone.utc))
     from ..ingestion.analyse import analyser
     a = analyser(octets)
     if magasin is not None: magasin.ecrire(str(comm_id), octets, remplacer=True)
@@ -276,10 +316,7 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
     c.snippet, c.corps_texte, c.taille = a.snippet, a.corps_texte or None, len(octets)
     e = await s.get(CommEmail, comm_id)
     if e is not None: e.message_id, e.headers = a.message_id, a.headers
-    for p in await s.scalars(select(Participant).where(Participant.comm_id == comm_id)): await s.delete(p)
-    await s.flush()
-    for role, nom, adr, ordre in a.participants:
-        s.add(Participant(comm_id=comm_id, role=role, adresse_id=(await _adresse(s, adr)).adresse_id, nom_affiche=nom, ordre=ordre))
+    await _poser_participants(s, comm_id, a.participants)
     await s.commit()
     log.info("brouillon %s réenregistré par %s", comm_id, compte.login)
     return serialiser(r, c, ds, adresse, extra={"destinataires": corps.get("destinataires") or [],
@@ -309,15 +346,8 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_c
     ds = await _dossiers_par_id(s, [boite.boite_id])
     brouillon = bool(corps.get("composition"))
     cible = next((d for d in ds.values() if dossier_id_court(d) == ("drafts" if brouillon else "sent")), None)
-    m = email.message.EmailMessage(policy=email.policy.SMTP)
-    m["From"] = "%s <%s>" % (compte.nom, adresses[boite.boite_id]); m["To"] = ", ".join(corps.get("destinataires") or [])
-    m["Subject"] = corps.get("sujet") or "(sans sujet)"; m["Date"] = email.utils.formatdate(localtime=True)
-    m["Message-ID"] = email.utils.make_msgid(domain=adresses[boite.boite_id].split("@")[-1])
-    if corps.get("reference"): m["X-AtomBox-Reference"] = str(corps["reference"])
-    m.set_content(corps.get("corps") or "")
     comm_id = uuid7(); maintenant = datetime.now(timezone.utc)
-    entetes_de_relais(m, comm_id, adresses[boite.boite_id], maintenant, ip_client)   # D162
-    octets = m.as_bytes()
+    octets = _composer(compte, adresses[boite.boite_id], corps, comm_id, maintenant, ip_client)
     from ..ingestion.analyse import analyser
     from ..ingestion.identite import empreinte_identite
     a = analyser(octets)
@@ -339,9 +369,10 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_c
     s.add(Rattachement(comm_id=comm_id, boite_id=boite.boite_id, compte_id=compte.compte_id, lu_le=maintenant, drapeau=False, statut="nouveau", personnel=False, gele=False,
                        dossier_id=cible.dossier_id if cible else None))
     await s.flush()
+    await _poser_participants(s, comm_id, a.participants)
     from ..modules import evenements
     if not brouillon:
-        evenements.emettre(s, "message.a_envoyer", {"comm_id": str(comm_id), "boite_id": str(boite.boite_id), "destinataires": corps.get("destinataires") or []})
+        await evenements.emettre_async(s, "message.a_envoyer", {"comm_id": str(comm_id), "boite_id": str(boite.boite_id), "destinataires": corps.get("destinataires") or []})
     await s.commit()
     r = await s.get(Rattachement, (comm_id, boite.boite_id))
     return serialiser(r, c, ds, adresses[boite.boite_id], extra={"destinataires": corps.get("destinataires") or [], "corps": corps.get("corps") or "", "composition": corps.get("composition")})

@@ -59,3 +59,19 @@ def test_point_inconnu_refuse():
 
 def test_les_points_sont_documentes():
     assert all(POINTS[p] for p in POINTS) and "message.ingere" in POINTS
+
+def test_le_notify_ne_peut_plus_etre_muet():
+    """Une session asynchrone rendait `execute` sous forme de coroutine : le NOTIFY ne partait
+    jamais, l'événement attendait le réveil périodique (15 s) et l'écran ne bougeait pas. Une
+    coroutine perdue ne se voit pas — ce refus, si."""
+    from atombox.modules import evenements
+
+    class SessionAsyncFactice:                      # ce que voit `emettre` d'une AsyncSession
+        __name__ = "AsyncSession"
+        def __init__(self): self.sync_session = object()
+        def add(self, x): raise AssertionError("rien ne doit être ajouté avant le refus")
+
+    SessionAsyncFactice.__name__ = "AsyncSession"
+    faux = SessionAsyncFactice(); faux.__class__.__name__ = "AsyncSession"
+    with pytest.raises(TypeError, match="emettre_async"):
+        evenements.emettre(faux, "message.a_envoyer", {})

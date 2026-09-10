@@ -107,7 +107,7 @@ async def relancer(s: AsyncSession, compte, comm_id) -> dict | None:
         ev.traite_le = None; ev.abandonne = None; ev.tentatives = 0; ev.erreur = None
         ev.prochaine_tentative = datetime.now(timezone.utc)
     else:
-        evenements.emettre(s, "message.a_envoyer", {"comm_id": str(comm_id), "boite_id": str(r.boite_id), "destinataires": dest})
+        await evenements.emettre_async(s, "message.a_envoyer", {"comm_id": str(comm_id), "boite_id": str(r.boite_id), "destinataires": dest})
     await s.commit()
     log.info("envoi de %s relancé par %s (%d destinataire(s))", comm_id, compte.login, len(dest))
     return {"comm_id": str(comm_id), "destinataires": dest}
