@@ -51,7 +51,7 @@
       "GIN sur corps_tsv, chaud sur la zone active seulement (D034) — archives sur disque lent");
   };
 
-  addEventListener("keydown", e => { if (e.key === "Escape" && App.qOuvert()) App.setQ(false); });
+  if (ABX.Controllers.Raccourcis) ABX.Controllers.Raccourcis.brancher();   // F111 — Échap y compris
   addEventListener("resize", () => { if (!App.TABLET()) App.fermerNav();
     if (!App.MOBILE()) D.byId("main").dataset.vue = "liste"; });
   try { if (localStorage.getItem("abx.q") === "0") App.setQ(false); } catch (e) {}
