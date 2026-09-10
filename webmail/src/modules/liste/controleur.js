@@ -91,9 +91,17 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
         const m = ABX.Api.cache.message(d.dataset.id);
         const b = D.closest(e, "data-act");
         if (b) { e.stopPropagation(); return M[b.dataset.act](m); }
-        /* Un brouillon ne s'ouvre pas en lecture : il se rouvre en composition. */
-        if ((m.dossier || m.dossier_origine) === "drafts" && m.composition)
-          return ABX.Controllers.Compose.rouvrir(m);
+        /* Un brouillon ne s'ouvre pas en lecture : il se rouvre en composition. La LISTE ne
+           porte ni corps ni composition (une seule passe, D078) : on va chercher le détail
+           avant de rouvrir — sinon le brouillon s'ouvrait en lecture seule, et on ne pouvait
+           plus le reprendre. */
+        if ((m.dossier || m.dossier_origine) === "drafts") {
+          if (m.composition) return ABX.Controllers.Compose.rouvrir(m);
+          return ABX.Api.message(m.id).then(x => {
+            if (x && x.composition) return ABX.Controllers.Compose.rouvrir(x);
+            ABX.Controllers.Tabs.ouvrir({ type:"msg", id:m.id }, true);
+          });
+        }
         ABX.Controllers.Tabs.ouvrir({ type:"msg", id:m.id }, true);
         if (App().MOBILE()) App().setVue("detail");
       });

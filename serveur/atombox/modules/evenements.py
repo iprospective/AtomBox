@@ -28,12 +28,32 @@ class Abonnes:
 
 abonnes = Abonnes()
 
+def _evenement(type_: str, charge: dict, module: str, cible: str | None) -> Evenement:
+    return Evenement(evenement_id=uuid7(), type=type_, module=module, cible=cible, charge=charge,
+                     cree_le=datetime.now(timezone.utc), prochaine_tentative=datetime.now(timezone.utc), tentatives=0)
+
+def _est_async(session) -> bool:
+    return session.__class__.__name__ == "AsyncSession" or hasattr(session, "sync_session")
+
 def emettre(session, type_: str, charge: dict, module: str = "noyau", cible: str | None = None) -> Evenement:
-    """à appeler DANS la transaction du fait métier ; le NOTIFY part avec le commit"""
-    e = Evenement(evenement_id=uuid7(), type=type_, module=module, cible=cible, charge=charge,
-                  cree_le=datetime.now(timezone.utc), prochaine_tentative=datetime.now(timezone.utc), tentatives=0)
+    """à appeler DANS la transaction du fait métier ; le NOTIFY part avec le commit.
+
+    Session ASYNCHRONE ⇒ `emettre_async`. Sur une session async, `execute` rend une coroutine :
+    l'appeler ici sans l'attendre ne notifiait personne — l'événement attendait le réveil
+    périodique du processus des tâches (15 s), et l'écran ne bougeait pas entre-temps. Une
+    coroutine perdue ne se voit pas ; ce refus, si."""
+    if _est_async(session):
+        raise TypeError("evenements.emettre : session asynchrone — utiliser `await emettre_async(...)`")
+    e = _evenement(type_, charge, module, cible)
     session.add(e)
     session.execute(text("select pg_notify(:c, :t)"), {"c": CANAL, "t": type_})   # dans schema/ on aurait mis le SQL ; ici c'est un NOTIFY, pas une requête
+    return e
+
+async def emettre_async(session, type_: str, charge: dict, module: str = "noyau", cible: str | None = None) -> Evenement:
+    """la même chose depuis l'API (session asynchrone) — le NOTIFY est attendu, donc il part"""
+    e = _evenement(type_, charge, module, cible)
+    session.add(e)
+    await session.execute(text("select pg_notify(:c, :t)"), {"c": CANAL, "t": type_})
     return e
 
 def a_traiter(session, lot: int = 50) -> list[Evenement]:

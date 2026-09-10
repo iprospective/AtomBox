@@ -50,7 +50,7 @@ VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj
     fabriquer(d, fid) {
       const id = fid + "/u" + (++St.seq);
       const m = { id, dossier_origine: fid, sens: "out", from_nom: ABX.Ref.moi.nom, from_adresse: d.de, boite: d.de,
-        destinataires: d.a.split(",").map(x => x.trim()).filter(Boolean),
+        destinataires: d.a.split(",").map(x => x.trim()).filter(Boolean), cc: d.cc || "",
         sujet: d.sujet || "(sans sujet)", corps: d.corps,
         snippet: (d.corps || "").split("\n").find(l => l.trim()) || "…",
         date_recue: Date.now(), lu: true, thread_id: 1000 + St.seq, tags: [],
@@ -81,9 +81,18 @@ VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj
          son onglet ; il n'est recréé que s'il devient un envoi. */
       const reprise = brouillonId && !envoyer;
       if (reprise) m.id = brouillonId;
+      /* C'EST LE SERVEUR QUI NOMME. Le message fabriqué ici porte un identifiant d'attente ;
+         celui qui compte est celui que la réponse rapporte (D141). En les confondant, l'onglet
+         ouvert après l'envoi pointait sur un message que le serveur n'avait jamais eu — « ça
+         part, mais rien ne change à l'écran ». Le POC ne le montrait pas : son serveur simulé
+         acceptait l'identifiant du client. */
       const cree = (reprise ? ABX.Api.reenregistrer(brouillonId, m) : ABX.Api.creer(m))
-        .then(() => { if (envoyer && brouillonId) return ABX.Api.detacher(brouillonId); })
-        .then(() => ABX.Api.compteurs()).then(() => m);
+        .then(r => (r && r.message) ? r.message : m)
+        .then(vrai => (envoyer && brouillonId) ? ABX.Api.detacher(brouillonId).then(() => vrai) : vrai)
+        .then(vrai => ABX.Api.compteurs().then(() => {
+          ABX.Bus.emit("corpus:changed", { message: vrai });
+          return vrai;
+        }));
 
       if (!envoyer) {
         ABX.log("Enregistrer le brouillon",
@@ -92,12 +101,14 @@ VALUES (:id, :sujet, :corps, true, :moi, now())
 ON CONFLICT (comm_id) DO UPDATE SET corps = EXCLUDED.corps, maj_le = now();`,
           "un brouillon est un message comme un autre, marqué : sinon il faut une seconde table " +
           "et deux chemins de code pour le même objet");
-      } else {
-        const dest = m.destinataires.concat(d.cc.split(",").map(x => x.trim()).filter(Boolean));
+      } else if (ABX.Fixtures) {
+        /* la trace pédagogique a besoin des fixtures pour dire qui est interne : elle n'existe
+           qu'en session simulée. En produit, `Fx` est undefined — et l'appel plantait APRÈS le
+           POST, donc le message partait et l'écran restait figé, sans erreur visible. */
+        const dest = m.destinataires.concat((d.cc || "").split(",").map(x => x.trim()).filter(Boolean));
         const int = dest.filter(Fx.interne), ext = dest.filter(a => !Fx.interne(a));
         ABX.Traces.envoyer(m, d, int, ext);
       }
-      ABX.Bus.emit("corpus:changed", { message: m });
       return cree;
     },
   };

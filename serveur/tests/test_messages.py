@@ -156,6 +156,23 @@ def test_parcours_du_webmail(monde):
     assert c.put("/api/v1/messages/" + str(monde["ids"][0]), json={"sujet": "x"}, headers=h).status_code == 404, \
         "un message reçu n'est pas un brouillon : il ne se réécrit pas (D029)"
 
+    # F106 (suite) — un brouillon se REPREND : sa composition est reconstruite du message,
+    # et les destinataires d'un message ÉCRIT ICI sont en base, pas seulement en écho du POST.
+    br2 = c.post("/api/v1/messages", json={"destinataires": ["jean@x.fr"], "cc": "paul@x.fr",
+                                           "sujet": "Avec copie", "corps": "texte",
+                                           "composition": {"a": "jean@x.fr"}}, headers=h).json()["message"]
+    relu2 = c.get("/api/v1/messages/" + br2["id"], headers=h).json()
+    compo = relu2["composition"]
+    assert compo, "un brouillon relu porte sa composition — sinon on ne peut pas le reprendre"
+    assert compo["a"] == "jean@x.fr" and compo["cc"] == "paul@x.fr", "le Cc survit à la relecture"
+    assert compo["sujet"] == "Avec copie" and "texte" in compo["corps"]
+    envoye = c.post("/api/v1/messages", json={"destinataires": ["jean@x.fr"], "sujet": "Parti",
+                                              "corps": "voilà"}, headers=h).json()["message"]
+    assert envoye["dossier_origine"] == "sent"
+    relu3 = c.get("/api/v1/messages/" + envoye["id"], headers=h).json()
+    assert relu3["destinataires"] == ["jean@x.fr"], "un message envoyé garde ses destinataires en base"
+    assert relu3["composition"] is None, "un message parti n'est plus un brouillon"
+
     # F108 — le carnet auto-collecté
     carnet = c.get("/api/v1/carnet", headers=h).json()["carnet"]
     assert any(x["adresse"] == "jean@x.fr" for x in carnet), "les destinataires écrits nourrissent le carnet (D109)"
