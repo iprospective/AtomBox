@@ -1,4 +1,4 @@
-"""LE MAGASIN D'OCTETS (F002 — D005, D007, D009b, D069, D145).
+"""LE MAGASIN D'OCTETS (F002 — D005, D007, D009b, D069, D145, D145b).
 
 Un fichier par contenu, nommé par son identifiant, sous ab/cd/<identifiant> : l'UUID de la
 comm pour un message brut (préfixe temporel), l'empreinte du contenu pour un blob dédupliqué
@@ -6,6 +6,17 @@ comm pour un message brut (préfixe temporel), l'empreinte du contenu pour un bl
 réécrit : le même identifiant, c'est le même contenu (ou le même message) — écrire deux fois
 est un succès silencieux. Compression zstd conditionnelle (D069) : on ne compresse que si ça
 gagne ; la trame zstd se reconnaît à son en-tête, donc la lecture n'a rien à savoir.
+
+⚠ `ab/cd` NE RÉPARTIT PAS les messages (D145b, mesuré — chapitre 20 du CDC). Un UUID v7
+commence par son horodatage : les quatre premiers caractères ne changent que tous les
+49,7 jours, donc TOUS les messages d'une même période vivent dans le MÊME répertoire (20 000
+messages mesurés : un seul répertoire ; les blobs, adressés par empreinte : 17 234). Ce n'est
+pas un défaut de performance — l'accès direct reste plat (2,2 µs à 500 000 entrées) — mais
+deux règles en découlent, et elles engagent tout code qui touche au magasin :
+
+  1. ne JAMAIS supposer l'uniformité (dimensionnement, partitionnement, parallélisme) ;
+  2. tout balayage se fait répertoire par répertoire — c'est-à-dire PÉRIODE par période, ce qui
+     rend l'archivage par date trivial : déplacer un trimestre, c'est déplacer des répertoires.
 """
 import hashlib, os, tempfile
 import zstandard
