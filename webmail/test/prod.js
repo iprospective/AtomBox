@@ -159,6 +159,30 @@ const { creerDocument } = require("./fake-dom");
     eq(repris && repris.data.cc, "paul@exemple.fr", "avec ses copies — le Cc a survécu à l'aller-retour");
   }
 
+  console.log("— se connecter là où il n'y a pas d'API ————————————————");
+  /* Une page statique servie sans serveur (le miroir public) répond 404 sur /session. Le client
+     traduisait ça en « identifiants refusés » — il accusait l'utilisateur de ce dont il n'était
+     pas responsable, et on cherchait un mot de passe pendant que le problème était l'adresse. */
+  {
+    const r404 = () => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve(null) });
+    const s = demarrer(creerStockage(), { session: null, fetch: r404 });
+    await drainer(s);
+    s.doc.getElementById("c_user").value = "mathieu"; s.doc.getElementById("c_pass").value = "peu importe";
+    await s.ABX.Controllers.Connexion.soumettre();
+    const html = s.doc.getElementById("connexion").innerHTML;
+    vrai(/maquette/.test(html) && /poc \/ poc/.test(html),
+         "404 sur /session : l'écran dit qu'il n'y a pas de service ici, et quoi faire à la place");
+    vrai(!/[Ii]dentifiants refusés/.test(html), "et surtout : il n'accuse pas les identifiants");
+
+    const r401 = () => Promise.resolve({ ok: false, status: 401, json: () => Promise.resolve(null) });
+    const s2 = demarrer(creerStockage(), { session: null, fetch: r401 });
+    await drainer(s2);
+    s2.doc.getElementById("c_user").value = "mathieu"; s2.doc.getElementById("c_pass").value = "faux";
+    await s2.ABX.Controllers.Connexion.soumettre();
+    vrai(/[Ii]dentifiants refusés/.test(s2.doc.getElementById("connexion").innerHTML),
+         "401, en revanche, dit bien que les identifiants sont refusés");
+  }
+
   console.log("— bundle produit ————————————————————————————————");
   const BUNDLE = path.join(RACINE, "dist", "prod.html");
   vrai(fs.existsSync(BUNDLE), "dist/prod.html existe");

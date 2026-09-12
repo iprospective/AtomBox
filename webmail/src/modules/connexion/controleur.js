@@ -19,7 +19,15 @@
       D.byId("c_user").value = u; D.byId("c_pass").value = p;
       return ABX.Session.connecter(u, p)
         .then(() => { location.reload(); return true; })
-        .catch(e => { Connexion.peindre({ erreur: /401|refus/.test(String(e && e.message)) ? "Identifiants refusés." : "Service indisponible : " + String(e && e.message || e) }); return false; });
+        .catch(e => {
+          const m = String(e && e.message || e);
+          Connexion.peindre({ erreur:
+            /sans-api|404/.test(m)
+              ? "Aucun service à cette adresse : cette page ne sert que la maquette. Connectez-vous avec poc / poc."
+              : /401|refus/.test(m) ? "Identifiants refusés."
+              : "Service indisponible : " + m });
+          return false;
+        });
     },
   };
   ABX.Controllers = ABX.Controllers || {};

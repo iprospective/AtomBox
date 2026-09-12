@@ -95,7 +95,14 @@
         .then(r => r || { moi: { nom: "", boites: [] }, speciaux: [], util: [], axes: [], valeurs: {}, statuts: [], vues: [] }),
 
     /* ---- la session ---------------------------------------------------------- */
-    connecter: (utilisateur, mot_de_passe) => req("POST", "/session", { utilisateur, mot_de_passe }),
+    /* `req` rend null sur 404 — « hors portée = 404 » (D108). Cette convention vaut pour une
+       RESSOURCE ; une session n'a pas de portée : un 404 ici dit qu'il n'y a pas d'API à cette
+       adresse, pas que la session est hors de vue. Les confondre affichait « identifiants
+       refusés » sur une page servie sans serveur — le pire message possible : il accuse
+       l'utilisateur de ce dont il n'est pas responsable. */
+    connecter: (utilisateur, mot_de_passe) =>
+      req("POST", "/session", { utilisateur, mot_de_passe })
+        .then(r => { if (r === null) throw new Error("sans-api : aucun service à cette adresse"); return r; }),
     deconnecter: () => req("DELETE", "/session"),
 
     /* ---- écriture : réponses {ok, modifies, …} ------------------------------ */
