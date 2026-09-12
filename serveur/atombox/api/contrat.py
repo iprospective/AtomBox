@@ -26,6 +26,19 @@ class Comm(BaseModel):
     snippet: str | None = None
     corps_texte: str | None = None
 
+class CommCitation(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    comm_citation_id: uuid.UUID
+    comm_id: uuid.UUID
+    cite_comm_id: uuid.UUID | None = None
+    cite_message_id: str | None = None
+    part_citee: decimal.Decimal
+    part_modifiee: decimal.Decimal
+    position: str
+    recette: dict | list | None = None
+    origine: str
+    detecte_le: datetime.datetime
+
 class CommEmail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     comm_id: uuid.UUID
@@ -419,4 +432,4 @@ class Evenement(BaseModel):
     abandonne: bool | None = None
     erreur: str | None = None
 
-CONTRAT = {"comm": Comm, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}
+CONTRAT = {"comm": Comm, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}

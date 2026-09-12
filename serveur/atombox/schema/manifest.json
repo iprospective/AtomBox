@@ -1,5 +1,5 @@
 {
- "genere": "2026-09-08T02:02:24",
+ "genere": "2026-09-12T03:04:33",
  "tables": {
   "comm": {
    "cle": [
@@ -108,6 +108,66 @@
     "D013",
     "D022",
     "D130"
+   ]
+  },
+  "comm_citation": {
+   "cle": [
+    "comm_citation_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "comm_citation_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "cite_comm_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "cite_message_id",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "part_citee",
+     "type": "numeric",
+     "obligatoire": true
+    },
+    {
+     "nom": "part_modifiee",
+     "type": "numeric",
+     "obligatoire": true
+    },
+    {
+     "nom": "position",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "recette",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
+     "nom": "origine",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "detecte_le",
+     "type": "timestamptz",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D163"
    ]
   },
   "comm_email": {
@@ -2005,8 +2065,8 @@
    ]
   }
  },
- "fks": 68,
- "index": 57,
+ "fks": 70,
+ "index": 59,
  "contraintes": 7,
  "rapport": []
 }

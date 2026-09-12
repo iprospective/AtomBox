@@ -1,4 +1,4 @@
-"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-08T02:02:24 depuis le dictionnaire (D158).
+"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-12T03:04:33 depuis le dictionnaire (D158).
 NE PAS ÉDITER : corriger .mmi-pm/docs/dict/*.yml, régénérer. Les tables sont celles de schema.sql (F114)."""
 from __future__ import annotations
 import datetime, decimal, uuid
@@ -33,6 +33,23 @@ class Comm(Base):
     corps_texte: Mapped[str | None] = mapped_column(Text, nullable=True)
     thread: Mapped[Comm | None] = relationship("Comm", foreign_keys=[thread_id], remote_side=[comm_id])
     __table_args__ = (PrimaryKeyConstraint("comm_id", name="pk_comm"), CheckConstraint("\"type\" IN ('email', 'interne', 'groupe', 'sms', 'whatsapp', 'tel')", name="ck_comm_type"), CheckConstraint("\"sens\" IN ('in', 'out')", name="ck_comm_sens"), CheckConstraint("\"nature\" IN ('humain', 'liste', 'notification', 'service')", name="ck_comm_nature"),)
+
+class CommCitation(Base):
+    """Le lien entre une réponse et le message qu'elle CITE dans son corps (D163). Une relation, jamais une substitution : le m"""
+    __tablename__ = "comm_citation"
+    comm_citation_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    comm_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("comm.comm_id", name="fk_comm_citation_comm_id"), nullable=False)
+    cite_comm_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("comm.comm_id", name="fk_comm_citation_cite_comm_id"), nullable=True)
+    cite_message_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    part_citee: Mapped[decimal.Decimal] = mapped_column(Numeric, nullable=False)
+    part_modifiee: Mapped[decimal.Decimal] = mapped_column(Numeric, nullable=False)
+    position: Mapped[str] = mapped_column(Text, nullable=False)
+    recette: Mapped[dict | list | None] = mapped_column(JSONB, nullable=True)
+    origine: Mapped[str] = mapped_column(Text, nullable=False)
+    detecte_le: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    comm: Mapped[Comm | None] = relationship("Comm", foreign_keys=[comm_id])
+    cite_comm: Mapped[Comm | None] = relationship("Comm", foreign_keys=[cite_comm_id])
+    __table_args__ = (PrimaryKeyConstraint("comm_citation_id", name="pk_comm_citation"), CheckConstraint("\"position\" IN ('avant', 'apres', 'intercale')", name="ck_comm_citation_position"), CheckConstraint("\"origine\" IN ('emission', 'ingestion')", name="ck_comm_citation_origine"),)
 
 class CommEmail(Base):
     """La fille « email » du tronc : en-têtes, identifiants de fil, verdicts d'authentification, référence du blob, empreinte, """
@@ -547,4 +564,4 @@ class Evenement(Base):
     erreur: Mapped[str | None] = mapped_column(Text, nullable=True)
     __table_args__ = (PrimaryKeyConstraint("evenement_id", name="pk_evenement"),)
 
-MODELES = {"comm": Comm, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}
+MODELES = {"comm": Comm, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}

@@ -1,6 +1,6 @@
--- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-08T02:02:24 depuis le dictionnaire des données.
+-- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-12T03:04:33 depuis le dictionnaire des données.
 -- NE PAS ÉDITER : la source est .mmi-pm/docs/dict/*.yml (F114, D154). PostgreSQL ≥ 14 (D027).
--- 34 tables, 68 clés étrangères, 57 index, 7 unicités. Identifiants : uuid v7 engendrés par
+-- 35 tables, 70 clés étrangères, 59 index, 7 unicités. Identifiants : uuid v7 engendrés par
 -- l'application (D145). Le tronc comm n'est PAS partitionné en V0 : la partition par canal (D138)
 -- se pose quand un second canal existe — l'uuid rend la clé indépendante de la partition.
 
@@ -31,6 +31,23 @@ CREATE TABLE "comm" (
   CONSTRAINT "ck_comm_type" CHECK ("type" IN ('email', 'interne', 'groupe', 'sms', 'whatsapp', 'tel')),
   CONSTRAINT "ck_comm_sens" CHECK ("sens" IN ('in', 'out')),
   CONSTRAINT "ck_comm_nature" CHECK ("nature" IN ('humain', 'liste', 'notification', 'service'))
+);
+
+-- comm_citation — Le lien entre une réponse et le message qu'elle CITE dans son corps (D163). Une relation, jamais une substitut
+CREATE TABLE "comm_citation" (
+  "comm_citation_id" uuid NOT NULL,
+  "comm_id" uuid NOT NULL,
+  "cite_comm_id" uuid,
+  "cite_message_id" text,
+  "part_citee" numeric NOT NULL,
+  "part_modifiee" numeric NOT NULL,
+  "position" text NOT NULL,
+  "recette" jsonb,
+  "origine" text NOT NULL,
+  "detecte_le" timestamptz NOT NULL,
+  CONSTRAINT "pk_comm_citation" PRIMARY KEY ("comm_citation_id"),
+  CONSTRAINT "ck_comm_citation_position" CHECK ("position" IN ('avant', 'apres', 'intercale')),
+  CONSTRAINT "ck_comm_citation_origine" CHECK ("origine" IN ('emission', 'ingestion'))
 );
 
 -- comm_email — La fille « email » du tronc : en-têtes, identifiants de fil, verdicts d'authentification, référence du blob, e
@@ -512,6 +529,8 @@ CREATE TABLE "evenement" (
 
 -- clés étrangères, après toutes les tables : l'ordre de création n'importe plus
 ALTER TABLE "comm" ADD CONSTRAINT "fk_comm_thread_id" FOREIGN KEY ("thread_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "comm_citation" ADD CONSTRAINT "fk_comm_citation_comm_id" FOREIGN KEY ("comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "comm_citation" ADD CONSTRAINT "fk_comm_citation_cite_comm_id" FOREIGN KEY ("cite_comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "comm_email" ADD CONSTRAINT "fk_comm_email_comm_id" FOREIGN KEY ("comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "comm_email" ADD CONSTRAINT "fk_comm_email_blob_ref" FOREIGN KEY ("blob_ref") REFERENCES "blob" ("empreinte") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "comm_interne" ADD CONSTRAINT "fk_comm_interne_comm_id" FOREIGN KEY ("comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
@@ -591,6 +610,8 @@ ALTER TABLE "session" ADD CONSTRAINT "uq_session_jeton_empreinte" UNIQUE ("jeton
 
 -- index des références
 CREATE INDEX "ix_comm_thread_id" ON "comm" ("thread_id");
+CREATE INDEX "ix_comm_citation_comm_id" ON "comm_citation" ("comm_id");
+CREATE INDEX "ix_comm_citation_cite_comm_id" ON "comm_citation" ("cite_comm_id");
 CREATE INDEX "ix_comm_email_blob_ref" ON "comm_email" ("blob_ref");
 CREATE INDEX "ix_comm_interne_de_compte_id" ON "comm_interne" ("de_compte_id");
 CREATE INDEX "ix_comm_interne_a_compte_id" ON "comm_interne" ("a_compte_id");
