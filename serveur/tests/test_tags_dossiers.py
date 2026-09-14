@@ -91,3 +91,15 @@ def test_un_dossier_virtuel_filtre_sur_les_tags(monde):  # noqa: F811
     assert not any(v["id"] == d["id"] for v in apres.get("virtuels", []))
     assert d["id"] not in (c.get("/api/v1/parametres", headers=h).json().get("epingles") or []), \
         "supprimer un dossier virtuel retire son épingle — sinon l'épingle pointe un mort"
+
+
+def test_les_axes_remontent_aux_referentiels(monde):  # noqa: F811
+    """RM3176 — ils étaient rendus `[]` et `{}` en dur : le formulaire « mes dossiers + » faisait
+    `axes[0].id` sur une liste vide et mourait en silence."""
+    c, h = _client(monde)
+    mid = str(monde["ids"][3])
+    c.post("/api/v1/messages/%s/tags" % mid, json={"axe": "service", "val": "compta"}, headers=h)
+    ref = c.get("/api/v1/referentiels", headers=h).json()
+    assert any(a["id"] == "service" for a in ref["axes"]), "l'axe créé à la volée est servi"
+    assert {v["id"] for v in ref["valeurs"].get("service", [])} >= {"compta"}, "et ses valeurs avec"
+    assert all(isinstance(a.get("label"), str) for a in ref["axes"]), "chaque axe a un libellé affichable"

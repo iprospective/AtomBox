@@ -89,16 +89,25 @@
           Nav.peindre();
         });
       });
-      const vnew = el.querySelector("#v_new");
+      /* D.byId, pas querySelector : le faux DOM du harnais rend un objet VOLATILE, et le
+         gestionnaire se poserait dans le vide — un écran qu'aucun test ne peut cliquer est un
+         écran qu'on ne teste pas. */
+      const vnew = D.byId("v_new");
       if (vnew) vnew.onclick = e => { stop(e);
-        ui.formVirtuel = { label: "", criteres: [{ axe: ABX.Ref.axes[0].id, val: "" }] }; Nav.peindre(); };
-      const form = el.querySelector("#vform");
+        /* `axes[0].id` sur une liste vide levait, et le clic mourait EN SILENCE — le serveur
+           rendait `axes: []`. Un référentiel vide n'est pas neutre : il faut le prévoir. */
+        const a0 = (ABX.Ref.axes && ABX.Ref.axes[0]) || null;
+        ui.formVirtuel = { label: "", criteres: [{ axe: a0 ? a0.id : "", val: "" }] };
+        Nav.peindre(); };
+      const form = D.byId("vform");
       if (form) {
         const lire = () => { const fv = ui.formVirtuel; fv.label = D.byId("v_label").value;
           form.querySelectorAll(".v_axe").forEach(s => { fv.criteres[+s.dataset.i].axe = s.value; });
           form.querySelectorAll(".v_val").forEach(s => { fv.criteres[+s.dataset.i].val = s.value; }); };
         form.querySelectorAll(".v_axe").forEach(s => { s.onchange = () => { lire(); Nav.peindre(); }; });
-        D.byId("v_plus").onclick = () => { lire(); ui.formVirtuel.criteres.push({ axe: ABX.Ref.axes[0].id, val: "" }); Nav.peindre(); };
+        D.byId("v_plus").onclick = () => { lire();
+          const a0 = (ABX.Ref.axes && ABX.Ref.axes[0]) || null;
+          ui.formVirtuel.criteres.push({ axe: a0 ? a0.id : "", val: "" }); Nav.peindre(); };
         D.byId("v_non").onclick = () => { ui.formVirtuel = null; Nav.peindre(); };
         D.byId("v_ok").onclick = () => { lire(); Nav.creerVirtuel(ui.formVirtuel); };
       }

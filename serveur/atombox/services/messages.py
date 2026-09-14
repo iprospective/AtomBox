@@ -49,6 +49,25 @@ async def boites_du_compte(s: AsyncSession, compte: Compte) -> list[Boite]:
     return list(await s.scalars(select(Boite).join(Acces, Acces.boite_id == Boite.boite_id)
                                 .where(Acces.compte_id == compte.compte_id, Acces.fin.is_(None))))
 
+async def _axes_et_valeurs(s: AsyncSession) -> dict:
+    """Les axes de classement et leurs valeurs (D002, D016) — ils étaient rendus `[]` et `{}` EN DUR.
+    Conséquence visible : le formulaire « mes dossiers + » faisait `axes[0].id` sur une liste vide,
+    levait, et le clic mourait en silence. Un référentiel vide n'est pas un référentiel neutre :
+    tout ce qui s'appuie dessus casse sans le dire.
+
+    Une seule requête pour les deux : un axe sans valeur existe (on vient de le créer), une valeur
+    sans axe n'existe pas."""
+    from ..schema.modeles import Axe, Tag
+    axes = list(await s.scalars(select(Axe).order_by(Axe.ordre, Axe.nom)))
+    lignes = (await s.execute(select(Axe.nom, Tag.valeur).join(Tag, Tag.axe_id == Axe.axe_id)
+                              .where(Tag.actif.is_(True)).order_by(Axe.nom, Tag.valeur))).all()
+    valeurs: dict = {a.nom: [] for a in axes}
+    for nom, val in lignes:
+        valeurs.setdefault(nom, []).append({"id": val, "label": val})
+    return {"axes": [{"id": a.nom, "label": a.nom.capitalize(), "derive": a.derive} for a in axes],
+            "valeurs": valeurs}
+
+
 async def referentiels(s: AsyncSession, compte: Compte) -> dict:
     boites = await boites_du_compte(s, compte)
     adresses = {b.boite_id: (await s.get(Adresse, b.adresse_id)).adresse_complete for b in boites}
@@ -61,7 +80,7 @@ async def referentiels(s: AsyncSession, compte: Compte) -> dict:
     virtuels = list(await s.scalars(select(Filtre).where(Filtre.portee_type == "compte", Filtre.portee_id == compte.compte_id, sans_action, Filtre.actif.is_(True)).order_by(Filtre.ordre)))
     return { "moi": {"nom": compte.nom, "login": compte.login, "boites": [{"id": str(b.boite_id), "adresse": adresses[b.boite_id], "label": adresses[b.boite_id].split("@")[0]} for b in boites]},
              "speciaux": [{"id": x["id"], "label": x["label"], "icon": x["icon"], **({"vue": True} if x.get("vue") else {}), **({"sortant": True} if x.get("sortant") else {})} for x in SPECIAUX],
-             "util": util, "axes": [], "valeurs": {}, "statuts": STATUTS, "vues": VUES,
+             "util": util, **(await _axes_et_valeurs(s)), "statuts": STATUTS, "vues": VUES,
              "virtuels": [{"id": "perso:" + str(f.filtre_id), "label": f.nom, "criteres": (f.predicat or {}).get("criteres", [])} for f in virtuels] }
 
 def _condition_tag(axe: str, val: str | None):
