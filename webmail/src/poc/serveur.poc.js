@@ -163,6 +163,23 @@
       C.ajoute(corps); St.crees.push(corps); St.save();
       return ok({ crees: 1, message: rep(corps, false) }); }],
 
+    ["POST", /^\/messages\/([^/]+)\/tags$/, (m, _, corps) => {
+      const x = C.par(dec(m[1])); if (!x) return null;
+      const c = corps || {}, axe = (c.axe || "").trim(), val = (c.val || c.valeur || "").trim();
+      if (!axe || !val) return null;
+      if (!x.tags.some(t => t.axe === axe && t.val === val)) x.tags.push({ axe, val, source: "manuel" });
+      St.patch(x, { tags: x.tags }); St.save();
+      return ok({ tags: x.tags }); }],
+
+    ["DELETE", /^\/messages\/([^/]+)\/tags\/([^/]+)$/, (m) => {
+      const x = C.par(dec(m[1])); if (!x) return null;
+      const [axe, val] = dec(m[2]).split("=");
+      const avant = x.tags.length;
+      x.tags = x.tags.filter(t => !(t.axe === axe && t.val === val));
+      if (x.tags.length === avant) return null;          // rien retiré = 404, comme le vrai serveur
+      St.patch(x, { tags: x.tags }); St.save();
+      return ok({ supprimes: 1, tags: x.tags }); }],
+
     ["DELETE", /^\/messages\/([^/]+)\/rattachement$/, (m) => {
       const x = C.par(dec(m[1])); if (!x) return null;
       St.patch(x, { suppr: true }); C.retire(x); St.save();
