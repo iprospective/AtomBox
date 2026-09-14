@@ -538,15 +538,15 @@ const mt = A.Corpus.par(lignes[0].dataset.id);
 const nTags = mt.tags.length;
 A.MessageService.ajouterTag(mt, "projet", "RM2937"); await tick(p);
 eq(mt.tags.length, nTags + 1, "tag ajouté");
-eq(mt.tags[mt.tags.length - 1].src, "utilisateur", "posé par l'utilisateur");
+eq(mt.tags[mt.tags.length - 1].source, "manuel", "posé à la main — le mot du CONTRAT, pas celui du POC");
 A.MessageService.ajouterTag(mt, "projet", "RM2937"); await tick(p);
 eq(mt.tags.length, nTags + 1, "un doublon exact n'est pas reposé");
 A.MessageService.ajouterTag(mt, "projet", "  "); await tick(p);
 eq(mt.tags.length, nTags + 1, "une valeur vide est refusée");
-const iAuto = mt.tags.findIndex(t => t.src === "dolibarr-mmi");
+const iAuto = mt.tags.findIndex(t => t.source === "dolibarr-mmi");
 if (iAuto >= 0) { A.MessageService.retirerTag(mt, iAuto); await tick(p);
   vrai(A.QueryLog.entrees[0].warn, "retirer un tag de connecteur lève un avertissement"); }
-const iUser = mt.tags.findIndex(t => t.src === "utilisateur");
+const iUser = mt.tags.findIndex(t => t.source === "manuel");
 A.MessageService.retirerTag(mt, iUser); await tick(p);
 vrai(!mt.tags.some(t => t.val === "RM2937"), "tag retiré");
 vrai(!!A.Store.ratt[mt.id].tags, "les tags sont dans le delta persisté");
@@ -684,7 +684,7 @@ vrai(/^RM\d+ · /.test(tickets[0].label), "un ticket est nommé RM<id> · titre"
 const mdev = A.Corpus.tous.find(m => m.dossier_origine.startsWith("developpement:"));
 vrai(!!mdev, "les tickets portent des messages");
 const tdev = mdev.tags.find(t => t.axe === "developpement");
-eq(tdev && tdev.src, "redmine-ipro", "le tag vient de Redmine, pas de l'ERP");
+eq(tdev && tdev.source, "redmine-ipro", "le tag vient de Redmine, pas de l'ERP");
 eq(A.Views.List.variante(mdev), "developpement", "la carte a sa variante");
 vrai(A.Registry.render("message.card", { m: mdev, variant: "developpement" })
       .includes("RM"), "et elle met le numéro de ticket en avant");

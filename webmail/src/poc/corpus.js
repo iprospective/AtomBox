@@ -152,8 +152,8 @@
          connecteur n'a pas le même sens selon qui l'a posé. */
       if (Fx.estAxe(axe))
         m.tags.push({ axe, val: label,
-                      src: (Fx.AXES.find(a => a.id === axe) || {}).app || "dolibarr-mmi" });
-      if (P.next() < .25) m.tags.push({ axe:"projet", val:"RM" + P.int(2800, 2900), src:"redmine-ipro" });
+                      source: (Fx.AXES.find(a => a.id === axe) || {}).app || "dolibarr-mmi" });
+      if (P.next() < .25) m.tags.push({ axe:"projet", val:"RM" + P.int(2800, 2900), source:"redmine-ipro" });
       if (P.next() < .18) m.tags.push({ axe:"type", val:P.pick(["facture","devis","contrat"]), src:"filtre" });
       out.push(m);
     }

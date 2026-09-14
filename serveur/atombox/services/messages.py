@@ -55,11 +55,30 @@ async def referentiels(s: AsyncSession, compte: Compte) -> dict:
     dossiers = list(await s.scalars(select(Dossier).where(Dossier.boite_id.in_([b.boite_id for b in boites])).order_by(Dossier.ordre, Dossier.nom)))
     util = [ {"id": str(d.dossier_id), "label": d.nom, "icon": "📁", "boite": adresses.get(d.boite_id)}
              for d in dossiers if not special_de(d.alias_imap) ]
-    virtuels = list(await s.scalars(select(Filtre).where(Filtre.portee_type == "compte", Filtre.portee_id == compte.compte_id, Filtre.action.is_(None), Filtre.actif.is_(True)).order_by(Filtre.ordre)))
+    # `action` sans action : NULL SQL, ou le JSON `null` des lignes écrites avant le correctif —
+    # les deux veulent dire « ce filtre est un dossier virtuel, pas une règle » (D143).
+    sans_action = or_(Filtre.action.is_(None), func.jsonb_typeof(Filtre.action) == "null")
+    virtuels = list(await s.scalars(select(Filtre).where(Filtre.portee_type == "compte", Filtre.portee_id == compte.compte_id, sans_action, Filtre.actif.is_(True)).order_by(Filtre.ordre)))
     return { "moi": {"nom": compte.nom, "login": compte.login, "boites": [{"id": str(b.boite_id), "adresse": adresses[b.boite_id], "label": adresses[b.boite_id].split("@")[0]} for b in boites]},
              "speciaux": [{"id": x["id"], "label": x["label"], "icon": x["icon"], **({"vue": True} if x.get("vue") else {}), **({"sortant": True} if x.get("sortant") else {})} for x in SPECIAUX],
              "util": util, "axes": [], "valeurs": {}, "statuts": STATUTS, "vues": VUES,
              "virtuels": [{"id": "perso:" + str(f.filtre_id), "label": f.nom, "criteres": (f.predicat or {}).get("criteres", [])} for f in virtuels] }
+
+def _condition_tag(axe: str, val: str | None):
+    """Un dossier virtuel sur un TAG — sa raison d'être (D143). `val` absente = toute la FAMILLE :
+    « tout ce qui porte un client », quel qu'il soit. C'est ce que demande « un dossier virtuel
+    depuis un tag OU une famille de tags ».
+
+    EXISTS plutôt qu'une jointure : un message portant trois tags du même axe doit apparaître une
+    fois, pas trois — et la liste ne doit pas avoir à dédupliquer après coup."""
+    from ..schema.modeles import Axe, CommTag, Tag
+    sous = (select(CommTag.comm_id).join(Tag, Tag.tag_id == CommTag.tag_id)
+            .join(Axe, Axe.axe_id == Tag.axe_id)
+            .where(CommTag.comm_id == Comm.comm_id, Axe.nom == (axe or "").strip().lower()))
+    if val and str(val).strip():
+        sous = sous.where(Tag.valeur == str(val).strip())
+    return sous.exists()
+
 
 def _portee(compte_boites):
     return Rattachement.boite_id.in_(compte_boites)
@@ -117,6 +136,7 @@ async def liste(s: AsyncSession, compte: Compte, dossier: str, kind: str | None,
             if c.get("axe") == "dossier" and c.get("val"): conds.append(_condition_dossier(c["val"], None, ds, compte))
             elif c.get("axe") == "from" and c.get("val"): conds.append(Comm.from_adresse.ilike("%" + c["val"] + "%"))
             elif c.get("axe") == "sujet" and c.get("val"): conds.append(Comm.sujet.ilike("%" + c["val"] + "%"))
+            elif c.get("axe"): conds.append(_condition_tag(c["axe"], c.get("val")))
         q = q.where(and_(*conds)) if conds else q.where(Comm.comm_id.is_(None))
         q = q.where(Rattachement.dossier_id.notin_([d.dossier_id for d in ds.values() if dossier_id_court(d) == "trash"]))
     else:
@@ -132,7 +152,13 @@ async def liste(s: AsyncSession, compte: Compte, dossier: str, kind: str | None,
         if filtre == "lourds": q = q.where(Comm.taille > 2048 * 1024)
     q = q.order_by(TRIS.get(tri or "date_desc", TRIS["date_desc"])).limit(500)
     adresses = {b: (await s.get(Adresse, (await s.get(Boite, b)).adresse_id)).adresse_complete for b in boites}
-    return [serialiser(r, c, ds, adresses.get(r.boite_id)) for r, c in (await s.execute(q)).all()]
+    lignes = (await s.execute(q)).all()
+    # les tags de TOUTE la liste en une passe (D078) : une requête par message rendrait la
+    # deuxième page inutilisable, et c'est le tag qui porte le classement (D002)
+    from .tags import tags_de
+    tags = await tags_de(s, [c.comm_id for _, c in lignes])
+    return [serialiser(r, c, ds, adresses.get(r.boite_id), extra={"tags": tags.get(c.comm_id, [])})
+            for r, c in lignes]
 
 def serialiser(r: Rattachement, c: Comm, ds: dict, boite_adresse: str | None, complet: bool = False, extra: dict | None = None) -> dict:
     origine = dossier_id_court(ds.get(r.dossier_origine_id)) if r.dossier_origine_id else dossier_id_court(ds.get(r.dossier_id))
@@ -179,7 +205,9 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, magasin=None) -> dict
             from ..ingestion.analyse import analyser
             corps = analyser(magasin.lire(str(comm_id))).corps_texte
         except Exception as ex: log.warning("corps de %s illisible : %s", comm_id, ex)
+    from .tags import tags_de
     return serialiser(r, c, ds, adresse, True, {
+        "tags": (await tags_de(s, [comm_id])).get(comm_id, []),
         "destinataires": list(dest) + list(copies), "composition": _composition(r, c, ds, adresse, dest, copies, corps, e),
         "corps": corps, "reponse_possible": e.reponse_possible if e else None, "list_id": e.list_id if e else None,
         "pieces_jointes": [ {"pj_id": str(p.piece_jointe_id), "ordre": l.ordre, "nom": l.nom_declare or ("piece-%d" % l.ordre), "octets": p.taille_octets,

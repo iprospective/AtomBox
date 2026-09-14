@@ -23,6 +23,13 @@
     }));
   }
 
+  /* la trace pédagogique seule — `appliquer` écrivait ET traçait ; poser un tag écrit ailleurs
+     (sa propre route), mais doit tracer pareil. */
+  function tracer(m, log) {
+    if (typeof log === "function") log(m);
+    else if (log) ABX.log(...(Array.isArray(log) ? log : [log]));
+  }
+
   const M = {
     appliquer,
 
@@ -214,7 +221,13 @@ VALUES (:moi, :id, 'statut', :statut, now());`,
       if (!axe || !val.trim()) return;
       const v = val.trim();
       if (m.tags.some(t => t.axe === axe && t.val === v)) return;
-      appliquer(m, { tags: m.tags.concat([{ axe, val: v, src: "utilisateur" }]) },
+      /* Le tag est sur le MESSAGE, pas sur le rattachement (D017) : il a sa route à lui.
+         Il passait par le PATCH du rattachement, que le serveur ignorait — le tag s'affichait,
+         et disparaissait au rechargement. */
+      m.tags = m.tags.concat([{ axe, val: v, source: "manuel" }]);            // optimiste
+      const envoi = ABX.Api.poserTag(m.id, axe, v)
+        .then(r => { if (r && r.tags) m.tags = r.tags; ABX.Bus.emit("corpus:changed", { message: m }); return r; });
+      tracer(m,
         { label: "Poser le tag " + axe + " = " + v,
           index: "le droit d'écrire sur l'axe est vérifié en amont (D018) — poser un tag sur un " +
                  "axe qu'on ne peut que lire doit être refusé, pas ignoré",
@@ -233,25 +246,30 @@ RETURNING tag_id;`,
 VALUES (:id, :tag, :moi, now()) ON CONFLICT DO NOTHING;`,
               index: "pas d'unicité (message, axe) : un message peut relever de deux clients (D017)" },
           ] });
+      return envoi;
     },
 
     retirerTag(m, i) {
       const t = m.tags[i];
       if (!t) return;
-      const auto = t.src && t.src !== "utilisateur";
-      appliquer(m, { tags: m.tags.filter((_, k) => k !== i) },
+      const auto = t.source && t.source !== "manuel";
+      m.tags = m.tags.filter((_, k) => k !== i);                             // optimiste
+      const envoi = ABX.Api.retirerTag(m.id, t.axe, t.val)
+        .then(r => { if (r && r.tags) m.tags = r.tags; ABX.Bus.emit("corpus:changed", { message: m }); return r; });
+      tracer(m,
         ["Retirer le tag " + t.axe + " = " + t.val,
 `DELETE FROM comm_tag
  WHERE comm_id = :id AND tag_id = :tag AND pose_par = :moi;
 
 -- le tag lui-même n'est PAS supprimé : d'autres messages le portent`,
           auto
-            ? "⚠ ce tag a été posé par « " + t.src + " » : le retirer ici ne l'empêche pas " +
+            ? "⚠ ce tag a été posé par « " + t.source + " » : le retirer ici ne l'empêche pas " +
               "d'être reposé au prochain passage du connecteur. Un retrait durable suppose " +
               "soit une table d'exclusions, soit un retrait côté application (D019/D021)"
             : "le tag reste en base tant qu'un autre message le porte — supprimer la ligne de " +
               "liaison n'est pas supprimer le tag",
           auto]);
+      return envoi;
     },
 
     /* Vider la corbeille : le seul endroit où la déduplication se paie. */
