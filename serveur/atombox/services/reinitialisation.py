@@ -107,16 +107,20 @@ async def demander(s: AsyncSession, qui: str, base_lien: str, ip: str | None = N
     octets = _message(secours, compte, lien, expire, expediteur)
     try:
         (envoyer or _remettre)(octets, secours)
-        log.info("réinitialisation envoyée pour %s à son adresse de secours", compte.login)
+        log.info("réinitialisation REMISE AU RELAIS pour %s (%s) — remise finale non garantie (D165)",
+                 compte.login, secours.rpartition("@")[2])
     except Exception as ex:                      # le relais peut être indisponible : on le dit au journal
         log.error("réinitialisation pour %s : le relais a refusé (%s)", compte.login, ex)
     return None
 
 
 async def _expediteur(s: AsyncSession, compte: Compte) -> str:
-    """L'adresse d'envoi du service. Configurée, sinon `no-reply@` du domaine de la boîte du
-    compte : un message de service parti d'un domaine étranger est refusé par SPF, et arrive
-    dans les indésirables quand il n'est pas refusé — c'est-à-dire jamais lu."""
+    """L'adresse d'envoi du service (D165). Configurée par `ATOMBOX_EXPEDITEUR_SERVICE`, sinon
+    dérivée du domaine de la boîte — ce qui n'est juste QUE si ce domaine est authentifié.
+
+    Incident fondateur : sans SPF ni DMARC sur le domaine émetteur, le relais accepte (250 Ok),
+    le journal écrit « envoyé », et Gmail refuse — en IPv6 surtout. Un domaine sans SPF n'est pas
+    moins bien classé : ses messages n'arrivent pas."""
     configure = os.environ.get("ATOMBOX_EXPEDITEUR_SERVICE")
     if configure:
         return configure
