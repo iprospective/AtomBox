@@ -104,6 +104,13 @@
       req("POST", "/session", { utilisateur, mot_de_passe })
         .then(r => { if (r === null) throw new Error("sans-api : aucun service à cette adresse"); return r; }),
     deconnecter: () => req("DELETE", "/session"),
+    /* F129 — la réponse est constante par contrat (D164) : le client n'a rien à en déduire */
+    demanderReinitialisation: utilisateur =>
+      req("POST", "/session/reinitialisation", { utilisateur })
+        .then(r => { if (r === null) throw new Error("sans-api : aucun service à cette adresse"); return r; }),
+    reinitialiser: (jeton, mot_de_passe) =>
+      req("PUT", "/session/reinitialisation", { jeton, mot_de_passe })
+        .then(r => { if (r === null) throw new Error("sans-api : aucun service à cette adresse"); return r; }),
 
     /* ---- écriture : réponses {ok, modifies, …} ------------------------------ */
     patcher: (id, patch) => req("PATCH", "/messages/" + encodeURIComponent(id) + "/rattachement", patch)

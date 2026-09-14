@@ -28,7 +28,7 @@ function demarrer(stockage, opts) {
     console, document: doc, localStorage: ls,
     matchMedia: () => ({ matches: false }),
     addEventListener: () => {}, alert: () => {}, confirm: () => true,
-    location: { reload: () => {} },
+    location: { reload: () => {}, hash: (o && o.hash) || "" },
     setTimeout, clearTimeout, encodeURIComponent, decodeURIComponent, Math, Date, JSON, Promise,
     /* pas de réseau dans le harnais : en mode produit sans serveur simulé, chaque
        appel rejette proprement — l'interface doit tenir avec une API qui répond
