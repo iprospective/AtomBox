@@ -1,0 +1,17 @@
+[Unit]
+Description=AtomBox — tunnel SSH inverse : l'API du conteneur servie par le vhost public (RM2937)
+After=network-online.target atombox-api.service
+Wants=network-online.target
+
+[Service]
+User=mathieu
+# -N : aucun shell distant. ExitOnForwardFailure : si le port distant est déjà pris, on ÉCHOUE
+# au lieu de tourner sans rien faire — un tunnel qui se croit ouvert est pire qu'un tunnel fermé.
+# Le port distant n'écoute que sur 127.0.0.1 (GatewayPorts no par défaut) : seul Apache y accède,
+# jamais internet en direct.
+ExecStart=/usr/bin/ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -R 127.0.0.1:8010:127.0.0.1:8010 root@dev.iprospective.net
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
