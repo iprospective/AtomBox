@@ -229,6 +229,56 @@ const { creerDocument } = require("./fake-dom");
     vrai(vus.includes("PUT /session/reinitialisation"), "le PUT a bien été fait");
   }
 
+  console.log("— en produit, CHAQUE écran s'ouvre vraiment (RM3176) ————————");
+  /* Les deux bugs trouvés à l'usage — administration vide, « mes dossiers + » inerte — avaient la
+     même cause : du code de maquette exécuté en produit. Le harnais n'ouvrait aucun de ces écrans.
+     Il les ouvre tous maintenant, et vérifie qu'ils PEIGNENT quelque chose. */
+  {
+    const rep = o => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(o) });
+    const faux = (url, init) => {
+      const chemin = url.replace("/api/v1", "").split("?")[0];
+      if (chemin === "/referentiels") return rep({ moi: { nom: "x", login: "x", boites: [{ id: "b", adresse: "moi@exemple.fr", label: "moi" }] },
+        speciaux: [{ id: "inbox", label: "Boîte de réception", icon: "📥" }], util: [],
+        axes: [{ id: "client", label: "Client" }], valeurs: { client: [{ id: "Tessier", label: "Tessier" }] },
+        statuts: [], vues: [], virtuels: [] });
+      if (chemin === "/arborescence") return rep({ compteurs: {}, virtuels: [], epingles: [] });
+      if (chemin === "/etat") return rep({ ingestion: [], files: {}, magasin: {}, contenu: {}, regles: [] });
+      if (chemin === "/journal") return rep({ lignes: [] });
+      if (chemin === "/filtres") return rep({ filtres: [], total: 0, champs: [], operateurs: [], actions: [] });
+      if (chemin === "/messages") return rep({ messages: [], total: 0 });
+      return rep({ ok: true });
+    };
+    const e = demarrer(creerStockage(), { session: "api", fetch: faux });
+    await drainer(e);
+    const A2 = e.ABX, doc = e.doc;
+
+    /* l'administration : elle ne doit proposer que ce qu'un serveur sert, et PEINDRE */
+    A2.Controllers.Tabs.ouvrir({ type: "admin", volet: null }, false);
+    await drainer(e).catch(() => {});
+    const adm = doc.getElementById("detail").innerHTML;
+    vrai(adm.length > 200, "l'administration peint quelque chose (" + adm.length + " caractères)");
+    vrai(/État & journal|Règles/.test(adm), "et propose les volets qui ont un serveur derrière");
+    vrai(!/Domaines & boîtes|Suite collaborative/.test(adm),
+         "sans proposer les volets qui n'existent qu'en maquette");
+
+    /* « mes dossiers + » : le clic doit ouvrir le formulaire, même sans axe servi */
+    const nav = A2.Controllers.Nav;
+    A2.Store.ui.formVirtuel = null;
+    nav.peindre();
+    const plus = doc.getElementById("v_new");
+    vrai(!!plus, "le bouton + de « mes dossiers » est là");
+    plus.onclick({ preventDefault() {}, stopPropagation() {} });
+    vrai(!!A2.Store.ui.formVirtuel, "le clic ouvre le formulaire — il levait sur axes[0] et mourait en silence");
+    eq(A2.Store.ui.formVirtuel.criteres[0].axe, "client", "et le premier axe SERVI est proposé");
+
+    /* le même clic quand le serveur ne sert AUCUN axe : il ne doit pas casser */
+    A2.Ref.axes = [];
+    A2.Store.ui.formVirtuel = null;
+    nav.peindre();
+    doc.getElementById("v_new").onclick({ preventDefault() {}, stopPropagation() {} });
+    vrai(!!A2.Store.ui.formVirtuel, "sans aucun axe, le formulaire s'ouvre quand même");
+  }
+
   console.log("— bundle produit ————————————————————————————————");
   const BUNDLE = path.join(RACINE, "dist", "prod.html");
   vrai(fs.existsSync(BUNDLE), "dist/prod.html existe");
