@@ -128,7 +128,45 @@ async def compteurs(s: AsyncSession, compte: Compte) -> dict:
         bump(k, n, non_lu, statut)
     prefs = compte.preferences or {}
     ref = await referentiels(s, compte)
+    c.update(await _compteurs_virtuels(s, boites, ds, compte, ref["virtuels"]))
     return {"compteurs": c, "virtuels": ref["virtuels"], "epingles": prefs.get("epingles", [])}
+
+
+async def _compteurs_virtuels(s: AsyncSession, boites, ds: dict, compte, virtuels: list) -> dict:
+    """Un dossier virtuel n'est pas un dossier : il n'apparaît dans aucun `GROUP BY dossier_id`,
+    donc il affichait **0/0** en portant des messages. On le compte avec la MÊME condition que
+    celle qui le liste — sinon le compteur et la liste diraient deux choses.
+
+    Toujours une seule passe (D078) : un agrégat conditionnel par dossier virtuel dans la même
+    requête, plutôt qu'une requête par dossier."""
+    if not virtuels:
+        return {}
+    colonnes, cles = [], []
+    for v in virtuels:
+        conds = []
+        for crit in (v.get("criteres") or []):
+            axe = crit.get("axe")
+            if not axe:
+                continue
+            if axe == "dossier" and crit.get("val"): conds.append(_condition_dossier(crit["val"], None, ds, compte))
+            elif axe == "from" and crit.get("val"): conds.append(Comm.from_adresse.ilike("%" + crit["val"] + "%"))
+            elif axe == "sujet" and crit.get("val"): conds.append(Comm.sujet.ilike("%" + crit["val"] + "%"))
+            else: conds.append(_condition_tag(axe, crit.get("val")))
+        if not conds:
+            continue
+        ou = and_(*conds)
+        cles.append(v["id"])
+        colonnes.append(func.count().filter(ou).label("t%d" % len(cles)))
+        colonnes.append(func.count().filter(and_(ou, Rattachement.lu_le.is_(None))).label("u%d" % len(cles)))
+        colonnes.append(func.count().filter(and_(ou, Rattachement.statut.in_(("a_faire", "en_cours")))).label("f%d" % len(cles)))
+    if not cles:
+        return {}
+    corbeilles = [d.dossier_id for d in ds.values() if dossier_id_court(d) == "trash"]
+    q = select(*colonnes).select_from(Rattachement).join(Comm, Comm.comm_id == Rattachement.comm_id).where(_portee(boites))
+    if corbeilles:
+        q = q.where(Rattachement.dossier_id.notin_(corbeilles))     # la corbeille ne compte pas
+    ligne = (await s.execute(q)).one()
+    return {cle: {"t": ligne[i * 3], "u": ligne[i * 3 + 1], "f": ligne[i * 3 + 2]} for i, cle in enumerate(cles)}
 
 def _condition_dossier(dossier: str, kind: str | None, ds: dict, compte):
     """la condition SQL d'un dossier du webmail"""
