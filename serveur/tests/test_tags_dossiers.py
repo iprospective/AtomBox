@@ -103,3 +103,28 @@ def test_les_axes_remontent_aux_referentiels(monde):  # noqa: F811
     assert any(a["id"] == "service" for a in ref["axes"]), "l'axe créé à la volée est servi"
     assert {v["id"] for v in ref["valeurs"].get("service", [])} >= {"compta"}, "et ses valeurs avec"
     assert all(isinstance(a.get("label"), str) for a in ref["axes"]), "chaque axe a un libellé affichable"
+
+
+def test_un_dossier_virtuel_est_compte(monde):  # noqa: F811
+    """Il affichait 0/0 en portant des messages : aucun `GROUP BY dossier_id` ne voit un dossier
+    qui n'existe pas en base. Le compteur et la liste doivent dire la MÊME chose."""
+    c, h = _client(monde)
+    a = str(monde["ids"][0])
+    c.post("/api/v1/messages/%s/tags" % a, json={"axe": "compté", "val": "oui"}, headers=h)
+    d = c.post("/api/v1/dossiers-virtuels",
+               json={"label": "Compté", "criteres": [{"axe": "compté", "val": "oui"}]},
+               headers=h).json()["dossier"]
+
+    arbo = c.get("/api/v1/arborescence", headers=h).json()
+    compte = arbo["compteurs"].get(d["id"])
+    assert compte, "le dossier virtuel a un compteur — il n'en avait aucun, d'où le 0/0"
+    liste = c.get("/api/v1/messages", params={"dossier": d["id"], "kind": "perso"}, headers=h).json()
+    assert compte["t"] == liste["total"] == 1, "le compteur dit ce que la liste montre"
+
+    # un second message tagué : les deux suivent
+    b = str(monde["ids"][1])
+    c.post("/api/v1/messages/%s/tags" % b, json={"axe": "compté", "val": "oui"}, headers=h)
+    arbo2 = c.get("/api/v1/arborescence", headers=h).json()
+    liste2 = c.get("/api/v1/messages", params={"dossier": d["id"], "kind": "perso"}, headers=h).json()
+    assert arbo2["compteurs"][d["id"]]["t"] == liste2["total"] == 2
+    assert arbo2["compteurs"][d["id"]]["u"] <= 2, "et les non-lus sont un sous-ensemble"
