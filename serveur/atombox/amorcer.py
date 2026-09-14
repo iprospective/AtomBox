@@ -18,12 +18,13 @@ from .uuid7 import uuid7
 log = journal("auth")
 SPECIAUX = (("INBOX", "INBOX"), ("Sent", "Envoyés"), ("Drafts", "Brouillons"), ("Junk", "Indésirables"), ("Trash", "Corbeille"))
 
-def amorcer(login: str, nom: str, mot_de_passe: str | None, boite_adresse: str, partagee: bool = False, s=None) -> dict:
+def amorcer(login: str, nom: str, mot_de_passe: str | None, boite_adresse: str, partagee: bool = False, s=None, email_secours: str | None = None) -> dict:
     s = s or ouvrir()
     compte = s.scalar(select(Compte).where(Compte.login == login.lower()))
     if compte is None:
         compte = Compte(compte_id=uuid7(), login=login.lower(), nom=nom, actif=True, cree_le=datetime.now(timezone.utc)); s.add(compte)
     if mot_de_passe: compte.mot_de_passe_empreinte = hacher_mot_de_passe(mot_de_passe)
+    if email_secours: compte.email_secours = email_secours.strip().lower()   # D164 — hors d'AtomBox
     a = adresse_de(s, boite_adresse.lower())
     boite = s.scalar(select(Boite).where(Boite.adresse_id == a.adresse_id))
     if boite is None:
@@ -45,8 +46,9 @@ def principal(argv=None):
     p.add_argument("--login", required=True); p.add_argument("--nom", required=True); p.add_argument("--mot-de-passe", default=None)
     p.add_argument("--boite", required=True, help="l'adresse de la boîte (aussi son login IMAP avec le compte master)")
     p.add_argument("--partagee", action="store_true")
+    p.add_argument("--email-secours", default=None, help="l'adresse de RÉCUPÉRATION, hors d'AtomBox (D164)")
     a = p.parse_args(argv)
-    r = amorcer(a.login, a.nom, a.mot_de_passe, a.boite, a.partagee)
+    r = amorcer(a.login, a.nom, a.mot_de_passe, a.boite, a.partagee, email_secours=a.email_secours)
     print("compte %s, boîte %s" % (r["compte_id"], r["boite_id"]))
 
 if __name__ == "__main__":

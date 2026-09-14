@@ -26,6 +26,17 @@ class Comm(BaseModel):
     snippet: str | None = None
     corps_texte: str | None = None
 
+class Reinitialisation(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    reinitialisation_id: uuid.UUID
+    compte_id: uuid.UUID
+    jeton_empreinte: str
+    envoye_a: str
+    demande_le: datetime.datetime
+    expire_le: datetime.datetime
+    utilise_le: datetime.datetime | None = None
+    demande_par_ip: str | None = None
+
 class CommCitation(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     comm_citation_id: uuid.UUID
@@ -179,6 +190,7 @@ class Compte(BaseModel):
     login: str
     nom: str
     mot_de_passe_empreinte: str | None = None
+    email_secours: str | None = None
     correspondant_id: uuid.UUID | None = None
     actif: bool
     cree_le: datetime.datetime
@@ -432,4 +444,4 @@ class Evenement(BaseModel):
     abandonne: bool | None = None
     erreur: str | None = None
 
-CONTRAT = {"comm": Comm, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}
+CONTRAT = {"comm": Comm, "reinitialisation": Reinitialisation, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}

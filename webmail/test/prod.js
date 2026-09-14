@@ -183,6 +183,52 @@ const { creerDocument } = require("./fake-dom");
          "401, en revanche, dit bien que les identifiants sont refusés");
   }
 
+  console.log("— mot de passe oublié : trois écrans, une réponse constante (F129) ————");
+  {
+    const vus = [];
+    const rep = o => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(o) });
+    const faux = (url, init) => {
+      const m = (init && init.method) || "GET", chemin = url.replace("/api/v1", "").split("?")[0];
+      vus.push(m + " " + chemin);
+      if (m === "POST" && chemin === "/session/reinitialisation")
+        return rep({ ok: true, message: "Si un compte correspond et qu'une adresse de secours y est enregistrée, un lien vient d'y être envoyé." });
+      if (m === "PUT" && chemin === "/session/reinitialisation") {
+        const c = JSON.parse(init.body);
+        vrai(c.jeton === "JETON-123", "le jeton vient du fragment d'URL, pas d'un champ");
+        return rep({ ok: true, message: "mot de passe changé" });
+      }
+      return rep({ ok: true });
+    };
+    const d = demarrer(creerStockage(), { session: null, fetch: faux });
+    await drainer(d);
+    const C = d.ABX.Controllers.Connexion;
+    C.peindre({});
+    vrai(/Mot de passe oublié/.test(d.doc.getElementById("connexion").innerHTML), "la porte propose « mot de passe oublié »");
+    C.peindre({ page: "oubli" });
+    d.doc.getElementById("o_user").value = "mathieu";
+    await C.demander();
+    const h = d.doc.getElementById("connexion").innerHTML;
+    vrai(/Si un compte correspond/.test(h), "la réponse du serveur est affichée telle quelle — constante (D164)");
+    vrai(!/introuvable|inconnu|n'existe/.test(h), "et elle ne dit jamais si le compte existe");
+
+    // le lien reçu par mail : le jeton est dans le FRAGMENT, que le navigateur n'envoie pas au serveur
+    const e = demarrer(creerStockage(), { session: null, fetch: faux, hash: "#reinitialiser=JETON-123" });
+    await drainer(e);
+    const C2 = e.ABX.Controllers.Connexion;
+    C2.peindre({});
+    vrai(/Nouveau mot de passe/.test(e.doc.getElementById("connexion").innerHTML),
+         "un jeton dans le fragment ouvre directement le choix du nouveau mot de passe");
+    vrai(/toutes les sessions ouvertes de ce compte seront fermées/.test(e.doc.getElementById("connexion").innerHTML.replace(/\s+/g, " ")),
+         "et l'écran dit ce que ça va faire : toutes les sessions tombent");
+    e.doc.getElementById("r_pass").value = "trop-court"; e.doc.getElementById("r_pass2").value = "different";
+    await C2.reinitialiser();
+    vrai(/diffèrent/.test(e.doc.getElementById("connexion").innerHTML), "deux saisies qui diffèrent sont refusées avant le réseau");
+    e.doc.getElementById("r_pass").value = "un-mot-de-passe-neuf"; e.doc.getElementById("r_pass2").value = "un-mot-de-passe-neuf";
+    await C2.reinitialiser();
+    vrai(/Mot de passe changé/.test(e.doc.getElementById("connexion").innerHTML), "puis l'écran renvoie à la connexion");
+    vrai(vus.includes("PUT /session/reinitialisation"), "le PUT a bien été fait");
+  }
+
   console.log("— bundle produit ————————————————————————————————");
   const BUNDLE = path.join(RACINE, "dist", "prod.html");
   vrai(fs.existsSync(BUNDLE), "dist/prod.html existe");

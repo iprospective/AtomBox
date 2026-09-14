@@ -1,6 +1,6 @@
--- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-12T03:04:33 depuis le dictionnaire des données.
+-- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le 2026-09-14T03:42:13 depuis le dictionnaire des données.
 -- NE PAS ÉDITER : la source est .mmi-pm/docs/dict/*.yml (F114, D154). PostgreSQL ≥ 14 (D027).
--- 35 tables, 70 clés étrangères, 59 index, 7 unicités. Identifiants : uuid v7 engendrés par
+-- 36 tables, 71 clés étrangères, 60 index, 8 unicités. Identifiants : uuid v7 engendrés par
 -- l'application (D145). Le tronc comm n'est PAS partitionné en V0 : la partition par canal (D138)
 -- se pose quand un second canal existe — l'uuid rend la clé indépendante de la partition.
 
@@ -31,6 +31,19 @@ CREATE TABLE "comm" (
   CONSTRAINT "ck_comm_type" CHECK ("type" IN ('email', 'interne', 'groupe', 'sms', 'whatsapp', 'tel')),
   CONSTRAINT "ck_comm_sens" CHECK ("sens" IN ('in', 'out')),
   CONSTRAINT "ck_comm_nature" CHECK ("nature" IN ('humain', 'liste', 'notification', 'service'))
+);
+
+-- reinitialisation — Une demande de réinitialisation de mot de passe (D164) : un jeton haché, à usage unique, valable trente minute
+CREATE TABLE "reinitialisation" (
+  "reinitialisation_id" uuid NOT NULL,
+  "compte_id" uuid NOT NULL,
+  "jeton_empreinte" text NOT NULL,
+  "envoye_a" text NOT NULL,
+  "demande_le" timestamptz NOT NULL,
+  "expire_le" timestamptz NOT NULL,
+  "utilise_le" timestamptz,
+  "demande_par_ip" text,
+  CONSTRAINT "pk_reinitialisation" PRIMARY KEY ("reinitialisation_id")
 );
 
 -- comm_citation — Le lien entre une réponse et le message qu'elle CITE dans son corps (D163). Une relation, jamais une substitut
@@ -221,6 +234,7 @@ CREATE TABLE "compte" (
   "login" text NOT NULL,
   "nom" text NOT NULL,
   "mot_de_passe_empreinte" text,
+  "email_secours" text,
   "correspondant_id" uuid,
   "actif" boolean NOT NULL,
   "cree_le" timestamptz NOT NULL,
@@ -529,6 +543,7 @@ CREATE TABLE "evenement" (
 
 -- clés étrangères, après toutes les tables : l'ordre de création n'importe plus
 ALTER TABLE "comm" ADD CONSTRAINT "fk_comm_thread_id" FOREIGN KEY ("thread_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "reinitialisation" ADD CONSTRAINT "fk_reinitialisation_compte_id" FOREIGN KEY ("compte_id") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "comm_citation" ADD CONSTRAINT "fk_comm_citation_comm_id" FOREIGN KEY ("comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "comm_citation" ADD CONSTRAINT "fk_comm_citation_cite_comm_id" FOREIGN KEY ("cite_comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "comm_email" ADD CONSTRAINT "fk_comm_email_comm_id" FOREIGN KEY ("comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
@@ -600,6 +615,7 @@ ALTER TABLE "modele" ADD CONSTRAINT "fk_modele_cree_par" FOREIGN KEY ("cree_par"
 ALTER TABLE "session" ADD CONSTRAINT "fk_session_compte_id" FOREIGN KEY ("compte_id") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
 
 -- unicités
+ALTER TABLE "reinitialisation" ADD CONSTRAINT "uq_reinitialisation_jeton_empreinte" UNIQUE ("jeton_empreinte");
 ALTER TABLE "adresse" ADD CONSTRAINT "uq_adresse_adresse_complete" UNIQUE ("adresse_complete");
 ALTER TABLE "domaine" ADD CONSTRAINT "uq_domaine_nom_ascii" UNIQUE ("nom_ascii");
 ALTER TABLE "compte" ADD CONSTRAINT "uq_compte_login" UNIQUE ("login");
@@ -610,6 +626,7 @@ ALTER TABLE "session" ADD CONSTRAINT "uq_session_jeton_empreinte" UNIQUE ("jeton
 
 -- index des références
 CREATE INDEX "ix_comm_thread_id" ON "comm" ("thread_id");
+CREATE INDEX "ix_reinitialisation_compte_id" ON "reinitialisation" ("compte_id");
 CREATE INDEX "ix_comm_citation_comm_id" ON "comm_citation" ("comm_id");
 CREATE INDEX "ix_comm_citation_cite_comm_id" ON "comm_citation" ("cite_comm_id");
 CREATE INDEX "ix_comm_email_blob_ref" ON "comm_email" ("blob_ref");

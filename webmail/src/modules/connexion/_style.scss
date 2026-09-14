@@ -10,3 +10,10 @@ body[data-etat="connexion"] header,body[data-etat="connexion"] .tabs,body[data-e
 .cnx input{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:inherit}
 .cnx .hbtn.prim{margin-top:8px;padding:9px}
 .cnxerr{color:var(--danger);font-size:12.5px}
+
+// F129 — les écrans de récupération : une intention, une confirmation, un lien discret
+.cnxint { color: #555; font-size: 13px; line-height: 1.45; margin: 0 0 4px; }
+.cnxok  { background: #eef7ee; border: 1px solid #cde3cd; color: #2b5f2b; border-radius: 6px;
+          padding: 8px 10px; font-size: 13px; }
+.cnx .lien { background: none; border: 0; color: #2c6cb0; text-decoration: underline; cursor: pointer;
+             font: inherit; padding: 6px 0; align-self: center; }

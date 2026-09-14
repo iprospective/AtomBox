@@ -1,4 +1,4 @@
-"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-12T03:04:33 depuis le dictionnaire (D158).
+"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-14T03:42:13 depuis le dictionnaire (D158).
 NE PAS ÉDITER : corriger .mmi-pm/docs/dict/*.yml, régénérer. Les tables sont celles de schema.sql (F114)."""
 from __future__ import annotations
 import datetime, decimal, uuid
@@ -33,6 +33,20 @@ class Comm(Base):
     corps_texte: Mapped[str | None] = mapped_column(Text, nullable=True)
     thread: Mapped[Comm | None] = relationship("Comm", foreign_keys=[thread_id], remote_side=[comm_id])
     __table_args__ = (PrimaryKeyConstraint("comm_id", name="pk_comm"), CheckConstraint("\"type\" IN ('email', 'interne', 'groupe', 'sms', 'whatsapp', 'tel')", name="ck_comm_type"), CheckConstraint("\"sens\" IN ('in', 'out')", name="ck_comm_sens"), CheckConstraint("\"nature\" IN ('humain', 'liste', 'notification', 'service')", name="ck_comm_nature"),)
+
+class Reinitialisation(Base):
+    """Une demande de réinitialisation de mot de passe (D164) : un jeton haché, à usage unique, valable trente minutes, envoyé """
+    __tablename__ = "reinitialisation"
+    reinitialisation_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    compte_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_reinitialisation_compte_id"), nullable=False)
+    jeton_empreinte: Mapped[str] = mapped_column(Text, nullable=False)
+    envoye_a: Mapped[str] = mapped_column(Text, nullable=False)
+    demande_le: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expire_le: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    utilise_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    demande_par_ip: Mapped[str | None] = mapped_column(Text, nullable=True)
+    compte: Mapped[Compte | None] = relationship("Compte", foreign_keys=[compte_id])
+    __table_args__ = (PrimaryKeyConstraint("reinitialisation_id", name="pk_reinitialisation"), UniqueConstraint("jeton_empreinte", name="uq_reinitialisation_jeton_empreinte"),)
 
 class CommCitation(Base):
     """Le lien entre une réponse et le message qu'elle CITE dans son corps (D163). Une relation, jamais une substitution : le m"""
@@ -230,6 +244,7 @@ class Compte(Base):
     login: Mapped[str] = mapped_column(Text, nullable=False)
     nom: Mapped[str] = mapped_column(Text, nullable=False)
     mot_de_passe_empreinte: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email_secours: Mapped[str | None] = mapped_column(Text, nullable=True)
     correspondant_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("correspondant.correspondant_id", name="fk_compte_correspondant_id"), nullable=True)
     actif: Mapped[bool] = mapped_column(Boolean, nullable=False)
     cree_le: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -564,4 +579,4 @@ class Evenement(Base):
     erreur: Mapped[str | None] = mapped_column(Text, nullable=True)
     __table_args__ = (PrimaryKeyConstraint("evenement_id", name="pk_evenement"),)
 
-MODELES = {"comm": Comm, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}
+MODELES = {"comm": Comm, "reinitialisation": Reinitialisation, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}
