@@ -7,9 +7,15 @@
   const F = ABX.Fmt, R = ABX.Registry, P = ABX.Providers;
   const Fx = () => ABX.Fixtures;      // POC seulement : les volets historiques s'en servent encore
 
-  const VOLETS = [["boites","Domaines & boîtes"], ["apps","Applications & jetons"],
-                  ["axes","Axes & tags"], ["etat","État & journal"], ["regles","Règles"],
-                  ["suite","Suite collaborative"], ["canaux","Canaux"]];
+  /* Tous les volets ne sont pas servis : « État & journal » (F122) et « Règles » (F016) ont un
+     serveur derrière ; les autres lisent les fixtures et ne valent qu'en maquette. Les proposer
+     en produit ouvrait un onglet VIDE — la vue levait sur `ABX.Fixtures` absent, et rien ne se
+     peignait. Un écran qui n'a rien à montrer ne doit pas être proposé (D141). */
+  const TOUS = [["boites","Domaines & boîtes"], ["apps","Applications & jetons"],
+                ["axes","Axes & tags"], ["etat","État & journal"], ["regles","Règles"],
+                ["suite","Suite collaborative"], ["canaux","Canaux"]];
+  const SERVIS = ["etat", "regles"];                       // ce qui tient sans le POC
+  const VOLETS = () => ABX.Fixtures ? TOUS : TOUS.filter(([k]) => SERVIS.includes(k));
   /* Le webmail EST l'interface d'administration (D159) : ces deux volets ne sont pas une
      seconde application, ce sont des pages gardées par un rôle — en V0 il n'y en a pas
      encore, tout compte les voit (D072 viendra en V1). */
@@ -251,12 +257,14 @@
   ABX.Views.Admin = {
     VOLETS,
     render(volet) {
-      const v = RENDU[volet] ? volet : "boites";
+      const dispo = VOLETS().map(([k]) => k);
+      const v = dispo.includes(volet) ? volet : dispo[0];
       return `<div class="backbar"><button data-vue="liste">‹ Retour</button></div>
         <div class="dhead"><div class="dsubj">Administration</div>
-          <div class="dmeta">rôles d'administration par utilisateur (D072) — ce POC affiche
-            tout, un exploitant réel ne verra que ses volets</div>
-          <div class="chips" style="margin-top:9px">${VOLETS.map(([k, l]) =>
+          <div class="dmeta">${ABX.Fixtures ? `rôles d'administration par utilisateur (D072) — ce POC
+            affiche tout, un exploitant réel ne verra que ses volets`
+            : `les volets servis par ce serveur ; les autres sont encore des maquettes`}</div>
+          <div class="chips" style="margin-top:9px">${VOLETS().map(([k, l]) =>
             `<span class="chip${k === v ? " on" : ""}" data-vol="${k}">${l}</span>`).join("")}</div>
         </div>
         <div class="admin">${RENDU[v]()}</div>`;

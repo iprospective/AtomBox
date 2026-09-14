@@ -14,6 +14,27 @@ CIBLE="${ATOMBOX_CIBLE:-/home/siteadm/atombox/public/dev}"
 URL="https://atombox.dev.iprospective.fr/"
 
 cd "$RACINE"
+# ---------------------------------------------------------------------------
+# GARDE (RM3176) : ne pas mettre en ligne une interface EN AVANCE sur son API.
+# Le 15/09, le webmail est parti avec les routes de tags, l'API tournait encore
+# sur le code d'avant : l'interface proposait le geste, le serveur répondait 405.
+# On compare la date du code serveur au démarrage du service ; si le code est
+# plus récent, on le dit — et on s'arrête, sauf --quand-meme.
+SERVEUR_DIR="$(cd "$RACINE/../serveur" 2>/dev/null && pwd || true)"
+if [ -n "$SERVEUR_DIR" ] && [ -d "$SERVEUR_DIR/atombox" ] && [ "${1:-}" != "--quand-meme" ]; then
+  CODE=$(find "$SERVEUR_DIR/atombox" -name '*.py' -printf '%T@\n' 2>/dev/null | sort -rn | head -1 || true)
+  DEMARRE=$(date -d "$(systemctl show atombox-api -p ActiveEnterTimestamp --value 2>/dev/null)" +%s 2>/dev/null || echo 0)
+  if [ -n "$CODE" ] && [ "$DEMARRE" != 0 ] && [ "${CODE%.*}" -gt "$DEMARRE" ]; then
+    echo "✗ le code serveur est PLUS RÉCENT que l'API qui tourne :"
+    echo "    code   : $(date -d @${CODE%.*} '+%F %H:%M')"
+    echo "    service: $(date -d @$DEMARRE '+%F %H:%M')"
+    echo "  Déployer l'interface maintenant, c'est proposer des gestes que le serveur refusera."
+    echo "  → sudo systemctl restart atombox-api atombox-taches atombox-ingestion"
+    echo "  (ou $0 --quand-meme, si l'écart est voulu)"
+    exit 3
+  fi
+fi
+
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-/run/user/$(id -u)/ssh-agent.sock}"
 
 echo "→ index du CDC"
