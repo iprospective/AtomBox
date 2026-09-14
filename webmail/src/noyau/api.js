@@ -73,6 +73,8 @@
     /* ---- la session (D063, D157) : POST /session rend un jeton ; DELETE le révoque */
     connecter:   (utilisateur, mot_de_passe) => appelle("connecter", [utilisateur, mot_de_passe]),
     deconnecter: () => appelle("deconnecter", []),
+    poserTag: (id, axe, val) => appelle("poserTag", [id, axe, val]),
+    retirerTag: (id, axe, val) => appelle("retirerTag", [id, axe, val]),
     demanderReinitialisation: utilisateur => appelle("demanderReinitialisation", [utilisateur]),
     reinitialiser: (jeton, mot_de_passe) => appelle("reinitialiser", [jeton, mot_de_passe]),
 

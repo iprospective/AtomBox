@@ -1,7 +1,7 @@
 """LES DOSSIERS VIRTUELS PERSONNELS (D143) et LES RÉGLAGES DU COMPTE (D106 nature personnel, D144)."""
 from __future__ import annotations
 from datetime import datetime, timezone
-from sqlalchemy import select
+from sqlalchemy import null as NULL_SQL, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 from ..schema.modeles import Compte, Filtre
@@ -14,12 +14,17 @@ CLES = ("epingles", "ordre_axes", "tri_axes", "theme")
 AXES_V0 = ("dossier", "from", "sujet")     # sans axe métier en V0 (D146) : le prédicat porte sur ça
 
 async def creer_virtuel(s: AsyncSession, compte: Compte, label: str, criteres: list[dict]) -> dict | None:
+    """Un dossier virtuel est un FILTRE SANS ACTION (D143) — c'est `action IS NULL` qui le
+    distingue d'une règle. Piège : sur une colonne JSONB, passer `None` écrit le JSON `null`,
+    pas un NULL SQL. La ligne existait, `action` se relisait `None` en Python, et pourtant
+    `IS NULL` était faux : le dossier était créé et INVISIBLE. D'où `null()` explicite."""
     criteres = [{"axe": c["axe"], **({"val": c["val"].strip()} if c.get("val") and c["val"].strip() else {})} for c in criteres or [] if c and c.get("axe")]
     label = (label or "").strip()
     if not label or not criteres: return None
     n = await s.scalar(select(Filtre).where(Filtre.portee_type == "compte", Filtre.portee_id == compte.compte_id).order_by(Filtre.ordre.desc()).limit(1))
     f = Filtre(filtre_id=uuid7(), portee_type="compte", portee_id=compte.compte_id, nom=label, ordre=(n.ordre + 1) if n else 1,
-               predicat={"criteres": criteres}, action=None, actif=True, retroactif=False, nb_declenchements=0, cree_par=compte.compte_id)
+               predicat={"criteres": criteres}, action=NULL_SQL(), actif=True, retroactif=False,
+               nb_declenchements=0, cree_par=compte.compte_id)
     s.add(f); await s.commit()
     return {"id": "perso:" + str(f.filtre_id), "label": f.nom, "criteres": criteres}
 

@@ -190,7 +190,7 @@
       ${m.tags.length ? m.tags.map((t, i) => `<div class="kv">
           <span class="k">${F.esc(t.axe)}</span>
           <span class="v"><b>${F.esc(t.val)}</b>
-            <span class="tag">posé par ${F.esc(t.src)}</span>
+            <span class="tag">posé par ${F.esc(t.source)}</span>
             <button class="tagx" data-newv="${i}" title="Créer un dossier virtuel pour ce tag">⊕</button><button class="tagx" data-untag="${i}" title="Retirer ce tag">✕</button></span>
         </div>`).join("") : `<div class="dmeta">aucun tag</div>`}
       <div class="frow" style="margin-top:9px">

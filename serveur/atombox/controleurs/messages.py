@@ -53,6 +53,28 @@ class MessagesControleur(Controleur):
         if not await svc.detacher(s, compte, _uuid(id)): raise HTTPException(404, "message inconnu")
         return {"ok": True, "modifies": 1, "detache": True}
 
+    @action("POST", "/{id}/tags")
+    async def poser_tag(self, id: str, request: Request, compte: Compte = Depends(compte_courant),
+                        s: AsyncSession = Depends(session_async)):
+        """D002/D017 — le tag est posé sur le MESSAGE : deux personnes d'une boîte partagée voient
+        les mêmes. La source distingue ce qu'un humain a posé de ce qu'un connecteur a déduit."""
+        from ..services import tags as svct
+        corps = await request.json() or {}
+        tags = await svct.poser(s, compte, _uuid(id), corps.get("axe"), corps.get("val") or corps.get("valeur"))
+        if tags is None: raise HTTPException(404, "message inconnu ou axe et valeur manquants")
+        return {"ok": True, "tags": tags}
+
+    @action("DELETE", "/{id}/tags/{tag}")
+    async def retirer_tag(self, id: str, tag: str, compte: Compte = Depends(compte_courant),
+                          s: AsyncSession = Depends(session_async)):
+        """`tag` est « axe=valeur » — un tag n'a pas d'identité propre du point de vue de l'API :
+        il EST la paire, et c'est ce qui rend l'appel idempotent."""
+        from ..services import tags as svct
+        axe, _, val = tag.partition("=")
+        tags = await svct.retirer(s, compte, _uuid(id), axe, val)
+        if tags is None: raise HTTPException(404, "tag inconnu sur ce message")
+        return {"ok": True, "supprimes": 1, "tags": tags}
+
     @action("PUT", "/{id}")
     async def reenregistrer(self, id: str, request: Request, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
         m = await svc.remplacer_brouillon(s, compte, _uuid(id), await request.json() or {}, magasin())

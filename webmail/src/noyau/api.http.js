@@ -118,6 +118,12 @@
     creer: m => req("POST", "/messages", m).then(r => { if (r && r.message) garde(r.message); return r; }),
     reenregistrer: (id, m) => req("PUT", "/messages/" + encodeURIComponent(id), m).then(r => { if (r && r.message) garde(r.message); return r; }),
     carnet: q => req("GET", "/carnet?" + q_({ q })).then(r => (r && r.carnet) || []),
+    /* D017 — le tag est sur le MESSAGE : sa route lui est propre, et un tag EST la paire axe=valeur */
+    poserTag: (id, axe, val) => req("POST", "/messages/" + encodeURIComponent(id) + "/tags", { axe, val })
+      .then(r => { const m = cache.messages[id]; if (m && r && r.tags) m.tags = r.tags; return r; }),
+    retirerTag: (id, axe, val) => req("DELETE", "/messages/" + encodeURIComponent(id) + "/tags/"
+      + encodeURIComponent(axe + "=" + val))
+      .then(r => { const m = cache.messages[id]; if (m && r && r.tags) m.tags = r.tags; return r; }),
     detacher: id => req("DELETE", "/messages/" + encodeURIComponent(id) + "/rattachement")
         .then(r => { if (r && r.ok) delete cache.messages[id]; return r; }),
 
