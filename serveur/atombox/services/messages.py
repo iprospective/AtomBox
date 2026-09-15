@@ -63,9 +63,26 @@ async def _axes_et_valeurs(s: AsyncSession) -> dict:
                               .where(Tag.actif.is_(True)).order_by(Axe.nom, Tag.valeur))).all()
     valeurs: dict = {a.nom: [] for a in axes}
     for nom, val in lignes:
-        valeurs.setdefault(nom, []).append({"id": val, "label": val})
+        valeurs.setdefault(nom, []).append({"id": "%s:%s" % (nom, val), "label": val, "axe": nom})
     return {"axes": [{"id": a.nom, "label": a.nom.capitalize(), "derive": a.derive} for a in axes],
             "valeurs": valeurs}
+
+
+def _tag_du_dossier(dossier: str):
+    """(axe, valeur) d'une branche de l'arborescence, ou None si ce n'en est pas une.
+
+    Deux formes, fixées par le SERVEUR puisque c'est lui qui sert le référentiel (D141) :
+      `axe:<nom>`      la tête — TOUTE la famille, « tout ce qui porte un projet » ;
+      `<axe>:<valeur>` une valeur précise.
+    Le découpage se fait sur le PREMIER deux-points : une valeur peut en contenir."""
+    if not dossier or ":" not in dossier:
+        return None
+    gauche, _, droite = dossier.partition(":")
+    if gauche == "axe":
+        return (droite, None)
+    if gauche in ("perso", "recherche"):
+        return None
+    return (gauche, droite)
 
 
 async def referentiels(s: AsyncSession, compte: Compte) -> dict:
@@ -128,8 +145,54 @@ async def compteurs(s: AsyncSession, compte: Compte) -> dict:
         bump(k, n, non_lu, statut)
     prefs = compte.preferences or {}
     ref = await referentiels(s, compte)
+    c.update(await _compteurs_axes(s, boites, ds))
     c.update(await _compteurs_virtuels(s, boites, ds, compte, ref["virtuels"]))
     return {"compteurs": c, "virtuels": ref["virtuels"], "epingles": prefs.get("epingles", [])}
+
+
+async def _compteurs_axes(s: AsyncSession, boites, ds: dict) -> dict:
+    """Les compteurs de TOUTES les branches d'axes, en une requête (D078).
+
+    Pas un agrégat par branche comme pour les dossiers virtuels : un axe peut porter deux cents
+    valeurs, et deux cents agrégats conditionnels dans une requête ne se lisent plus. Ici la forme
+    naturelle est un `GROUP BY (axe, valeur)` — le SGBD rend tout d'un coup, et la tête d'axe est
+    la somme de ses valeurs.
+
+    Un message portant deux valeurs du même axe compte UNE fois dans la tête : `count(distinct)`.
+    Sans lui, « Projet » afficherait plus de messages que la somme de ce qu'il contient."""
+    from ..schema.modeles import Axe, CommTag, Tag
+    corbeilles = [d.dossier_id for d in ds.values() if dossier_id_court(d) == "trash"]
+    q = (select(Axe.nom, Tag.valeur,
+                func.count(func.distinct(Rattachement.comm_id)).label("t"),
+                func.count(func.distinct(case((Rattachement.lu_le.is_(None), Rattachement.comm_id)))).label("u"),
+                func.count(func.distinct(case((Rattachement.statut.in_(("a_faire", "en_cours")), Rattachement.comm_id)))).label("f"))
+         .select_from(CommTag)
+         .join(Tag, Tag.tag_id == CommTag.tag_id).join(Axe, Axe.axe_id == Tag.axe_id)
+         .join(Rattachement, Rattachement.comm_id == CommTag.comm_id)
+         .where(_portee(boites)).group_by(Axe.nom, Tag.valeur))
+    if corbeilles:
+        q = q.where(Rattachement.dossier_id.notin_(corbeilles))
+    out: dict = {}
+    for nom, valeur, total, non_lus, a_faire in (await s.execute(q)).all():
+        out["%s:%s" % (nom, valeur)] = {"t": total, "u": non_lus, "f": a_faire}
+
+    # La tête n'est PAS la somme de ses valeurs : un message étiqueté « projet=A » et
+    # « projet=B » y figure une fois, pas deux. Une seconde agrégation, au niveau de l'axe —
+    # GROUPING SETS ferait les deux d'un coup, mais demanderait du SQL brut, interdit hors de
+    # schema/ (D154). Deux requêtes constantes valent mieux qu'une exception à la règle.
+    qa = (select(Axe.nom,
+                 func.count(func.distinct(Rattachement.comm_id)).label("t"),
+                 func.count(func.distinct(case((Rattachement.lu_le.is_(None), Rattachement.comm_id)))).label("u"),
+                 func.count(func.distinct(case((Rattachement.statut.in_(("a_faire", "en_cours")), Rattachement.comm_id)))).label("f"))
+          .select_from(CommTag)
+          .join(Tag, Tag.tag_id == CommTag.tag_id).join(Axe, Axe.axe_id == Tag.axe_id)
+          .join(Rattachement, Rattachement.comm_id == CommTag.comm_id)
+          .where(_portee(boites)).group_by(Axe.nom))
+    if corbeilles:
+        qa = qa.where(Rattachement.dossier_id.notin_(corbeilles))
+    for nom, total, non_lus, a_faire in (await s.execute(qa)).all():
+        out["axe:" + nom] = {"t": total, "u": non_lus, "f": a_faire}
+    return out
 
 
 async def _compteurs_virtuels(s: AsyncSession, boites, ds: dict, compte, virtuels: list) -> dict:
@@ -176,6 +239,10 @@ def _condition_dossier(dossier: str, kind: str | None, ds: dict, compte):
     if dossier == "archives": return and_(Rattachement.motif_sortie == "archive", Rattachement.dossier_id.notin_(par_court.get("trash", [])))
     if dossier == "traites": return and_(Rattachement.motif_sortie == "traite", Rattachement.dossier_id.notin_(par_court.get("trash", [])))
     if dossier in par_court: return Rattachement.dossier_id.in_(par_court[dossier])
+    # une branche d'axe (D016/D077) : elle n'est pas un dossier, c'est un prédicat sur les tags —
+    # elle tombait dans le `try UUID` ci-dessous, échouait, et la liste rendait « rien ».
+    branche = _tag_du_dossier(dossier)
+    if branche: return _condition_tag(branche[0], branche[1])
     try: return Rattachement.dossier_id == __import__("uuid").UUID(dossier)
     except Exception: return Rattachement.dossier_id.is_(None) & (Rattachement.comm_id.is_(None))   # rien
 
