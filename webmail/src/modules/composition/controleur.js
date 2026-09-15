@@ -23,20 +23,20 @@
       App().bindRetour(el);
       const d = t.data;
 
-      const lie = (sel, k) => { const n = el.querySelector(sel); n.oninput = () => {
+      const lie = (sel, k) => { const n = D.byId(sel.replace("#", "")); if (!n) return; n.oninput = () => {
         d[k] = n.value; t.sale = true;
         if (k === "sujet") ABX.Controllers.App.peindre("tabs"); }; };
       lie("#f_a", "a"); lie("#f_cc", "cc"); lie("#f_sujet", "sujet"); lie("#f_corps", "corps");
 
-      el.querySelector("#f_de").onchange = e => { d.de = e.target.value; t.sale = true; };
-      const ref = el.querySelector("#f_ref");
+      D.byId("f_de").onchange = e => { d.de = e.target.value; t.sale = true; };
+      const ref = D.byId("f_ref");
       if (ref) ref.onchange = e => { d.reference = e.target.checked; t.sale = true; };
 
-      el.querySelector("#c_pj").onclick  = () => { Svc.joindre(d); t.sale = true;
+      D.byId("c_pj").onclick  = () => { Svc.joindre(d); t.sale = true;
                                                    App().peindre("detail"); };
-      el.querySelector("#c_del").onclick = () => Tabs().fermer(t.key);
-      el.querySelector("#c_br").onclick  = () => Compose.finir(t, false);
-      el.querySelector("#c_env").onclick = () => Compose.finir(t, true);
+      D.byId("c_del").onclick = () => Tabs().fermer(t.key);
+      D.byId("c_br").onclick  = () => Compose.finir(t, false);
+      D.byId("c_env").onclick = () => Compose.finir(t, true);
     },
 
     finir(t, envoyer) {

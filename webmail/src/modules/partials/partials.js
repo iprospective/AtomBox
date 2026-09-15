@@ -155,7 +155,9 @@
     if (ABX.V0()) return "";
     const Erp = ABX.Erp, t = Erp.tagDe(m);
     if (!t) return "";
-    const f = Erp.fiche(t.axe, t.val), c = f.cfg;
+    const f = Erp.fiche(t.axe, t.val);
+    if (!f) return "";            // pas d'ERP branché (produit) : on n'invente pas un contexte métier
+    const c = f.cfg;
     return `<div class="box erp"><h4>${c.ic} ${F.esc(c.nom)} — contexte métier</h4>
       <div class="kv"><span class="k">${F.esc(c.objet)}</span><span><b>${F.esc(t.val)}</b>
         <span class="tag ax">${F.esc(f.reference)}</span>
