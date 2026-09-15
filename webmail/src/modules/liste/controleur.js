@@ -16,6 +16,12 @@
 
   const List = {
     ouvrir(folder) {
+      /* Le filtre par défaut dépend de la NATURE du dossier (D166) : une file de travail
+         s'ouvre sur « en file », un classement sur « tout ». Sinon un projet dont tout est
+         traité s'affiche vide — et c'est justement celui qu'on vient consulter. */
+      const classement = ["perso", "virtuel", "abo", "axe"].includes(folder.kind);
+      if (classement && (St.ui.filtre === "file" || !St.ui.filtre)) St.ui.filtre = "tous";
+      if (!classement && St.ui.filtre === "tous") St.ui.filtre = "file";
       const ui = St.ui;
       ui.folder = folder;
       St.save();
@@ -76,14 +82,18 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
       const vider = el.querySelector("#vider");
       if (vider) vider.onclick = () => ABX.Api.contenu(ui.folder).then(M.viderCorbeille);
 
+      /* CHARGER, pas peindre : filtre, sens et tri sont des paramètres de la REQUÊTE — c'est le
+         serveur qui les applique (D078 : on ne rapatrie pas tout pour trier ici). Repeindre
+         depuis le cache changeait la puce active et laissait la liste identique : les boutons
+         avaient l'air cassés, et ils l'étaient. */
       D.on(el, ".chip[data-f]", "onclick", c => { ui.filtre = c.dataset.f; St.save();
-        List.peindre(); List.logFiltre(ui.filtre); });
+        List.charger(); List.logFiltre(ui.filtre); });
 
       D.on(el, ".chip[data-s]", "onclick", c => { ui.sens = c.dataset.s; St.save();
-        List.peindre(); List.logSens(ui.sens); });
+        List.charger(); List.logSens(ui.sens); });
 
-      el.querySelector("#tri").onchange = e => {
-        ui.tri = e.target.value; St.save(); List.peindre();
+      D.byId("tri").onchange = e => {
+        ui.tri = e.target.value; St.save(); List.charger();
         const idx = IDX_TRI[ui.tri];
         ABX.log("Tri : " + e.target.selectedOptions[0].text,
           `SELECT … ORDER BY ${SQL_TRI[ui.tri]} LIMIT 50;`, idx[0], idx[1]);

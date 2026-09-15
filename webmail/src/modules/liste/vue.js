@@ -4,7 +4,7 @@
   "use strict";
   const R = ABX.Registry, F = ABX.Fmt, C = ABX.Corpus;
 
-  const FILTRES = [["file","En file"], ["non_lus","Non lus"], ["recents","30 derniers jours"],
+  const FILTRES = [["tous","Tout"], ["file","En file"], ["non_lus","Non lus"], ["recents","30 derniers jours"],
                    ["pj","Avec pièce jointe"], ["lourds","Lourds (> 2 Mo)"], ["sortis","Traités / archivés"]];
   /* Le sens est un axe à part : on le croise avec le filtre, on ne le remplace pas. */
   const SENS = [["tous","Tous"], ["in","↓ Reçus"], ["out","↑ Envoyés"]];
