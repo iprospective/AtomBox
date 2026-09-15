@@ -153,6 +153,10 @@ async def compteurs(s: AsyncSession, compte: Compte) -> dict:
 async def _compteurs_axes(s: AsyncSession, boites, ds: dict) -> dict:
     """Les compteurs de TOUTES les branches d'axes, en une requête (D078).
 
+    Ils comptent TOUT, traités et archivés compris (D166) : une branche de classement s'ouvre sur
+    « tous », et le compteur doit dire ce que la liste montre. Un projet terminé reste visible —
+    c'est justement celui qu'on vient consulter.
+
     Pas un agrégat par branche comme pour les dossiers virtuels : un axe peut porter deux cents
     valeurs, et deux cents agrégats conditionnels dans une requête ne se lisent plus. Ici la forme
     naturelle est un `GROUP BY (axe, valeur)` — le SGBD rend tout d'un coup, et la tête d'axe est
@@ -225,7 +229,8 @@ async def _compteurs_virtuels(s: AsyncSession, boites, ds: dict, compte, virtuel
     if not cles:
         return {}
     corbeilles = [d.dossier_id for d in ds.values() if dossier_id_court(d) == "trash"]
-    q = select(*colonnes).select_from(Rattachement).join(Comm, Comm.comm_id == Rattachement.comm_id).where(_portee(boites))
+    q = (select(*colonnes).select_from(Rattachement).join(Comm, Comm.comm_id == Rattachement.comm_id)
+         .where(_portee(boites)))
     if corbeilles:
         q = q.where(Rattachement.dossier_id.notin_(corbeilles))     # la corbeille ne compte pas
     ligne = (await s.execute(q)).one()
@@ -269,7 +274,11 @@ async def liste(s: AsyncSession, compte: Compte, dossier: str, kind: str | None,
     if not tout:
         if sens in ("in", "out"): q = q.where(Comm.sens == sens)
         if statut and statut != "tous": q = q.where(Rattachement.statut == statut)
-        if not est_vue: q = q.where(Rattachement.motif_sortie.isnot(None)) if filtre == "sortis" else q.where(Rattachement.motif_sortie.is_(None))
+        # « tous » : rien n'est exclu — c'est le défaut d'une branche de CLASSEMENT (D166). La
+        # règle « traité sort de la file » (D014/D030) vaut pour une file de travail ; appliquée
+        # à un tag, elle fait disparaître un projet entier dès qu'il est terminé.
+        if not est_vue and filtre != "tous":
+            q = q.where(Rattachement.motif_sortie.isnot(None)) if filtre == "sortis" else q.where(Rattachement.motif_sortie.is_(None))
         if filtre == "non_lus": q = q.where(Rattachement.lu_le.is_(None))
         if filtre == "recents": q = q.where(Comm.date_recue >= datetime.now(timezone.utc) - timedelta(days=30))
         if filtre == "pj": q = q.where(Comm.nb_pieces_jointes > 0)

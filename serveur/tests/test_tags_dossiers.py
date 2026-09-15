@@ -155,3 +155,31 @@ def test_les_branches_d_axes_listent_et_comptent(monde):  # noqa: F811
     arbo = c.get("/api/v1/arborescence", headers=h).json()["compteurs"]
     assert arbo["branche:un"]["t"] == 1 and arbo["branche:deux"]["t"] == 1
     assert arbo["axe:branche"]["t"] == 2, "la tête compte comme elle liste — pas trois pour deux messages"
+
+
+def test_une_branche_de_classement_montre_aussi_les_traites(monde):  # noqa: F811
+    """D166 — « traité sort de la file » vaut pour une FILE de travail ; appliquée à un tag, elle
+    ferait disparaître un projet entier dès qu'il est terminé. Une branche de classement s'ouvre
+    sur « tous », et son compteur compte ce qu'elle liste."""
+    c, h = _client(monde)
+    a, b = str(monde["ids"][0]), str(monde["ids"][2])
+    c.post("/api/v1/messages/%s/tags" % a, json={"axe": "file", "val": "x"}, headers=h)
+    c.post("/api/v1/messages/%s/tags" % b, json={"axe": "file", "val": "x"}, headers=h)
+
+    # on en traite un : il sort de la FILE, pas du classement
+    c.patch("/api/v1/messages/%s/rattachement" % b,
+            json={"statut": "traite", "motif_sortie": "traite"}, headers=h)
+
+    tous = c.get("/api/v1/messages", params={"dossier": "file:x", "kind": "virtuel", "filtre": "tous"},
+                 headers=h).json()
+    assert tous["total"] == 2, "la branche montre le message traité — c'est lui qu'on vient consulter"
+    arbo = c.get("/api/v1/arborescence", headers=h).json()["compteurs"]
+    assert arbo["file:x"]["t"] == 2 and arbo["axe:file"]["t"] == 2, "le compteur dit ce que la liste montre"
+
+    # et le filtre « en file » reste disponible pour restreindre
+    file = c.get("/api/v1/messages", params={"dossier": "file:x", "kind": "virtuel", "filtre": "file"},
+                 headers=h).json()
+    assert file["total"] == 1, "« en file » écarte toujours ce qui est traité"
+    sortis = c.get("/api/v1/messages", params={"dossier": "file:x", "kind": "virtuel", "filtre": "sortis"},
+                   headers=h).json()
+    assert sortis["total"] == 1, "et « traités / archivés » ne montre que lui"

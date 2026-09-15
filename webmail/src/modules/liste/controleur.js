@@ -16,6 +16,12 @@
 
   const List = {
     ouvrir(folder) {
+      /* Le filtre par défaut dépend de la NATURE du dossier (D166) : une file de travail
+         s'ouvre sur « en file », un classement sur « tout ». Sinon un projet dont tout est
+         traité s'affiche vide — et c'est justement celui qu'on vient consulter. */
+      const classement = ["perso", "virtuel", "abo", "axe"].includes(folder.kind);
+      if (classement && (St.ui.filtre === "file" || !St.ui.filtre)) St.ui.filtre = "tous";
+      if (!classement && St.ui.filtre === "tous") St.ui.filtre = "file";
       const ui = St.ui;
       ui.folder = folder;
       St.save();
