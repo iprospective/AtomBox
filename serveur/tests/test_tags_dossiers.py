@@ -101,7 +101,11 @@ def test_les_axes_remontent_aux_referentiels(monde):  # noqa: F811
     c.post("/api/v1/messages/%s/tags" % mid, json={"axe": "service", "val": "compta"}, headers=h)
     ref = c.get("/api/v1/referentiels", headers=h).json()
     assert any(a["id"] == "service" for a in ref["axes"]), "l'axe créé à la volée est servi"
-    assert {v["id"] for v in ref["valeurs"].get("service", [])} >= {"compta"}, "et ses valeurs avec"
+    vals = ref["valeurs"].get("service", [])
+    # l'identifiant d'une valeur est « axe:valeur » — c'est le SERVEUR qui fixe ce contrat (D141),
+    # et le client le renvoie tel quel pour ouvrir la branche (RM3197)
+    assert {v["id"] for v in vals} >= {"service:compta"}, "l'identifiant porte l'axe"
+    assert {v["label"] for v in vals} >= {"compta"}, "et le libellé reste la valeur nue"
     assert all(isinstance(a.get("label"), str) for a in ref["axes"]), "chaque axe a un libellé affichable"
 
 
@@ -128,3 +132,26 @@ def test_un_dossier_virtuel_est_compte(monde):  # noqa: F811
     liste2 = c.get("/api/v1/messages", params={"dossier": d["id"], "kind": "perso"}, headers=h).json()
     assert arbo2["compteurs"][d["id"]]["t"] == liste2["total"] == 2
     assert arbo2["compteurs"][d["id"]]["u"] <= 2, "et les non-lus sont un sous-ensemble"
+
+
+def test_les_branches_d_axes_listent_et_comptent(monde):  # noqa: F811
+    """RM3197 — elles étaient affichées, vides et à zéro : la liste ne savait pas filtrer une
+    branche, et aucun GROUP BY dossier_id ne voit un axe."""
+    c, h = _client(monde)
+    a, b = str(monde["ids"][0]), str(monde["ids"][1])
+    c.post("/api/v1/messages/%s/tags" % a, json={"axe": "branche", "val": "un"}, headers=h)
+    c.post("/api/v1/messages/%s/tags" % b, json={"axe": "branche", "val": "deux"}, headers=h)
+    c.post("/api/v1/messages/%s/tags" % a, json={"axe": "branche", "val": "trois"}, headers=h)
+
+    # une VALEUR précise
+    l1 = c.get("/api/v1/messages", params={"dossier": "branche:un", "kind": "virtuel"}, headers=h).json()
+    assert [m["id"] for m in l1["messages"]] == [a], "la branche d'une valeur liste ses messages"
+
+    # la TÊTE d'axe : toute la famille, et un message à deux valeurs ne compte qu'une fois
+    tete = c.get("/api/v1/messages", params={"dossier": "axe:branche", "kind": "axe"}, headers=h).json()
+    assert {m["id"] for m in tete["messages"]} == {a, b}, "la tête liste toute la famille"
+    assert tete["total"] == 2, "et un message portant deux valeurs du même axe n'y figure qu'une fois"
+
+    arbo = c.get("/api/v1/arborescence", headers=h).json()["compteurs"]
+    assert arbo["branche:un"]["t"] == 1 and arbo["branche:deux"]["t"] == 1
+    assert arbo["axe:branche"]["t"] == 2, "la tête compte comme elle liste — pas trois pour deux messages"
