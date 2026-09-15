@@ -62,5 +62,7 @@ webmail:
     - python3 outils/bundle.py && python3 outils/bundle.py dist/prod.html prod
     - node test/smoke.js
     - node test/prod.js
+    - node test/parcours.js      # chaque écran UTILISÉ en mode produit (RM3189)
+    - node test/couverture.js    # et le contrôle qui refuse un bouton sans parcours
     - node test/bundle.js
     - node test/style.js

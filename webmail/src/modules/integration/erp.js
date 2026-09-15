@@ -50,6 +50,10 @@
       if (cache[k]) return cache[k];
       const cfg = APPS[axe];
       if (!cfg) return null;
+      /* La fiche est FABRIQUÉE par le générateur du POC : en produit il n'existe pas, et aucun
+         ERP n'est branché avant la V2 (F117/F118). Rendre null plutôt que planter — la partielle
+         qui l'affiche s'abstient alors, au lieu d'emporter tout le message avec elle. */
+      if (!ABX.PRNG) return null;
       return cache[k] = P.with(k, () => fabrique(cfg));
     },
   };
