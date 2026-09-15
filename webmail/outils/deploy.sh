@@ -20,6 +20,19 @@ cd "$RACINE"
 # sur le code d'avant : l'interface proposait le geste, le serveur répondait 405.
 # On compare la date du code serveur au démarrage du service ; si le code est
 # plus récent, on le dit — et on s'arrête, sauf --quand-meme.
+# Le service tourne sur CE worktree : s'il est en retard sur `dev`, on déploie une interface
+# qui parle à un serveur d'avant-hier. Arrivé le 15/09 : RM3197 mergé côté forge, worktree local
+# jamais mis à jour, et les branches d'axes restaient vides malgré « c'est corrigé ».
+if [ "${1:-}" != "--quand-meme" ] && git -C "$RACINE" rev-parse --git-dir >/dev/null 2>&1; then
+  git -C "$RACINE" fetch -q origin 2>/dev/null || true
+  RETARD=$(git -C "$RACINE" rev-list --count HEAD..origin/dev 2>/dev/null || echo 0)
+  if [ "${RETARD:-0}" -gt 0 ]; then
+    echo "✗ ce worktree a $RETARD commit(s) de retard sur origin/dev — c'est LUI que le service exécute."
+    echo "  → git -C \"$RACINE\" merge origin/dev  puis  sudo systemctl restart atombox-api"
+    exit 4
+  fi
+fi
+
 SERVEUR_DIR="$(cd "$RACINE/../serveur" 2>/dev/null && pwd || true)"
 if [ -n "$SERVEUR_DIR" ] && [ -d "$SERVEUR_DIR/atombox" ] && [ "${1:-}" != "--quand-meme" ]; then
   CODE=$(find "$SERVEUR_DIR/atombox" -name '*.py' -printf '%T@\n' 2>/dev/null | sort -rn | head -1 || true)
