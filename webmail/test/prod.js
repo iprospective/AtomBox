@@ -279,6 +279,45 @@ const { creerDocument } = require("./fake-dom");
     vrai(!!A2.Store.ui.formVirtuel, "sans aucun axe, le formulaire s'ouvre quand même");
   }
 
+  console.log("— les filtres de la liste REDEMANDENT au serveur ————————");
+  /* Ils repeignaient depuis le cache : la puce changeait d'état, la liste restait identique.
+     Le test ne regarde donc pas l'écran mais la REQUÊTE — c'est elle qui porte le filtre. */
+  {
+    const vus = [];
+    const rep = o => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(o) });
+    const faux = (url, init) => {
+      const chemin = url.replace("/api/v1", "");
+      if (chemin.startsWith("/messages?")) { vus.push(chemin); return rep({ messages: [], total: 0 }); }
+      if (chemin.startsWith("/referentiels")) return rep({ moi: { nom: "x", login: "x", boites: [] },
+        speciaux: [{ id: "inbox", label: "Boîte de réception", icon: "📥" }], util: [], axes: [], valeurs: {},
+        statuts: [], vues: [], virtuels: [] });
+      if (chemin.startsWith("/arborescence")) return rep({ compteurs: {}, virtuels: [], epingles: [] });
+      return rep({ ok: true });
+    };
+    const e = demarrer(creerStockage(), { session: "api", fetch: faux });
+    await drainer(e);
+    const L = e.ABX.Controllers.List;
+    L.ouvrir({ id: "inbox", label: "Boîte de réception", kind: "special" });
+    await drainer(e);
+    const avant = vus.length;
+
+    const puce = { dataset: { f: "non_lus" } };
+    e.ABX.Store.ui.filtre = "non_lus"; await L.charger();
+    vrai(vus.length > avant, "changer de filtre déclenche une requête");
+    vrai(/filtre=non_lus/.test(vus[vus.length - 1]), "et le filtre voyage DANS la requête : " + vus[vus.length - 1]);
+
+    e.ABX.Store.ui.sens = "out"; await L.charger();
+    vrai(/sens=out/.test(vus[vus.length - 1]), "le sens aussi");
+    e.ABX.Store.ui.tri = "taille"; await L.charger();
+    vrai(/tri=taille/.test(vus[vus.length - 1]), "le tri aussi — il ne se fait pas dans le navigateur (D078)");
+
+    /* et le câblage lui-même : le clic doit appeler charger, pas peindre */
+    const src = require("fs").readFileSync(RACINE + "/src/modules/liste/controleur.js", "utf8");
+    const bloc_f = src.slice(src.indexOf('data-f]'), src.indexOf('data-f]') + 220);
+    vrai(/List\.charger\(\)/.test(bloc_f) && !/List\.peindre\(\);\s*List\.logFiltre/.test(bloc_f),
+         "le clic sur un filtre appelle charger(), pas peindre()");
+  }
+
   console.log("— bundle produit ————————————————————————————————");
   const BUNDLE = path.join(RACINE, "dist", "prod.html");
   vrai(fs.existsSync(BUNDLE), "dist/prod.html existe");
