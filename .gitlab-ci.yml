@@ -1,0 +1,66 @@
+# AtomBox — le pipeline qui refuse le rouge (RM3187).
+#
+# Une MR ne se fusionne pas si ce fichier échoue. C'est la seule partie qui compte : un test qui
+# n'empêche pas de merger n'est pas une barrière, c'est une opinion.
+#
+# Trois choses sont vérifiées, dans cet ordre de coût :
+#   1. le SERVEUR, contre un vrai PostgreSQL : les tests créent leur base jetable ;
+#   2. le WEBMAIL : les quatre harnais (maquette, mode produit, bundles, style).
+#
+# Ce qui NE peut pas être vérifié ici : la fraîcheur des fichiers engendrés (schéma, modèles,
+# contrat). Leur source — le dictionnaire — vit dans le dépôt de DONNÉES, absent de la CI. Ce
+# contrôle tourne donc avant le push, sur le poste : `outils/verifier-engendre.sh --installer`.
+# Le dire ici plutôt que de laisser un job s'ignorer en silence et se croire vert.
+#
+# Le pipeline doit rester COURT. Un pipeline de dix minutes n'est pas attendu : il est contourné.
+
+stages: [serveur, webmail]
+
+default:
+  interruptible: true          # une nouvelle poussée annule la précédente
+
+.regles: &regles
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "dev"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ---------------------------------------------------------------- 2. le serveur
+serveur:
+  stage: serveur
+  image: python:3.12-slim
+  <<: *regles
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    POSTGRES_DB: atombox_ci
+    POSTGRES_USER: atombox
+    POSTGRES_PASSWORD: atombox
+    POSTGRES_HOST_AUTH_METHOD: trust
+    DATABASE_URL: "postgresql://atombox@postgres/atombox_ci"
+  before_script:
+    - cd serveur && pip install --quiet -e ".[dev]"
+  script:
+    - pytest -q
+  # Sans DATABASE_URL, les tests qui ont besoin d'une base s'IGNORENT au lieu d'échouer (RM2749).
+  # En CI ce silence est inacceptable : on refuse qu'un test s'ignore pour cette raison-là.
+  after_script:
+    - cd serveur && pytest -q -rs 2>&1 | grep -q "DATABASE_URL absent" && { echo "✗ des tests se sont ignorés faute de base"; exit 1; } || true
+
+# ---------------------------------------------------------------- 3. le webmail
+webmail:
+  stage: webmail
+  image: node:22-slim
+  <<: *regles
+  before_script:
+    - apt-get update -qq && apt-get install -qq -y python3 >/dev/null
+    - cd webmail && npm install --silent
+  script:
+    - npm run css
+    - git diff --exit-code -- css/app.css || { echo "✗ css/app.css n'est pas à jour : npm run css"; exit 1; }
+    - python3 outils/bundle.py && python3 outils/bundle.py dist/prod.html prod
+    - node test/smoke.js
+    - node test/prod.js
+    - node test/bundle.js
+    - node test/style.js

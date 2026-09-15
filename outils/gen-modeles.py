@@ -44,7 +44,7 @@ def cible_de(ent, c):
     if m and m.group(1) in ENT and m.group(1) != ent: return m.group(1)
     return None
 
-M = ['"""MODÈLES ORM — engendrés par outils/gen-modeles.py le %s depuis le dictionnaire (D158).' % datetime.datetime.now().isoformat(timespec="seconds"),
+M = ['"""MODÈLES ORM — engendrés par outils/gen-modeles.py depuis le dictionnaire (D158).',
      'NE PAS ÉDITER : corriger .mmi-pm/docs/dict/*.yml, régénérer. Les tables sont celles de schema.sql (F114)."""',
      "from __future__ import annotations", "import datetime, decimal, uuid",
      "from sqlalchemy import BigInteger, Boolean, CheckConstraint, Date, DateTime, ForeignKey, LargeBinary, Numeric, PrimaryKeyConstraint, Text, UniqueConstraint, Uuid",
