@@ -32,6 +32,21 @@ bash webmail/outils/deploy.sh         # mise en ligne du webmail
 Branches : `main` (protégée, un jalon à la fois), `dev` (intégration), une branche courte par
 fonctionnalité — `v0/F114-schema`, `v0/F001-ingestion`… — fusionnée dans `dev` par MR.
 
+## Ce qui empêche de casser
+
+| Barrière | Où elle tourne | Ce qu'elle refuse |
+|---|---|---|
+| **`.gitlab-ci.yml`** | à chaque MR et sur `dev`/`main` | une fusion dont la suite serveur (83 tests, PostgreSQL réel) ou les quatre harnais du webmail (494 assertions) sont rouges |
+| **`outils/verifier-engendre.sh`** | avant le push, sur le poste (hook `pre-push`) | un schéma, des modèles ou un contrat d'API qui ne correspondent plus au dictionnaire — leur source vit dans le dépôt de données, absent de la CI |
+| **`webmail/outils/deploy.sh`** | à chaque déploiement | une interface mise en ligne alors que l'API qui tourne est plus ancienne : elle proposerait des gestes que le serveur refuse |
+
+Poser le hook sur un poste neuf : `bash outils/verifier-engendre.sh --installer`.
+
+Ces trois barrières ont la même règle : **elles refusent, elles n'avertissent pas**. Un contrôle
+qu'on peut ignorer n'est pas une barrière, c'est une opinion — et les fichiers engendrés ne
+portent plus d'horodatage, sans quoi le contrôle de fraîcheur crierait à chaque exécution et
+cesserait d'être lu.
+
 ## Le cahier des charges — une source, plusieurs vues
 
 Le CDC, le registre des décisions et le dictionnaire des données **ne sont pas dans ce dépôt** :

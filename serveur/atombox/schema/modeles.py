@@ -1,4 +1,4 @@
-"""MODÈLES ORM — engendrés par outils/gen-modeles.py le 2026-09-14T03:42:13 depuis le dictionnaire (D158).
+"""MODÈLES ORM — engendrés par outils/gen-modeles.py depuis le dictionnaire (D158).
 NE PAS ÉDITER : corriger .mmi-pm/docs/dict/*.yml, régénérer. Les tables sont celles de schema.sql (F114)."""
 from __future__ import annotations
 import datetime, decimal, uuid

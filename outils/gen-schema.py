@@ -60,7 +60,9 @@ def q(s): return '"%s"' % s
 
 rapport = []
 tables, fks, index, contraintes = [], [], [], []
-manifest = {"genere": datetime.datetime.now().isoformat(timespec="seconds"), "tables": {}}
+# pas d'horodatage dans un fichier ENGENDRÉ : il changerait à chaque exécution et le contrôle
+# de fraîcheur (git diff en CI, RM3187) serait rouge en permanence, pour rien. Git date déjà.
+manifest = {"tables": {}}
 
 for e in E:
     ent = e["id"]; champs = CH.get(ent)
@@ -108,12 +110,12 @@ for r in REL:
         rapport.append("RELATION SANS CLÉ ÉTRANGÈRE : %s → %s (%s) — champ porteur absent ou polymorphe" % (de, vers, card))
 
 manifest["fks"] = len(fks); manifest["index"] = len(index); manifest["contraintes"] = len(contraintes); manifest["rapport"] = rapport
-entete = ("-- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py le %s depuis le dictionnaire des données.\n"
+entete = ("-- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py depuis le dictionnaire des données.\n"
           "-- NE PAS ÉDITER : la source est .mmi-pm/docs/dict/*.yml (F114, D154). PostgreSQL ≥ 14 (D027).\n"
           "-- %d tables, %d clés étrangères, %d index, %d unicités. Identifiants : uuid v7 engendrés par\n"
           "-- l'application (D145). Le tronc comm n'est PAS partitionné en V0 : la partition par canal (D138)\n"
           "-- se pose quand un second canal existe — l'uuid rend la clé indépendante de la partition.\n"
-          % (manifest["genere"], len(tables), len(fks), len(index), len(contraintes)))
+          % (len(tables), len(fks), len(index), len(contraintes)))
 sql = entete + "\nBEGIN;\n\n" + "\n\n".join(tables) + "\n\n-- clés étrangères, après toutes les tables : l'ordre de création n'importe plus\n" + "\n".join(fks) + "\n\n-- unicités\n" + "\n".join(contraintes) + "\n\n-- index des références\n" + "\n".join(index) + "\n\nCOMMIT;\n"
 os.makedirs(SORTIE, exist_ok=True)
 io.open(os.path.join(SORTIE, "schema.sql"), "w", encoding="utf-8").write(sql)
