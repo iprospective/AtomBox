@@ -31,7 +31,7 @@ const PARCOURS = ["prod.js", "parcours.js"]
 /* Deux familles d'exceptions STRUCTURELLES — elles ne sont pas de la dette, elles n'ont pas
    lieu d'être exercées ici. Tout le reste est de la dette, nommée. */
 const RENDU = ["render", "decrire", "statutHtml", "menuHtml", "fiabiliteHtml", "repondHtml",
-               "spoofHtml", "lienHtml", "titre", "tailleKo", "contexte"];   // exercés par le rendu
+               "spoofHtml", "lienHtml", "sourceHtml", "titre", "tailleKo", "contexte"];   // exercés par le rendu
 const POC = ["log", "logFiltre", "logSens", "logMessage", "logErp", "logPieceJointe", "logTri",
              "logOuverture", "logRestauration", "logCompteurs", "encapsuler", "fiche", "choisir",
              "creerTache", "ficheContact", "actif", "deposerFichier", "ecrire"];  // maquette seule

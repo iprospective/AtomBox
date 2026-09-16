@@ -44,8 +44,12 @@ function serveur(vus) {
     if (nu === "/arborescence") return rep({ compteurs: { inbox: { t: 2, u: 1, f: 0 } }, virtuels: etat.virtuels, epingles: [] });
     if (nu === "/messages" && m === "GET") return rep({ messages: Object.values(etat.messages), total: 2 });
     if (nu === "/messages" && m === "POST") { const id = "u" + (Object.keys(etat.messages).length + 1);
+      /* comme le vrai (D167) : le corps stocké est le COMMENTAIRE seul, la provenance est une
+         relation, et le message transféré compte pour une pièce — il part encapsulé (D066). */
       etat.messages[id] = MSG(id, { sens: "out", dossier_origine: corps.composition ? "drafts" : "sent",
-                                    composition: corps.composition || null });
+                                    composition: corps.composition || null, sujet: corps.sujet || "",
+                                    corps: corps.corps || "", reference: corps.reference || null,
+                                    nb_pieces_jointes: corps.reference ? 1 : 0 });
       return rep({ ok: true, crees: 1, message: etat.messages[id] }); }
     if (/^\/messages\/[^/]+\/tags\/?$/.test(nu) && m === "POST") {
       const id = nu.split("/")[2]; const t = { axe: corps.axe, val: corps.val, source: "manuel" };
@@ -154,6 +158,29 @@ function serveur(vus) {
   clic("c_pj");
   await A.Controllers.Compose.finir(t1, true);
   vrai(ui.tabs.some(x => x.type === "msg"), "après l'envoi, le message s'ouvre");
+
+  console.log("— transférer : le source verrouillé, le commentaire à part (D167) ————");
+  A.Controllers.Compose.demarrer("tr", A.Api.cache.message("m1"));
+  await drainer(e);
+  const t2 = ui.tabs.find(x => x.type === "compo");
+  vrai(t2.data.sujet.startsWith("Tr:"), "transférer préremplit le sujet");
+  eq(t2.data.corps, "", "le message transmis n'est PAS recopié dans la zone de saisie (D167)");
+  /* On lit le HTML PEINT, pas `getElementById` : le faux DOM fabrique à la demande tout id qu'on
+     lui réclame, donc `!!doc.getElementById("x")` est vrai même pour un contrôle qui n'existe
+     plus. Un test qui ne peut pas échouer ne prouve rien. */
+  const ecran = () => doc.getElementById("detail").innerHTML;
+  vrai(/<textarea id="f_corps"><\/textarea>/.test(ecran()), "la zone de saisie est vide : elle ne porte que le commentaire");
+  vrai(ecran().includes('id="tr_src"'), "le bloc source est peint — verrouillé, à part du commentaire");
+  vrai(!ecran().includes('id="f_ref"'), "on ne demande plus « par référence ? » : la réponse est dans les destinataires");
+  vrai(/id="tr_mod"[^>]*disabled/.test(ecran()), "modifier le message transmis est un geste de la V1 (F133), pas un défaut d'aujourd'hui");
+  vrai(ecran().includes("Sujet m1"), "et le message transmis est montré : on voit ce qu'on envoie");
+  saisir("f_a", "collegue@exemple.fr"); saisir("f_corps", "tu peux regarder ?");
+  await A.Controllers.Compose.finir(t2, true);
+  const envoye = Object.values(etat.messages).filter(x => x.reference).pop();
+  vrai(!!envoye, "le transfert est bien parti au serveur");
+  eq(envoye.reference, "m1", "il porte sa PROVENANCE — une relation, pas un en-tête (D067)");
+  eq(envoye.corps, "tu peux regarder ?", "le corps envoyé est le commentaire seul : l'index ne reprend pas le fil (D163)");
+  eq(envoye.nb_pieces_jointes, 1, "le message d'origine part encapsulé en message/rfc822 (D066)");
 
   console.log("— l'arborescence : dossier virtuel, épingle, renommer —");
   const nav = A.Controllers.Nav;

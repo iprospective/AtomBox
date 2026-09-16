@@ -164,15 +164,18 @@
           <b>${F.esc(m.from_adresse)}</b>.</div>${R.contexte("usurpation", { m })}</div>`;
     },
 
+    /* LA PROVENANCE D'UN TRANSFERT (D167) — une relation en base, jamais un en-tête dans le
+       message (D067). En V0 l'original part ENCAPSULÉ : une copie est sortie, et le lien qu'on
+       montre ici ne sert qu'à ceux qui ont déjà accès au message d'origine. Le partage par accès,
+       où rien n'est copié, est V2 (F134). */
     lienHtml(m) {
-      if (ABX.V0()) return "";
       if (!m.reference) return "";
       const src = ABX.Api.cache.message(m.reference);
-      return `<div class="lien" style="margin:12px 16px">➦ <b>Message transféré par référence</b> —
-        aucune copie n'a été faite : ce message pointe
-        « ${F.esc(src ? src.sujet : "message supprimé")} ».
+      return `<div class="lien" style="margin:12px 16px">➦ <b>Transfert</b> — le message d'origine
+        « ${F.esc(src ? src.sujet : "hors de vos boîtes")} » est joint <b>intact</b> ; le
+        commentaire ci-dessus est celui de l'expéditeur, il ne s'y mélange pas.
         ${src ? `<button class="hbtn" id="suivre" style="margin-top:6px">Ouvrir l'original</button>`
-              : `<span class="tag">l'original n'existe plus</span>`}
+              : `<span class="tag">l'original n'est pas dans vos boîtes</span>`}
         ${R.contexte("transfert.reference", { m, src })}</div>`;
     },
   };

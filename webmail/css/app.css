@@ -455,6 +455,26 @@ header {
   margin: 8px 0;
 }
 
+/* Le bloc SOURCE d'un transfert (D167) : verrouillé, donc il ne ressemble pas à une zone de
+   saisie — un champ qu'on ne peut pas modifier doit se voir avant qu'on essaie. */
+.src-fige {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel);
+  max-height: 260px;
+  overflow: auto;
+}
+
+.src-corps {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
 /* ---- actions au survol dans la liste ---- */
 .msg {
   position: relative;

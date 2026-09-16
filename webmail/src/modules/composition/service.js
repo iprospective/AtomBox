@@ -14,12 +14,16 @@
   const Compose = {
     /* Prépare le brouillon d'écran (pas encore un message). */
     preparer(mode, m) {
-      const d = { mode, src: m ? m.id : null, cc:"", pieces_jointes:[], reference: mode === "tr" };
+      const d = { mode, src: m ? m.id : null, cc:"", pieces_jointes:[] };
       if (mode === "new") {
         Object.assign(d, { de: (ABX.Ref.moi.boites[0] || {}).adresse || "", a:"", sujet:"", corps:"" });
       } else if (mode === "tr") {
+        /* LE CORPS RESTE VIDE (D167) : le message transféré n'est pas recopié dans la zone de
+           saisie, il s'affiche dans un bloc VERROUILLÉ sous le commentaire. Le recopier, c'est
+           le rendre modifiable par accident — et plus rien ne distingue alors un transfert fidèle
+           d'un transfert retouché. Le déverrouillage viendra en V1 (F133), comme un geste. */
         Object.assign(d, { de: m.boite, a:"",
-          sujet: /^tr:/i.test(m.sujet) ? m.sujet : "Tr: " + m.sujet, corps: cite(m) });
+          sujet: /^tr:/i.test(m.sujet) ? m.sujet : "Tr: " + m.sujet, corps: "" });
       } else {
         const autres = (m.destinataires || []).filter(a => a !== m.boite);
         Object.assign(d, { de: m.boite,        // Q026 : l'identité de la BOÎTE, pas du compte
@@ -55,9 +59,10 @@ VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj
         snippet: (d.corps || "").split("\n").find(l => l.trim()) || "…",
         date_recue: Date.now(), lu: true, thread_id: 1000 + St.seq, tags: [],
         sorti_le: null, motif_sortie: null, dossier: null,
-        pieces_jointes: d.pieces_jointes.slice(), reference: d.reference && d.src ? d.src : null, composition: null };
-      /* Transfert par VALEUR : l'original est encapsulé, donc matérialisé (D066). */
-      if (d.mode === "tr" && d.src && !d.reference) {
+        pieces_jointes: d.pieces_jointes.slice(), reference: d.mode === "tr" && d.src ? d.src : null, composition: null };
+      /* Le source est ENCAPSULÉ (D066) : une copie part, et la provenance est une relation en
+         base (D067). Le partage par accès — où rien n'est copié — est V2 (F134, D058). */
+      if (d.mode === "tr" && d.src) {
         const s = ABX.Api.cache.message(d.src);
         if (s) m.pieces_jointes.push(At.encapsuler(s));
       }
