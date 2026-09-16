@@ -85,6 +85,8 @@
     reenregistrer: (id, m) => appelle("reenregistrer", [id, m]),
     /* le carnet auto-collecté des destinataires écrits (D109) — GET /carnet */
     carnet: q => appelle("carnet", [q]),
+    /* en maquette, aucune pièce n'a d'octets : la façade le dit au lieu de faire semblant */
+    contenuPieceJointe: (id, pj) => impl && impl.contenuPieceJointe ? impl.contenuPieceJointe(id, pj) : Promise.resolve(null),
     /* POST /messages — un message écrit ici (envoyé, brouillon) */
     creer:      m => appelle("creer", [m]),
     /* suppression définitive = détachement (D118) */

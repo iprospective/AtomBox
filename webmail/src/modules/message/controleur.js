@@ -63,8 +63,45 @@
         if (t) ABX.Controllers.Nav.creerVirtuel({ criteres: [{ axe: t.axe, val: t.val }] }); });
       Message.cablerTags(el, m);
       D.on(el, "[data-c]", "onclick", b => ABX.Controllers.Compose.demarrer(b.dataset.c, m));
-      D.on(el, ".pjc",     "onclick", c => Message.logPieceJointe(m, +c.dataset.nb_pieces_jointes));
+      D.on(el, ".pjc",     "onclick", c => Message.ouvrirPiece(m, +c.dataset.pj));
       D.on(el, "[data-e]", "onclick", b => Message.logErp(m, b.dataset.e));
+    },
+
+    /* CLIQUER UNE PIÈCE JOINTE (F136/F137, D168).
+
+       Deux issues, et la première est celle qui compte : une pièce qui EST un message qu'on
+       possède déjà s'ouvre COMME UN MESSAGE — avec son fil, ses tags, ses propres pièces — au lieu
+       d'être rapatriée comme un fichier mort. Sinon seulement, on demande ses octets.
+
+       Avant, ce clic appelait la trace pédagogique du POC, avec un `dataset` qui n'existait pas :
+       il ne faisait rien, et rien ne le disait. */
+    ouvrirPiece(m, i) {
+      const p = (m.pieces_jointes || [])[i];
+      if (!p) return null;
+      if (p.comm_id) return ABX.Controllers.Tabs.ouvrir({ type: "msg", id: p.comm_id }, false);
+      Message.logPieceJointe(m, i);
+      const pj = p.b && p.b.pj_id;
+      if (!pj) return null;
+      return Promise.resolve(ABX.Api.contenuPieceJointe(m.id, pj)).then(blob => {
+        if (blob) Message.remettrePiece(blob, p);
+        return blob;
+      });
+    },
+
+    /* Remettre la pièce au navigateur. Isolé pour une raison : le harnais n'a ni `URL` ni
+       `createElement` — ce qui n'est pas testable doit être petit, et le reste doit l'être. */
+    remettrePiece(blob, p) {
+      if (typeof URL === "undefined" || !URL.createObjectURL) return null;
+      const url = URL.createObjectURL(blob);
+      const mime = (p.b && p.b.mime) || "";
+      const lisible = mime === "application/pdf" || mime.startsWith("image/") || mime.startsWith("text/");
+      if (lisible && typeof window !== "undefined" && window.open) window.open(url, "_blank");
+      else if (typeof document !== "undefined" && document.createElement) {
+        const a = document.createElement("a");
+        a.href = url; a.download = p.nom || "piece"; a.click();
+      }
+      if (typeof setTimeout === "function") setTimeout(() => URL.revokeObjectURL(url), 30000);
+      return url;
     },
 
     /* Le champ de valeur propose les valeurs existantes de l'axe choisi : sans

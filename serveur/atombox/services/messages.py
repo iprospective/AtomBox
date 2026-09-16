@@ -340,13 +340,73 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, magasin=None) -> dict
     from .tags import tags_de
     provenance = await _provenance_de(s, comm_id)
     ref = str(provenance) if provenance else None
+    vers = await _messages_des_encapsules(s, comm_id, boites, pjs)      # D168
     return serialiser(r, c, ds, adresse, True, {
         "tags": (await tags_de(s, [comm_id])).get(comm_id, []), "reference": ref,
         "destinataires": list(dest) + list(copies), "composition": _composition(r, c, ds, adresse, dest, copies, corps, ref),
         "corps": corps, "reponse_possible": e.reponse_possible if e else None, "list_id": e.list_id if e else None,
         "pieces_jointes": [ {"pj_id": str(p.piece_jointe_id), "ordre": l.ordre, "nom": l.nom_declare or ("piece-%d" % l.ordre), "octets": p.taille_octets,
                              "mime_declare": l.type_declare, "mime_detecte": p.type_detecte, "sha256": p.blob_ref, "partage_par": p.nb_references,
-                             "content_id": l.content_id, "disposition": l.disposition} for l, p in pjs ] })
+                             "content_id": l.content_id, "disposition": l.disposition,
+                             "comm_id": vers.get(str(p.piece_jointe_id))} for l, p in pjs ] })
+
+async def piece_jointe(s: AsyncSession, compte: Compte, comm_id, pj_id, magasin=None) -> dict | None:
+    """Les OCTETS d'une pièce jointe (F136), dans la portée du compte (D036) — hors portée : None,
+    donc 404, jamais 403 (D108).
+
+    Le type rendu est le type DÉTECTÉ (D032), jamais le déclaré : c'est la seule règle qui empêche
+    qu'un exécutable nommé `facture.pdf` s'ouvre comme un PDF. Et le nom est nettoyé avant de partir
+    dans un en-tête — un nom de fichier vient du message, donc de l'extérieur."""
+    boites = [b.boite_id for b in await boites_du_compte(s, compte)]
+    r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, _portee(boites)).limit(1))
+    if not r: return None
+    ligne = await s.scalar(select(CommPieceJointe).where(CommPieceJointe.comm_id == comm_id,
+                                                        CommPieceJointe.piece_jointe_id == pj_id).limit(1))
+    if ligne is None: return None
+    p = await s.get(PieceJointe, pj_id)
+    if p is None or magasin is None or not magasin.existe(p.blob_ref): return None
+    return {"octets": magasin.lire(p.blob_ref), "type": p.type_detecte or "application/octet-stream",
+            "nom": _nom_de_fichier(ligne.nom_declare or ("piece-%d" % ligne.ordre)),
+            "disposition": ligne.disposition or "attachment"}
+
+
+async def _messages_des_encapsules(s: AsyncSession, comm_id, boites: list, pjs: list) -> dict:
+    """D168 — une partie `message/rfc822` dont l'original est EN BASE et DANS LA PORTÉE du lecteur
+    se rend comme une référence, pas comme un fichier. La résolution n'accorde aucun droit : elle
+    ne regarde que ce que le lecteur peut déjà voir.
+
+    Deux chemins, dans cet ordre : la provenance posée à l'émission (D067), puis le `Message-ID` du
+    message encapsulé — le seul indice quand il vient de l'extérieur (D064). Un encapsulé non résolu
+    aujourd'hui se résoudra le jour où son original sera ingéré (D163)."""
+    encapsules = [(l, p) for l, p in pjs if (p.type_detecte or "") == "message/rfc822"]
+    if not encapsules: return {}
+    cite = await s.scalar(select(CommCitation.cite_comm_id).where(CommCitation.comm_id == comm_id).limit(1))
+    if cite is not None and not await s.scalar(select(Rattachement.comm_id).where(Rattachement.comm_id == cite, _portee(boites)).limit(1)):
+        cite = None                      # l'original existe, mais pas pour ce lecteur : un contenu, pas un lien
+    out = {}
+    for l, p in encapsules:
+        vise = cite
+        if vise is None:
+            vise = await _resoudre_par_message_id(s, p, boites)
+        if vise is not None: out[str(p.piece_jointe_id)] = str(vise)
+        cite = None                      # la provenance ne vaut que pour la PREMIÈRE pièce encapsulée
+    return out
+
+
+async def _resoudre_par_message_id(s: AsyncSession, p: PieceJointe, boites: list):
+    """Le `Message-ID` lu dans les octets de l'encapsulé, confronté à ce que le lecteur possède."""
+    from ..magasin import Magasin
+    try:
+        m = Magasin(os.environ.get("ATOMBOX_MAGASIN", "./magasin"))
+        if not m.existe(p.blob_ref): return None
+        interne = email.message_from_bytes(m.lire(p.blob_ref), policy=email.policy.SMTP)
+        mid = (interne["Message-ID"] or "").strip()
+    except Exception as ex:
+        log.debug("encapsulé illisible %s : %s", p.piece_jointe_id, ex); return None
+    if not mid: return None
+    return await s.scalar(select(Rattachement.comm_id).join(CommEmail, CommEmail.comm_id == Rattachement.comm_id)
+                          .where(CommEmail.message_id == mid, _portee(boites)).limit(1))
+
 
 async def fil(s: AsyncSession, compte: Compte, comm_id) -> list[dict]:
     boites = [b.boite_id for b in await boites_du_compte(s, compte)]

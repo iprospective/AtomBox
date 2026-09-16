@@ -25,7 +25,17 @@ function serveur(vus) {
      deux fois, et le harnais accuserait le code d'un défaut qui n'est que le sien. */
   const rep = o => Promise.resolve({ ok: true, status: 200,
                                      json: () => Promise.resolve(JSON.parse(JSON.stringify(o))) });
-  const etat = { messages: { m1: MSG("m1"), m2: MSG("m2", { lu: true }) }, filtres: [], virtuels: [] };
+  /* m3 porte DEUX pièces : un PDF ordinaire, et un message encapsulé que le serveur a RÉSOLU vers
+     m1 — le cas de D168, celui qu'on ne voyait pas parce que rien ne cliquait sur une pièce. */
+  const PJ = (o) => Object.assign({ ordre: 1, octets: 2048, sha256: "abc123", partage_par: 1,
+                                    content_id: null, disposition: "attachment", comm_id: null }, o);
+  const etat = { messages: {
+      m1: MSG("m1"), m2: MSG("m2", { lu: true }),
+      m3: MSG("m3", { nb_pieces_jointes: 2, pieces_jointes: [
+        PJ({ pj_id: "p1", nom: "devis.pdf", mime_declare: "application/pdf", mime_detecte: "application/pdf" }),
+        PJ({ pj_id: "p2", ordre: 2, nom: "Sujet m1.eml", octets: 4015, mime_declare: "message/rfc822",
+             mime_detecte: "message/rfc822", comm_id: "m1" })] }),
+    }, filtres: [], virtuels: [] };
   return [etat, (url, init) => {
     const m = (init && init.method) || "GET";
     const chemin = url.replace("/api/v1", "");
@@ -64,6 +74,9 @@ function serveur(vus) {
       return rep({ ok: true, modifies: 1, message: etat.messages[id] }); }
     if (/^\/messages\/[^/]+\/rattachement$/.test(nu) && m === "DELETE") return rep({ ok: true, detache: true });
     if (/^\/messages\/[^/]+\/fil$/.test(nu)) return rep({ fil: [] });
+    /* les octets d'une pièce ne sont pas du JSON : la réponse porte un blob, comme la vraie */
+    if (/^\/messages\/[^/]+\/pieces-jointes\/[^/]+$/.test(nu) && m === "GET")
+      return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve({ size: 2048 }) });
     if (/^\/messages\/[^/]+$/.test(nu) && m === "GET") return rep(etat.messages[nu.split("/")[2]] || null);
     if (/^\/messages\/[^/]+$/.test(nu) && m === "PUT") return rep({ ok: true, modifies: 1, message: etat.messages[nu.split("/")[2]] });
     if (nu === "/dossiers-virtuels" && m === "POST") { const d = { id: "perso:v1", label: corps.label, criteres: corps.criteres };
@@ -234,6 +247,22 @@ function serveur(vus) {
   eq(envoye.reference, "m1", "il porte sa PROVENANCE — une relation, pas un en-tête (D067)");
   eq(envoye.corps, "tu peux regarder ?", "le corps envoyé est le commentaire seul : l'index ne reprend pas le fil (D163)");
   eq(envoye.nb_pieces_jointes, 1, "le message d'origine part encapsulé en message/rfc822 (D066)");
+
+  console.log("— une pièce jointe : l'ouvrir, ou ouvrir le message qu'elle EST (D168) ————");
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m3" }, false); await drainer(e);
+  vrai(det().includes("un message que vous avez"), "la pièce résolue s'annonce comme un message, pas comme un fichier");
+  geste("detail", ".pjc", 1);
+  await drainer(e);
+  vrai(ui.tabs.some(t => t.key === "m:m1"), "cliquer l'encapsulé OUVRE le message d'origine (D168)");
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m3" }, false); await drainer(e);
+  n = vus.length;
+  geste("detail", ".pjc", 0);
+  await drainer(e);
+  vrai(vus.slice(n).some(v => v.includes("/pieces-jointes/")), "et une pièce ordinaire demande ses octets au serveur");
+  vrai(!ui.tabs.some(t => t.key === "m:p1"), "elle n'ouvre évidemment pas d'onglet de message");
+  /* le service seul, en plus du câblage : une pièce sans octets servis ne casse rien */
+  const rendu = await A.Controllers.Message.ouvrirPiece(A.Api.cache.message("m3"), 0);
+  vrai(rendu !== undefined, "ouvrirPiece rend ce que le serveur a donné, sans jeter");
 
   console.log("— l'arborescence : dossier virtuel, épingle, renommer —");
   const nav = A.Controllers.Nav;
