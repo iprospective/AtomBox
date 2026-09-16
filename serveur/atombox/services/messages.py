@@ -627,8 +627,12 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
                                                 "composition": corps.get("composition"), "reference": str(src_id) if src_id else None})
 
 async def _adresse(s: AsyncSession, complete: str):
-    """l'adresse, créée au besoin — version asynchrone de celle de l'ingestion"""
+    """l'adresse, créée au besoin — version asynchrone de celle de l'ingestion.
+
+    Elle NORMALISE : une adresse saisie porte souvent son nom d'affichage (D126)."""
     from ..schema.modeles import Domaine
+    from ..ingestion.ingestion import normaliser_adresse
+    complete = normaliser_adresse(complete) or (complete or "").strip().strip("<>")
     a = await s.scalar(select(Adresse).where(Adresse.adresse_complete == complete))
     if a: return a
     local, _, dom = complete.partition("@")
@@ -679,7 +683,13 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_c
     await _poser_provenance(s, comm_id, src_id, maintenant)
     from ..modules import evenements
     if not brouillon:
-        await evenements.emettre_async(s, "message.a_envoyer", {"comm_id": str(comm_id), "boite_id": str(boite.boite_id), "destinataires": corps.get("destinataires") or []})
+        """Les destinataires de l'ENVELOPPE viennent des participants ANALYSÉS, pas du corps de la
+        requête : le `cc` du client n'y était pas, et il n'était donc remis à personne — alors que
+        l'en-tête du message l'affichait (RM3214)."""
+        vus, enveloppe = set(), []
+        for role, _nom, adr, _ordre in a.participants:
+            if role in ("to", "cc", "bcc") and adr and adr not in vus: vus.add(adr); enveloppe.append(adr)
+        await evenements.emettre_async(s, "message.a_envoyer", {"comm_id": str(comm_id), "boite_id": str(boite.boite_id), "destinataires": enveloppe})
     await s.commit()
     r = await s.get(Rattachement, (comm_id, boite.boite_id))
     return serialiser(r, c, ds, adresses[boite.boite_id], extra={"destinataires": corps.get("destinataires") or [], "corps": corps.get("corps") or "",
