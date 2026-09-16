@@ -214,6 +214,23 @@ VALUES (:moi, :id, 'statut', :statut, now());`,
       ]));
     },
 
+    /* RECHARGER LE RÉFÉRENTIEL AVANT DE REPEINDRE (F139, D169).
+
+       Poser `projet = dolibarr` créait la valeur côté serveur et ne la montrait NULLE PART :
+       l'arborescence lit `Ref.valeurs`, chargé une fois au démarrage, et le client repeignait le
+       référentiel d'il y a dix minutes. Il fallait recharger la page pour voir la branche.
+
+       Ce n'est pas un manque de temps réel — c'est l'onglet de celui qui vient d'agir qui était
+       faux. On ne recharge QUE pour les actions qui peuvent créer une entrée de référentiel : un
+       « lu » ne doit pas payer deux requêtes de plus. Les compteurs suivent, sans quoi la branche
+       neuve s'afficherait à zéro. */
+    rafraichirReferentiel(m) {
+      return Promise.resolve(ABX.Ref.charger())
+        .then(() => ABX.Api.compteurs())
+        .catch(() => null)                    // un référentiel non rechargé ne doit pas perdre le tag posé
+        .then(() => { ABX.Bus.emit("corpus:changed", m ? { message: m } : {}); });
+    },
+
     /* Les tags sont posés sur le MESSAGE, pas sur le rattachement (D017) : c'est ce
        qui les rend interopérables entre applications. Un tag posé par un connecteur
        et retiré à la main sera reposé au passage suivant — l'écran doit le dire. */
@@ -226,7 +243,7 @@ VALUES (:moi, :id, 'statut', :statut, now());`,
          et disparaissait au rechargement. */
       m.tags = m.tags.concat([{ axe, val: v, source: "manuel" }]);            // optimiste
       const envoi = ABX.Api.poserTag(m.id, axe, v)
-        .then(r => { if (r && r.tags) m.tags = r.tags; ABX.Bus.emit("corpus:changed", { message: m }); return r; });
+        .then(r => { if (r && r.tags) m.tags = r.tags; return M.rafraichirReferentiel(m).then(() => r); });
       tracer(m,
         { label: "Poser le tag " + axe + " = " + v,
           index: "le droit d'écrire sur l'axe est vérifié en amont (D018) — poser un tag sur un " +
@@ -255,7 +272,7 @@ VALUES (:id, :tag, :moi, now()) ON CONFLICT DO NOTHING;`,
       const auto = t.source && t.source !== "manuel";
       m.tags = m.tags.filter((_, k) => k !== i);                             // optimiste
       const envoi = ABX.Api.retirerTag(m.id, t.axe, t.val)
-        .then(r => { if (r && r.tags) m.tags = r.tags; ABX.Bus.emit("corpus:changed", { message: m }); return r; });
+        .then(r => { if (r && r.tags) m.tags = r.tags; return M.rafraichirReferentiel(m).then(() => r); });
       tracer(m,
         ["Retirer le tag " + t.axe + " = " + t.val,
 `DELETE FROM comm_tag
