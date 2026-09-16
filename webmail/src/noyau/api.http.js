@@ -47,7 +47,10 @@
     if (typeof m.sorti_le === "string") m.sorti_le = Date.parse(m.sorti_le);
     if (Array.isArray(m.pieces_jointes)) m.pieces_jointes = m.pieces_jointes.map(p => p.b ? p : {
       nom: p.nom, declare: p.mime_declare, ordre: p.ordre,
-      b: { pj_id: p.pj_id, mime: p.mime_detecte, ko: Math.round((p.octets || 0) / 1024), sha: (p.sha256 || "").slice(0, 12), refs: p.partage_par || 1, ic: icone(p.mime_detecte) } });
+      /* `comm_id` : le message AtomBox que cette pièce EST, quand le serveur a su le résoudre
+         (D168). Une pièce résolue s'ouvre comme un message, pas comme un fichier. */
+      comm_id: p.comm_id || null,
+      b: { pj_id: p.pj_id, mime: p.mime_detecte, ko: Math.round((p.octets || 0) / 1024), sha: (p.sha256 || "").slice(0, 12), refs: p.partage_par || 1, ic: icone(p.mime_detecte), eml: p.mime_detecte === "message/rfc822" } });
     return m;
   };
   /* Le cache FUSIONNE : une réponse enrichit l'objet déjà en cache au lieu de le remplacer —
@@ -117,6 +120,15 @@
         .then(r => { if (r && r.message) garde(r.message); return r; }),
     creer: m => req("POST", "/messages", m).then(r => { if (r && r.message) garde(r.message); return r; }),
     reenregistrer: (id, m) => req("PUT", "/messages/" + encodeURIComponent(id), m).then(r => { if (r && r.message) garde(r.message); return r; }),
+    /* F136 — les OCTETS d'une pièce. Un `<a href>` ne conviendrait pas : la session est un jeton
+       porté par l'en-tête, pas un cookie — le lien partirait sans authentification. On rapatrie
+       donc la pièce et on en fait une URL d'objet, que l'appelant ouvre ou enregistre. */
+    contenuPieceJointe: (id, pj) => {
+      const jeton = ABX.Session && ABX.Session.jeton();
+      return fetch(BASE + "/messages/" + encodeURIComponent(id) + "/pieces-jointes/" + encodeURIComponent(pj),
+                   { headers: jeton && jeton !== "poc" ? { "Authorization": "Bearer " + jeton } : {} })
+        .then(r => { if (!r.ok) return null; return r.blob(); });
+    },
     carnet: q => req("GET", "/carnet?" + q_({ q })).then(r => (r && r.carnet) || []),
     /* D017 — le tag est sur le MESSAGE : sa route lui est propre, et un tag EST la paire axe=valeur */
     poserTag: (id, axe, val) => req("POST", "/messages/" + encodeURIComponent(id) + "/tags", { axe, val })

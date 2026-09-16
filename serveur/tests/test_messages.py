@@ -216,6 +216,21 @@ def test_parcours_du_webmail(monde):
                                             "corps": "?", "reference": str(uuid.uuid4())}, headers=h).json()["message"]
     assert hors["reference"] is None, "on ne transfère pas ce qu'on n'a pas le droit de lire (D036)"
 
+    # F137 — l'encapsulé qu'on POSSÈDE est résolu vers son message (D168), et n'est plus un fichier
+    pj = relu_tr["pieces_jointes"][0]
+    assert pj["comm_id"] == source, "la pièce message/rfc822 pointe le message AtomBox d'origine"
+    # F136 — et les octets d'une pièce se servent enfin : sans cette route, aucun clic n'aboutit
+    rr = c.get("/api/v1/messages/%s/pieces-jointes/%s" % (tr["id"], pj["pj_id"]), headers=h)
+    assert rr.status_code == 200 and rr.headers["content-type"].startswith("message/rfc822"), rr.headers
+    assert len(rr.content) == pj["octets"] and "attachment" in rr.headers["content-disposition"]
+    d2 = c.get("/api/v1/messages/" + source, headers=h).json()
+    pdf = next(x for x in d2["pieces_jointes"] if x["mime_detecte"] == "application/pdf")
+    assert pdf["comm_id"] is None, "un PDF n'est pas un message : rien à résoudre"
+    r2 = c.get("/api/v1/messages/%s/pieces-jointes/%s" % (source, pdf["pj_id"]), headers=h)
+    assert r2.status_code == 200 and r2.content[:4] == b"%PDF", "le type servi est le type DÉTECTÉ (D032)"
+    assert c.get("/api/v1/messages/%s/pieces-jointes/%s" % (str(monde["ids"][0]), pdf["pj_id"]),
+                 headers=h).status_code == 404, "une pièce ne se sert pas depuis un autre message"
+
     envoye = c.post("/api/v1/messages", json={"destinataires": ["jean@x.fr"], "sujet": "Parti",
                                               "corps": "voilà"}, headers=h).json()["message"]
     assert envoye["dossier_origine"] == "sent"

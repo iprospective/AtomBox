@@ -133,7 +133,8 @@
             : `<span class="badge">octets uniques</span>`}
           ${div ? `<span class="badge w">déclaré ${F.esc(F.mimeC(p.declare))} — c'est le type
                    DÉTECTÉ qui fait foi</span>` : ""}
-          ${b.eml ? `<span class="badge">message/rfc822 — dédupliqué comme un message (D066)</span>` : ""}
+          ${p.comm_id ? `<span class="badge ok">✉ un message que vous avez — cliquez pour l'ouvrir (D168)</span>`
+            : b.eml ? `<span class="badge">message/rfc822 — dédupliqué comme un message (D066)</span>` : ""}
           ${At.recompressable(b)
             ? `<span class="badge w">recompression proposée · gain ≈ ${F.poids(At.gain(b))} (D070)</span>` : ""}
         </span></span></div>`;

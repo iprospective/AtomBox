@@ -2,7 +2,7 @@
 Hors portée = 404, jamais 403 (D108)."""
 from __future__ import annotations
 import os, uuid
-from fastapi import Depends, HTTPException, Query, Request
+from fastapi import Depends, HTTPException, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..api.routage import Controleur, action
 from ..api.dependances import session_async
@@ -36,6 +36,16 @@ class MessagesControleur(Controleur):
         m = await svc.detail(s, compte, _uuid(id), magasin())
         if not m: raise HTTPException(404, "message inconnu")
         return m
+
+    @action("GET", "/{id}/pieces-jointes/{pj}")
+    async def piece_jointe(self, id: str, pj: str, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
+        """Les octets d'une pièce (F136). `inline` pour ce qu'un navigateur sait afficher sans danger,
+        `attachment` pour tout le reste — et jamais le type déclaré par le message (D032)."""
+        p = await svc.piece_jointe(s, compte, _uuid(id), _uuid(pj), magasin())
+        if not p: raise HTTPException(404, "pièce jointe inconnue")
+        entetes = {"Content-Disposition": '%s; filename="%s"' % (p["disposition"], p["nom"]),
+                   "X-Content-Type-Options": "nosniff"}       # le navigateur ne redevine pas le type
+        return Response(content=p["octets"], media_type=p["type"], headers=entetes)
 
     @action("GET", "/{id}/fil")
     async def fil(self, id: str, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
