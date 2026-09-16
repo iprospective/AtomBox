@@ -32,6 +32,18 @@
   "vider"
  ],
  "gestes": [],
+ "ecoutes": [
+  ".axop",
+  ".chip[data-cap]",
+  ".chip[data-pjt]",
+  ".more",
+  ".pjc",
+  ".pjname",
+  "[data-adm]",
+  "[data-m]",
+  "[data-move]",
+  "[data-pja]"
+ ],
  "fonctions": [
   "Tabs",
   "attacher",
@@ -42,12 +54,10 @@
   "cablerTags",
   "charge",
   "chargerJournal",
-  "compte",
   "connecter",
   "creerVirtuel",
   "enregistrer",
   "fabriquer",
-  "geste",
   "jeton",
   "jetonDuLien",
   "joindre",
