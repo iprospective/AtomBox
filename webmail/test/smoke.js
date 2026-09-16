@@ -476,16 +476,18 @@ vrai(q.etapes.some(e => det(e).includes("pg_notify")), "les externes passent au 
 vrai(q.etapes.some(e => det(e).includes("'recu'")), "les internes sont livrés en base");
 vrai(q.etapes.some(e => e.warn), "l'étage mixte porte l'avertissement");
 
-console.log("— transfert par référence ————————————————————————");
+console.log("— transfert : source verrouillé, commentaire dissocié (D167) ————");
 A.Controllers.Compose.demarrer("tr", src);
 t = A.Store.ui.tabs.find(x => x.type === "compo");
-eq(t.data.reference, true, "transfert par référence par défaut");
-t.data.a = "collegue@exemple.fr";
+eq(t.data.corps, "", "le message transmis n'est PAS recopié dans la zone de saisie (D167)");
+eq(t.data.src, src.id, "le transfert sait ce qu'il transmet");
+t.data.a = "collegue@exemple.fr"; t.data.corps = "tu peux regarder ?";
 A.Controllers.Compose.finir(t, true);
 await tick(p);
 
-eq(A.Corpus.dossiers.sent[0].reference, src.id, "le message porte un lien, pas une copie");
-eq(A.Corpus.dossiers.sent[0].nb_pieces_jointes, 0, "aucune pièce jointe recopiée");
+eq(A.Corpus.dossiers.sent[0].reference, src.id, "la provenance est posée — une relation, pas un en-tête (D067)");
+eq(A.Corpus.dossiers.sent[0].corps, "tu peux regarder ?", "le corps envoyé est le COMMENTAIRE seul");
+eq(A.Corpus.dossiers.sent[0].nb_pieces_jointes, 1, "le message d'origine part encapsulé (D066)");
 
 console.log("— brouillon ——————————————————————————————————");
 A.Controllers.Compose.demarrer("new", null);

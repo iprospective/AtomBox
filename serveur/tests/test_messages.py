@@ -35,6 +35,41 @@ def test_le_contrat_couvre_ce_que_le_webmail_appelle():
                  ("GET", "/messages/{id}/fil"), ("PATCH", "/messages/{id}/rattachement"), ("DELETE", "/messages/{id}/rattachement"), ("POST", "/messages")):
         assert (m, c) in ecrites, (m, c)
 
+def test_transfert_encapsule_le_source_et_ne_marque_pas_le_message():
+    """D167/D066/D067 — le message transféré part INTACT dans une partie message/rfc822 ; le corps
+    indexé est le commentaire seul (D163) ; et aucun en-tête ne porte le lien : la provenance est
+    une relation en base. Un marqueur dans le message partirait chez le destinataire, ne
+    s'indexerait pas, et rendrait le message non reconstructible à l'octet (D025)."""
+    import email, email.policy
+    from atombox.ingestion.analyse import analyser
+
+    class FauxCompte:
+        nom, login = "Mathieu", "mathieu"
+
+    src = email.message.EmailMessage(policy=email.policy.SMTP)
+    src["From"] = "Client <client@exemple.fr>"; src["To"] = "contact@exemple.fr"
+    src["Subject"] = "Devis 2026 / travaux"; src["Message-ID"] = "<abc@exemple.fr>"
+    src.set_content("Bonjour,\nvoici le devis.")
+    src.add_attachment(b"%PDF-1.4 devis", maintype="application", subtype="pdf", filename="devis.pdf")
+    brut = src.as_bytes()
+
+    octets = svc._composer(FauxCompte(), "contact@exemple.fr",
+                           {"destinataires": ["jean@x.fr"], "sujet": "Tr: Devis 2026 / travaux",
+                            "corps": "tu peux regarder ?", "reference": "peu-importe"},
+                           uuid.uuid4(), datetime.now(timezone.utc), None, brut)
+    a = analyser(octets)
+    assert a.corps_texte.strip() == "tu peux regarder ?", "l'index ne voit que le commentaire (D163)"
+    assert len(a.pieces) == 1 and a.pieces[0].type_declare == "message/rfc822", a.structure_mime
+    assert a.pieces[0].nom_declare.endswith(".eml"), "la pièce porte le sujet du message transmis"
+    # le PDF du message transmis est DEDANS, il n'est pas une pièce du transfert (D066) : compter
+    # les deux annoncerait « 2 pièces jointes » à qui n'en a joint qu'une.
+    assert a.pieces[0].octets, "une partie message/rfc822 n'a pas de charge décodable : sans le cas " \
+                               "particulier, toutes les pièces encapsulées pesaient zéro octet"
+    assert b"X-AtomBox-Reference" not in octets, "la provenance vit en base, jamais dans le message (D067)"
+    interne = email.message_from_bytes(octets, policy=email.policy.SMTP).get_payload(1).get_payload(0)
+    assert interne["Subject"] == "Devis 2026 / travaux" and interne["Message-ID"] == "<abc@exemple.fr>", \
+        "le message transféré part tel qu'il a été reçu"
+
 # ---- avec une base : le parcours complet du webmail ----------------------------------------
 F = os.path.join(os.path.dirname(__file__), "fixtures")
 def lire(n): return open(os.path.join(F, n), "rb").read()
@@ -166,6 +201,21 @@ def test_parcours_du_webmail(monde):
     assert compo, "un brouillon relu porte sa composition — sinon on ne peut pas le reprendre"
     assert compo["a"] == "jean@x.fr" and compo["cc"] == "paul@x.fr", "le Cc survit à la relecture"
     assert compo["sujet"] == "Avec copie" and "texte" in compo["corps"]
+    # F132 — TRANSFÉRER : le source encapsulé, la provenance en base, le commentaire à part (D167)
+    source = str(monde["ids"][2])                      # pieces.eml — avec ses propres pièces jointes
+    tr = c.post("/api/v1/messages", json={"destinataires": ["jean@x.fr"], "sujet": "Tr: Devis",
+                                          "corps": "tu peux regarder ?", "reference": source}, headers=h).json()["message"]
+    assert tr["reference"] == source, "le transfert rapporte sa provenance"
+    relu_tr = c.get("/api/v1/messages/" + tr["id"], headers=h).json()
+    assert relu_tr["corps"].strip() == "tu peux regarder ?", "le corps stocké est le COMMENTAIRE seul (D163)"
+    assert len(relu_tr["pieces_jointes"]) == 1, relu_tr["pieces_jointes"]
+    assert relu_tr["pieces_jointes"][0]["mime_detecte"] == "message/rfc822", "l'original part encapsulé (D066)"
+    assert relu_tr["pieces_jointes"][0]["octets"] > 0, "et il pèse ses octets : la pièce n'est pas vide"
+    assert relu_tr["reference"] == source, "la provenance se relit — c'est une relation, pas un en-tête (D067)"
+    hors = c.post("/api/v1/messages", json={"destinataires": ["jean@x.fr"], "sujet": "Tr: rien",
+                                            "corps": "?", "reference": str(uuid.uuid4())}, headers=h).json()["message"]
+    assert hors["reference"] is None, "on ne transfère pas ce qu'on n'a pas le droit de lire (D036)"
+
     envoye = c.post("/api/v1/messages", json={"destinataires": ["jean@x.fr"], "sujet": "Parti",
                                               "corps": "voilà"}, headers=h).json()["message"]
     assert envoye["dossier_origine"] == "sent"

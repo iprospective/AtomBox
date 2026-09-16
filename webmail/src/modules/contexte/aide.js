@@ -34,8 +34,9 @@
   A("usurpation", ({ m }) => `<div class="hint">Le nom affiché correspond à un contact que vous
     connaissez, mais l'adresse n'est pas la sienne. AtomBox vous avertit ; il ne rejette pas le
     message — à vous de juger.</div>`);
-  A("transfert.reference", ({ src }) => `<div class="hint">Ce message a été transféré sans être
-    copié : il pointe l'original${src ? "" : ", qui n'existe plus"}.</div>`);
+  A("transfert.reference", ({ src }) => `<div class="hint">Le message transmis est joint tel qu'il
+    a été reçu : le commentaire du transfert est à part, et l'index ne compte pas deux fois ce qui
+    n'a été écrit qu'une (D163)${src ? "" : ". L'original, lui, n'est pas dans vos boîtes — le lien de provenance n'accorde aucun accès (D167)"}.</div>`);
   A("statut", () => `<div class="hint">Le statut dit où en est le traitement de ce message ;
     « traité » le sort de votre file de travail.</div>`);
   A("nav.v0", () => `<div class="hint">Les dossiers sont ceux de votre messagerie IMAP ; ce que

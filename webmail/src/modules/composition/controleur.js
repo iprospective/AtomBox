@@ -29,8 +29,16 @@
       lie("#f_a", "a"); lie("#f_cc", "cc"); lie("#f_sujet", "sujet"); lie("#f_corps", "corps");
 
       D.byId("f_de").onchange = e => { d.de = e.target.value; t.sale = true; };
-      const ref = D.byId("f_ref");
-      if (ref) ref.onchange = e => { d.reference = e.target.checked; t.sale = true; };
+      /* Le bloc source a besoin du message COMPLET (corps, pièces) : la liste ne le porte pas, et
+         un brouillon de transfert rouvert demain n'a plus rien en cache. On le charge une fois —
+         `t._src` interdit d'y revenir en boucle si le message a été purgé (Q030). */
+      if (d.mode === "tr" && d.src && !t._src) {
+        const src = ABX.Api.cache.message(d.src);
+        if (!src || !src._complet) {
+          t._src = true;
+          Promise.resolve(ABX.Api.message(d.src)).then(() => App().peindre("detail"), () => {});
+        }
+      }
 
       D.byId("c_pj").onclick  = () => { Svc.joindre(d); t.sale = true;
                                                    App().peindre("detail"); };

@@ -5,11 +5,11 @@ Les dossiers du webmail : des identifiants courts pour les spéciaux (inbox, sen
 trash — les alias IMAP protégés, D047), des vues calculées (traites, archives — D051), l'UUID
 d'un dossier utilisateur, et les dossiers virtuels personnels (perso:…, D143)."""
 from __future__ import annotations
-import email.message, email.policy, email.utils, os, socket
+import email.message, email.policy, email.utils, os, re, socket, uuid
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, func, case, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from ..schema.modeles import Acces, Adresse, Boite, Comm, CommEmail, CommPieceJointe, Compte, Dossier, Filtre, Participant, PieceJointe, Rattachement
+from ..schema.modeles import Acces, Adresse, Blob, Boite, Comm, CommCitation, CommEmail, CommPieceJointe, Compte, Dossier, Filtre, Participant, PieceJointe, Rattachement
 from ..uuid7 import uuid7
 from ..journal import journal
 from ..sync import sync
@@ -306,19 +306,18 @@ def serialiser(r: Rattachement, c: Comm, ds: dict, boite_adresse: str | None, co
     if extra: o.update(extra)
     return o
 
-def _composition(r: Rattachement, c: Comm, ds: dict, adresse: str, dest: list, copies: list, corps: str, e) -> dict | None:
+def _composition(r: Rattachement, c: Comm, ds: dict, adresse: str, dest: list, copies: list, corps: str, ref: str | None) -> dict | None:
     """Un brouillon se rouvre dans l'état où il a été laissé — reconstruit du MESSAGE, jamais
     d'une copie d'écran gardée à côté : un brouillon EST un message marqué (D089), et une
-    seconde source d'écriture aurait divergé dès le premier réenregistrement."""
+    seconde source d'écriture aurait divergé dès le premier réenregistrement.
+
+    Le transfert se reconnaît à sa PROVENANCE en base (D067) : elle a remplacé l'en-tête
+    `X-AtomBox-Reference`, qui partait chez le destinataire et ne s'indexait pas."""
     if dossier_id_court(ds.get(r.dossier_id)) != "drafts":
         return None
-    ref = None
-    for ligne in (e.headers or "").splitlines() if e is not None else []:
-        if ligne.lower().startswith("x-atombox-reference:"):
-            ref = ligne.split(":", 1)[1].strip() or None
     return {"mode": "tr" if ref else "new", "src": ref, "de": adresse,
             "a": ", ".join(dest), "cc": ", ".join(copies), "sujet": c.sujet or "",
-            "corps": corps, "pieces_jointes": [], "reference": bool(ref)}
+            "corps": corps, "pieces_jointes": [], "reference": ref}
 
 async def detail(s: AsyncSession, compte: Compte, comm_id, magasin=None) -> dict | None:
     boites = [b.boite_id for b in await boites_du_compte(s, compte)]
@@ -339,9 +338,11 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, magasin=None) -> dict
             corps = analyser(magasin.lire(str(comm_id))).corps_texte
         except Exception as ex: log.warning("corps de %s illisible : %s", comm_id, ex)
     from .tags import tags_de
+    provenance = await _provenance_de(s, comm_id)
+    ref = str(provenance) if provenance else None
     return serialiser(r, c, ds, adresse, True, {
-        "tags": (await tags_de(s, [comm_id])).get(comm_id, []),
-        "destinataires": list(dest) + list(copies), "composition": _composition(r, c, ds, adresse, dest, copies, corps, e),
+        "tags": (await tags_de(s, [comm_id])).get(comm_id, []), "reference": ref,
+        "destinataires": list(dest) + list(copies), "composition": _composition(r, c, ds, adresse, dest, copies, corps, ref),
         "corps": corps, "reponse_possible": e.reponse_possible if e else None, "list_id": e.list_id if e else None,
         "pieces_jointes": [ {"pj_id": str(p.piece_jointe_id), "ordre": l.ordre, "nom": l.nom_declare or ("piece-%d" % l.ordre), "octets": p.taille_octets,
                              "mime_declare": l.type_declare, "mime_detecte": p.type_detecte, "sha256": p.blob_ref, "partage_par": p.nb_references,
@@ -429,7 +430,78 @@ def entetes_de_relais(m: email.message.EmailMessage, comm_id, expediteur: str, q
     m["Received"] = recu
     for cle, valeur in anciens: m[cle] = valeur
 
-def _composer(compte: Compte, adresse: str, corps: dict, comm_id, quand, ip_client: str | None = None) -> bytes:
+def _nom_de_fichier(sujet) -> str:
+    """Le nom que verra le destinataire : le sujet du message transféré, rendu inoffensif."""
+    propre = re.sub(r"[^\w .()\[\]-]+", "_", str(sujet or "message transfere"), flags=re.UNICODE).strip()
+    return (propre or "message transfere")[:80]
+
+
+async def _source_a_transferer(s: AsyncSession, compte: Compte, corps: dict, magasin):
+    """Le message transféré, LU DANS LE MAGASIN — jamais reconstruit depuis ce que l'écran affiche.
+
+    Et lu dans la PORTÉE du compte (D036) : transférer se fait sur ce qu'on a le droit de lire,
+    la référence venant du client. Rend (comm_id, octets) ou (None, None)."""
+    ref = corps.get("reference")
+    if not ref or magasin is None: return None, None
+    try: src_id = uuid.UUID(str(ref))
+    except (ValueError, AttributeError, TypeError): return None, None
+    boites = [b.boite_id for b in await boites_du_compte(s, compte)]
+    if not await s.scalar(select(Rattachement.comm_id).where(Rattachement.comm_id == src_id, _portee(boites)).limit(1)):
+        log.warning("transfert refuse : %s hors de la portee de %s", src_id, compte.login)
+        return None, None
+    if not magasin.existe(str(src_id)): return src_id, None      # purgé : le transfert part sans lui (Q030)
+    return src_id, magasin.lire(str(src_id))
+
+
+async def _poser_pieces(s: AsyncSession, comm_id, pieces, magasin, quand) -> None:
+    """Les pièces d'un message écrit ici entrent en base comme celles d'un message reçu — même
+    déduplication par empreinte (D024). Sans ça, un transfert s'envoyait avec son encapsulé dans
+    les octets mais se relisait sans rien : la pièce existait et l'écran ne la voyait pas."""
+    from ..magasin import empreinte as empreinte_de
+    for l in await s.scalars(select(CommPieceJointe).where(CommPieceJointe.comm_id == comm_id)):
+        await s.delete(l)
+    await s.flush()
+    for p in pieces:
+        if magasin is not None: ref, info = magasin.deposer(p.octets)
+        else: ref, info = empreinte_de(p.octets), {"taille_octets": len(p.octets), "taille_stockee": len(p.octets), "compression": "aucune"}
+        b = await s.get(Blob, ref)
+        if b: b.nb_references += 1
+        else: s.add(Blob(empreinte=ref, taille_octets=info["taille_octets"], taille_stockee=info["taille_stockee"],
+                         compression=info["compression"], cree_le=quand, nb_references=1))
+        pj = await s.scalar(select(PieceJointe).where(PieceJointe.blob_ref == ref, PieceJointe.type_detecte == p.type_detecte))
+        if pj: pj.nb_references += 1
+        else:
+            pj = PieceJointe(piece_jointe_id=uuid7(), blob_ref=ref, type_detecte=p.type_detecte, taille_octets=len(p.octets), nb_references=1)
+            s.add(pj); await s.flush()
+        s.add(CommPieceJointe(comm_id=comm_id, piece_jointe_id=pj.piece_jointe_id, ordre=p.ordre, nom_declare=p.nom_declare,
+                              type_declare=p.type_declare, transfer_encoding=p.transfer_encoding, disposition=p.disposition,
+                              content_id=p.content_id, parametres=p.parametres))
+
+
+async def _poser_provenance(s: AsyncSession, comm_id, src_id, quand) -> None:
+    """La provenance d'un transfert est une RELATION (D067), pas un en-tête. En V0 le bloc source
+    est verrouillé : la citation est donc entière et fidèle par construction — part_citee 100,
+    part_modifiee 0 (D163). Le jour où le bloc se déverrouille (F133), c'est ici que le degré de
+    modification se posera, et l'accès ne suivra pas la provenance (D167)."""
+    for c in await s.scalars(select(CommCitation).where(CommCitation.comm_id == comm_id)):
+        await s.delete(c)
+    await s.flush()
+    if src_id is None: return
+    src = await s.get(Comm, src_id)
+    e = await s.get(CommEmail, src_id) if src is not None else None
+    s.add(CommCitation(comm_citation_id=uuid7(), comm_id=comm_id, cite_comm_id=src_id,
+                       cite_message_id=(e.message_id if e is not None else None),
+                       part_citee=100, part_modifiee=0, position="apres", recette=None,
+                       origine="emission", detecte_le=quand))
+
+
+async def _provenance_de(s: AsyncSession, comm_id):
+    """L'identifiant du message transféré, s'il y en a un."""
+    return await s.scalar(select(CommCitation.cite_comm_id).where(CommCitation.comm_id == comm_id).limit(1))
+
+
+def _composer(compte: Compte, adresse: str, corps: dict, comm_id, quand, ip_client: str | None = None,
+              source: bytes | None = None) -> bytes:
     """Les octets d'un message écrit dans le webmail — brouillon ou envoi, même chemin.
 
     Il y en avait deux, presque identiques : l'un posait les destinataires en base et pas
@@ -443,8 +515,14 @@ def _composer(compte: Compte, adresse: str, corps: dict, comm_id, quand, ip_clie
     m["Subject"] = corps.get("sujet") or "(sans sujet)"
     m["Date"] = email.utils.formatdate(localtime=True)
     m["Message-ID"] = email.utils.make_msgid(domain=adresse.split("@")[-1])
-    if corps.get("reference"): m["X-AtomBox-Reference"] = str(corps["reference"])
     m.set_content(corps.get("corps") or "")
+    """Le message transféré est ENCAPSULÉ, pas recopié dans le corps (D066/D167) : le commentaire
+    reste dissocié, l'index ne voit que lui (D163), et l'octet du source part intact. Aucun en-tête
+    ne porte le lien — la provenance vit en base, jamais dans le message (D067) : un marqueur
+    partirait chez le destinataire et ne s'indexerait pas."""
+    if source:
+        src = email.message_from_bytes(source, policy=email.policy.SMTP)
+        m.add_attachment(src, filename=(_nom_de_fichier(src["Subject"]) + ".eml"))
     entetes_de_relais(m, comm_id, adresse, quand, ip_client)   # D162
     return m.as_bytes()
 
@@ -469,19 +547,24 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
     if c is None or c.sens != "out" or dossier_id_court(ds.get(r.dossier_id)) != "drafts":
         return None                       # on ne réécrit QUE des brouillons : un message est un fait (D029)
     boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
-    octets = _composer(compte, adresse, corps, comm_id, datetime.now(timezone.utc))
+    maintenant = datetime.now(timezone.utc)
+    src_id, source = await _source_a_transferer(s, compte, corps, magasin)
+    octets = _composer(compte, adresse, corps, comm_id, maintenant, None, source)
     from ..ingestion.analyse import analyser
     a = analyser(octets)
     if magasin is not None: magasin.ecrire(str(comm_id), octets, remplacer=True)
     c.sujet, c.sujet_normalise = a.sujet, a.sujet_normalise
     c.snippet, c.corps_texte, c.taille = a.snippet, a.corps_texte or None, len(octets)
+    c.nb_pieces_jointes = len(a.pieces)
     e = await s.get(CommEmail, comm_id)
     if e is not None: e.message_id, e.headers = a.message_id, a.headers
     await _poser_participants(s, comm_id, a.participants)
+    await _poser_pieces(s, comm_id, a.pieces, magasin, maintenant)
+    await _poser_provenance(s, comm_id, src_id, maintenant)
     await s.commit()
     log.info("brouillon %s réenregistré par %s", comm_id, compte.login)
-    return serialiser(r, c, ds, adresse, extra={"destinataires": corps.get("destinataires") or [],
-                                                "corps": corps.get("corps") or "", "composition": corps.get("composition")})
+    return serialiser(r, c, ds, adresse, extra={"destinataires": corps.get("destinataires") or [], "corps": corps.get("corps") or "",
+                                                "composition": corps.get("composition"), "reference": str(src_id) if src_id else None})
 
 async def _adresse(s: AsyncSession, complete: str):
     """l'adresse, créée au besoin — version asynchrone de celle de l'ingestion"""
@@ -508,7 +591,8 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_c
     brouillon = bool(corps.get("composition"))
     cible = next((d for d in ds.values() if dossier_id_court(d) == ("drafts" if brouillon else "sent")), None)
     comm_id = uuid7(); maintenant = datetime.now(timezone.utc)
-    octets = _composer(compte, adresses[boite.boite_id], corps, comm_id, maintenant, ip_client)
+    src_id, source = await _source_a_transferer(s, compte, corps, magasin)
+    octets = _composer(compte, adresses[boite.boite_id], corps, comm_id, maintenant, ip_client, source)
     from ..ingestion.analyse import analyser
     from ..ingestion.identite import empreinte_identite
     a = analyser(octets)
@@ -524,16 +608,19 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_c
     else: s.add(Blob(empreinte=brut, taille_octets=info["taille_octets"], taille_stockee=info["taille_stockee"], compression=info["compression"], cree_le=maintenant, nb_references=1))
     c = Comm(comm_id=comm_id, type="email", date_recue=maintenant, date_declaree=maintenant, date_ingestion=maintenant, sens="out", sujet=a.sujet,
              sujet_normalise=a.sujet_normalise, thread_id=comm_id, nature="humain", from_adresse=adresses[boite.boite_id], from_nom=compte.nom,
-             taille=len(octets), nb_pieces_jointes=0, est_chiffre=False, est_signe=False, snippet=a.snippet, corps_texte=a.corps_texte or None)
+             taille=len(octets), nb_pieces_jointes=len(a.pieces), est_chiffre=False, est_signe=False, snippet=a.snippet, corps_texte=a.corps_texte or None)
     s.add(c)
     s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, headers=a.headers, blob_ref=brut, empreinte=empreinte_identite(a), structure_mime=a.structure_mime, reponse_possible="oui"))
     s.add(Rattachement(comm_id=comm_id, boite_id=boite.boite_id, compte_id=compte.compte_id, lu_le=maintenant, drapeau=False, statut="nouveau", personnel=False, gele=False,
                        dossier_id=cible.dossier_id if cible else None))
     await s.flush()
     await _poser_participants(s, comm_id, a.participants)
+    await _poser_pieces(s, comm_id, a.pieces, magasin, maintenant)
+    await _poser_provenance(s, comm_id, src_id, maintenant)
     from ..modules import evenements
     if not brouillon:
         await evenements.emettre_async(s, "message.a_envoyer", {"comm_id": str(comm_id), "boite_id": str(boite.boite_id), "destinataires": corps.get("destinataires") or []})
     await s.commit()
     r = await s.get(Rattachement, (comm_id, boite.boite_id))
-    return serialiser(r, c, ds, adresses[boite.boite_id], extra={"destinataires": corps.get("destinataires") or [], "corps": corps.get("corps") or "", "composition": corps.get("composition")})
+    return serialiser(r, c, ds, adresses[boite.boite_id], extra={"destinataires": corps.get("destinataires") or [], "corps": corps.get("corps") or "",
+                                                                 "composition": corps.get("composition"), "reference": str(src_id) if src_id else None})

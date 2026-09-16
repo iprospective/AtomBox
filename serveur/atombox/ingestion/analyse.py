@@ -115,8 +115,19 @@ def analyser(octets: bytes, date_recue: datetime | None = None) -> Analyse:
             if corps_part.get_content_type() == "text/html": corps = re.sub(r"<[^>]+>", " ", corps)
         except Exception:
             corps = ""
+    def sans_descendre(part):
+        """Les parties du message, SANS entrer dans un message encapsulé : ses pièces sont les
+        SIENNES, pas celles du porteur (D066 — « le message encapsulé est un contenu »). En
+        descendant, transférer un message à trois pièces en annonçait quatre, et le compteur
+        mentait sur ce qu'on a joint. Cela borne aussi la profondeur : un transfert de transfert
+        de transfert ne se déplie plus indéfiniment."""
+        yield part
+        if part.get_content_type().lower() == "message/rfc822": return
+        if part.is_multipart():
+            for p in part.iter_parts(): yield from sans_descendre(p)
+
     n = 0
-    for part in msg.walk():
+    for part in sans_descendre(msg):
         ct = part.get_content_type().lower()
         if ct.startswith("multipart/"):
             if ct == "multipart/encrypted": est_chiffre = True
@@ -125,6 +136,14 @@ def analyser(octets: bytes, date_recue: datetime | None = None) -> Analyse:
         if ct == "application/pkcs7-mime": est_chiffre = True
         try: charge = part.get_payload(decode=True) or b""
         except Exception: charge = b""
+        if not charge and ct == "message/rfc822":
+            # une partie message/rfc822 n'a PAS de charge décodable : son contenu est un message
+            # (D066). Sans ça, un .eml joint pesait zéro octet — et toutes les pièces encapsulées
+            # partageaient l'empreinte du vide, donc le même blob dédupliqué.
+            try:
+                interne = part.get_payload(0)
+                charge = interne.as_bytes() if interne is not None else b""
+            except Exception: charge = b""
         parties.append(charge)
         est_pj = part.is_attachment() or bool(part.get_filename()) or part.get("Content-ID") or ct in ("message/rfc822", "application/pdf") or (ct.startswith("image/") and part is not corps_part)
         if est_pj and part is not corps_part and ct != "text/plain" or (est_pj and part.get_filename()):
