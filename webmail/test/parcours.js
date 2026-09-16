@@ -35,7 +35,10 @@ function serveur(vus) {
         PJ({ pj_id: "p1", nom: "devis.pdf", mime_declare: "application/pdf", mime_detecte: "application/pdf" }),
         PJ({ pj_id: "p2", ordre: 2, nom: "Sujet m1.eml", octets: 4015, mime_declare: "message/rfc822",
              mime_detecte: "message/rfc822", comm_id: "m1" })] }),
-    }, filtres: [], virtuels: [] };
+    }, filtres: [], virtuels: [],
+    /* le référentiel des valeurs d'axe VIT côté serveur : poser un tag dont la valeur n'existe
+       pas encore l'y ajoute — c'est ce que fait le vrai, et c'est ce que le client doit relire. */
+    valeurs: { client: [{ id: "client:Acme", label: "Acme", axe: "client" }] } };
   return [etat, (url, init) => {
     const m = (init && init.method) || "GET";
     const chemin = url.replace("/api/v1", "");
@@ -49,7 +52,7 @@ function serveur(vus) {
                  { id: "sent", label: "Envoyés", icon: "📤", sortant: true },
                  { id: "trash", label: "Corbeille", icon: "🗑", vue: true }],
       util: [{ id: "d1", label: "Clients", icon: "📁", boite: "moi@exemple.fr" }],
-      axes: [{ id: "client", label: "Client" }], valeurs: { client: [{ id: "client:Acme", label: "Acme", axe: "client" }] },
+      axes: [{ id: "client", label: "Client" }], valeurs: etat.valeurs,
       statuts: [{ id: "nouveau", label: "Nouveau" }, { id: "a_faire", label: "À faire" }, { id: "traite", label: "Traité", sortie: "traite" }],
       vues: ["trash", "archives", "traites"], virtuels: etat.virtuels });
     if (nu === "/arborescence") return rep({ compteurs: { inbox: { t: 2, u: 1, f: 0 } }, virtuels: etat.virtuels, epingles: [] });
@@ -65,6 +68,9 @@ function serveur(vus) {
     if (/^\/messages\/[^/]+\/tags\/?$/.test(nu) && m === "POST") {
       const id = nu.split("/")[2]; const t = { axe: corps.axe, val: corps.val, source: "manuel" };
       etat.messages[id].tags = (etat.messages[id].tags || []).concat([t]);
+      const vs = etat.valeurs[corps.axe] = etat.valeurs[corps.axe] || [];
+      if (!vs.some(v => v.label === corps.val))
+        vs.push({ id: corps.axe + ":" + corps.val, label: corps.val, axe: corps.axe });
       return rep({ ok: true, tags: etat.messages[id].tags }); }
     if (/^\/messages\/[^/]+\/tags\//.test(nu) && m === "DELETE") {
       const id = nu.split("/")[2]; etat.messages[id].tags = [];
@@ -194,6 +200,25 @@ function serveur(vus) {
   await drainer(e);
   vrai(vus.slice(n).some(v => v.startsWith("POST /dossiers-virtuels")),
        "« un dossier virtuel depuis ce tag » n'a rien à saisir (D143)");
+  /* F139 — une valeur d'axe NEUVE doit apparaître sans recharger la page : l'arborescence lit
+     `Ref.valeurs`, chargé une fois au démarrage. Sans rechargement, le tag existait côté serveur
+     et l'écran de celui qui venait de le poser ne le montrait nulle part. */
+  n = vus.length;
+  await A.MessageService.ajouterTag(A.Api.cache.message("m1"), "client", "Neuf SARL");
+  await drainer(e);
+  vrai(vus.slice(n).includes("GET /referentiels"), "poser un tag recharge le référentiel (F139, D169)");
+  vrai((A.Ref.valeurs.client || []).some(v => v.label === "Neuf SARL"), "la valeur neuve est connue du client");
+  ui.ouverts.client = true;                     // une branche fermée ne montre rien, c'est normal
+  A.Controllers.Nav.peindre();
+  vrai(doc.getElementById("nav").innerHTML.includes("Neuf SARL"), "et sa branche apparaît dans l'arborescence, sans rechargement");
+  await A.MessageService.retirerTag(A.Api.cache.message("m1"), A.Api.cache.message("m1").tags.length - 1);
+  await drainer(e);
+  n = vus.length;
+  await A.MessageService.rafraichirReferentiel(null);
+  await drainer(e);
+  vrai(vus.slice(n).includes("GET /referentiels") && vus.slice(n).includes("GET /arborescence"),
+       "rafraichirReferentiel relit le référentiel ET les compteurs : une branche neuve à zéro serait fausse");
+
   /* DEUX chemins, deux choses différentes : le service (le contrat avec l'API) et le câblage (le
      bouton atteint-il le service ?). Les six défauts de septembre étaient tous dans le second. */
   await A.MessageService.retirerTag(A.Api.cache.message("m1"), 0);
