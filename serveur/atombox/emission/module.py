@@ -8,12 +8,32 @@ from ..magasin import Magasin
 from ..controleurs.envois import EnvoisControleur
 from ..modules import Module, evenement
 from ..modules import evenements
-from ..schema.modeles import Adresse, Boite, Comm, Envoi, EnvoiDestinataire, Identite
+from ..schema.modeles import Adresse, Boite, Comm, Envoi, EnvoiDestinataire, Identite, Participant
 from ..uuid7 import uuid7
-from ..ingestion.ingestion import adresse as adresse_de
+from ..ingestion.ingestion import adresse as adresse_de, normaliser_adresse
 from .smtp import remettre
 
 log = journal("apps")
+
+def destinataires_de(s, comm_id, repli: list[str]) -> list[str]:
+    """L'ENVELOPPE se dérive des participants DU MESSAGE — `to`, `cc`, `bcc` — jamais de la charge
+    de l'événement.
+
+    Le Cc saisi au clavier n'était pas dans cette charge : il figurait dans l'en-tête, le
+    destinataire le voyait donc écrit, et personne ne le lui avait envoyé. Un courrier qui se dit
+    envoyé à quelqu'un qui ne le reçoit pas est pire qu'une erreur : c'est un mensonge silencieux.
+
+    Le repli ne sert qu'à un message sans participant enregistré. Les doublons sont écartés : la
+    même adresse en `to` et en `cc` ne fait qu'un RCPT."""
+    lignes = s.execute(select(Adresse.adresse_complete)
+                       .join(Participant, Participant.adresse_id == Adresse.adresse_id)
+                       .where(Participant.comm_id == comm_id, Participant.role.in_(("to", "cc", "bcc")))
+                       .order_by(Participant.ordre)).scalars().all()
+    vus, out = set(), []
+    for a in list(lignes) + [normaliser_adresse(d) for d in (repli or [])]:
+        if a and a not in vus: vus.add(a); out.append(a)
+    return out
+
 
 class ModuleEmission(Module):
     nom = "emission"; version = "0.1"; description = "remise au relais SMTP (F109, D114), envoi et destinataires, suivi et relance (D099)"; interne = True
@@ -22,7 +42,8 @@ class ModuleEmission(Module):
     @evenement("message.a_envoyer")
     def envoyer(self, ctx):
         s = ctx["session"]; charge = ctx["charge"]
-        comm_id = uuid.UUID(charge["comm_id"]); boite_id = uuid.UUID(charge["boite_id"]); dest = list(charge.get("destinataires") or [])
+        comm_id = uuid.UUID(charge["comm_id"]); boite_id = uuid.UUID(charge["boite_id"])
+        dest = destinataires_de(s, comm_id, charge.get("destinataires") or [])
         comm = s.get(Comm, comm_id); boite = s.get(Boite, boite_id)
         if not comm or not boite: raise RuntimeError("message ou boîte introuvable : %s" % comm_id)
         expediteur = s.get(Adresse, boite.adresse_id).adresse_complete

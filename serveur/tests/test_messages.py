@@ -22,6 +22,17 @@ def test_serialisation_porte_le_contrat():
     for k in ("sujet", "from_nom", "from_adresse", "date_recue", "thread_id", "nb_pieces_jointes", "taille", "sorti_le", "motif_sortie", "dossier_origine", "destinataires", "reponse_possible", "list_id", "lu", "sens", "nature", "snippet", "boite", "dossier", "statut", "tags"):
         assert k in o, k
 
+def test_une_adresse_est_parsee_avant_d_entrer_en_base():
+    """RM3214 — « Florian HENRY <florian.henry@scopen.fr> » est entré TEL QUEL en base, avec le nom
+    dans la partie locale. smtplib parsait à la remise, donc le courrier partait : seul le suivi
+    d'envoi et le carnet gardaient un fantôme."""
+    from atombox.ingestion.ingestion import normaliser_adresse
+    assert normaliser_adresse("Florian HENRY <florian.henry@scopen.fr>") == "florian.henry@scopen.fr"
+    assert normaliser_adresse("  jean@x.fr  ") == "jean@x.fr"
+    assert normaliser_adresse('"Nom, Prénom" <a@b.fr>') == "a@b.fr"
+    assert normaliser_adresse("n'importe quoi") == "", "sans @, il n'y a pas d'adresse"
+
+
 def test_quand_accepte_ms_et_iso():
     assert svc.quand(1756976400000).year == 2025 or svc.quand(1756976400000).year == 2026
     assert svc.quand("2026-09-04T09:12:00Z").tzinfo is not None and svc.quand(None) is None
@@ -230,6 +241,15 @@ def test_parcours_du_webmail(monde):
     assert r2.status_code == 200 and r2.content[:4] == b"%PDF", "le type servi est le type DÉTECTÉ (D032)"
     assert c.get("/api/v1/messages/%s/pieces-jointes/%s" % (str(monde["ids"][0]), pdf["pj_id"]),
                  headers=h).status_code == 404, "une pièce ne se sert pas depuis un autre message"
+
+    # RM3214 — un Cc EST un destinataire : il doit être dans l'enveloppe, pas seulement dans l'en-tête
+    avec_cc = c.post("/api/v1/messages", json={"destinataires": ["Jean Valjean <jean@x.fr>"], "cc": "copie@x.fr",
+                                               "sujet": "Avec copie", "corps": "bonjour"}, headers=h).json()["message"]
+    rl = c.post("/api/v1/envois/%s/relancer" % avec_cc["id"], headers=h).json()
+    assert rl["destinataires"] == ["jean@x.fr", "copie@x.fr"], rl
+    relu_cc = c.get("/api/v1/messages/" + avec_cc["id"], headers=h).json()
+    assert relu_cc["destinataires"] == ["jean@x.fr", "copie@x.fr"], relu_cc["destinataires"]
+    assert all("<" not in d for d in relu_cc["destinataires"]), "le nom d'affichage n'entre pas dans l'adresse"
 
     envoye = c.post("/api/v1/messages", json={"destinataires": ["jean@x.fr"], "sujet": "Parti",
                                               "corps": "voilà"}, headers=h).json()["message"]

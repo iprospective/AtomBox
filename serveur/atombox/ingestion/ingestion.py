@@ -30,7 +30,21 @@ def domaine(s: Session, nom: str) -> Domaine:
     s.add(d); s.flush()
     return d
 
+def normaliser_adresse(brut: str) -> str:
+    """« Florian HENRY <florian.henry@scopen.fr> » → « florian.henry@scopen.fr ».
+
+    Une adresse vient TOUJOURS de l'extérieur — d'un en-tête reçu ou d'un champ de saisie — donc
+    on ne la croit pas sur parole. Sans ce passage, une adresse entière avec son nom d'affichage
+    est entrée en base (`local = "Florian HENRY <florian.henry"`) : smtplib parsait à la remise, le
+    courrier partait, et le suivi d'envoi pointait une adresse qui n'existe pas."""
+    import email.utils
+    _, adr = email.utils.parseaddr((brut or "").strip())
+    adr = (adr or "").strip().strip("<>")
+    return adr if "@" in adr else ""      # `parseaddr` rend volontiers du texte quelconque
+
+
 def adresse(s: Session, complete: str) -> Adresse:
+    complete = normaliser_adresse(complete) or (complete or "").strip().strip("<>")
     a = s.scalar(select(Adresse).where(Adresse.adresse_complete == complete))
     if a: return a
     local, _, dom = complete.partition("@")
