@@ -63,7 +63,6 @@
         if (t) ABX.Controllers.Nav.creerVirtuel({ criteres: [{ axe: t.axe, val: t.val }] }); });
       Message.cablerTags(el, m);
       D.on(el, "[data-c]", "onclick", b => ABX.Controllers.Compose.demarrer(b.dataset.c, m));
-      D.on(el, "[data-a]", "onclick", b => Message.logMessage(b.dataset.a, m));
       D.on(el, ".pjc",     "onclick", c => Message.logPieceJointe(m, +c.dataset.nb_pieces_jointes));
       D.on(el, "[data-e]", "onclick", b => Message.logErp(m, b.dataset.e));
     },

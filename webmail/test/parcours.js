@@ -9,6 +9,7 @@
    partie, l'état changé, l'écran repeint. */
 "use strict";
 const { demarrer, drainer, creerStockage, eq, vrai, bilan } = require("./run");
+const { evt } = require("./fake-dom");
 
 const MSG = (id, o = {}) => Object.assign({
   id, sujet: "Sujet " + id, from_nom: "Paul", from_adresse: "paul@exemple.fr",
@@ -100,6 +101,15 @@ function serveur(vus) {
   await drainer(e);
   const A = e.ABX, doc = e.doc, ui = A.Store.ui;
   const clic = id => { const n = doc.getElementById(id); vrai(!!n, "le contrôle #" + id + " existe"); if (n && n.onclick) n.onclick({ preventDefault() {}, stopPropagation() {} }); return n; };
+  /* UN GESTE DÉLÉGUÉ (RM3211). Les trois quarts de l'interface ne se cliquent pas par `id` mais
+     par sélecteur — `D.on(zone, ".msg", …)`. Appeler le service à la place, comme le faisait ce
+     harnais, laisse le CÂBLAGE hors du test : c'est justement là que se logent les défauts. */
+  const geste = (zone, sel, n = 0) => {
+    const el = doc.getElementById(zone).querySelectorAll(sel)[n];
+    vrai(!!el, "un « " + sel + " » existe dans #" + zone);
+    if (el && el.onclick) el.onclick(evt(el));
+    return el;
+  };
   const saisir = (id, v) => { const n = doc.getElementById(id); if (n) { n.value = v; if (n.oninput) n.oninput({ target: n }); } return n; };
 
   console.log("— la liste : tri, filtres, sens ————————————————————");
@@ -110,10 +120,23 @@ function serveur(vus) {
   vrai(!!tri, "le sélecteur de tri existe");
   if (tri && tri.onchange) { tri.value = "taille"; tri.onchange({ target: tri, selectedOptions: [{ text: "Taille" }] }); await drainer(e); }
   vrai(vus.some(v => v.startsWith("GET /messages")), "changer le tri redemande la liste");
+  /* Les puces de filtre et de sens : le défaut du 15 septembre était ICI — elles repeignaient
+     depuis le cache au lieu de redemander au serveur, et la liste ne bougeait pas. */
+  let n = vus.length;
+  geste("list", ".chip[data-f]", 1);
+  await drainer(e);
+  vrai(vus.slice(n).some(v => v.startsWith("GET /messages")), "cliquer une puce de filtre REDEMANDE la liste");
+  n = vus.length;
+  geste("list", ".chip[data-s]", 1);
+  await drainer(e);
+  vrai(vus.slice(n).some(v => v.startsWith("GET /messages")), "cliquer une puce de sens aussi");
 
   console.log("— un message : ouvrir, statuer, taguer —————————————");
-  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m1" }, true);
+  /* par le CLIC sur la ligne : c'est le chemin de l'utilisateur, et il passe par le câblage */
+  A.Store.ui.filtre = "tous"; A.Controllers.List.charger(); await drainer(e);
+  geste("list", ".msg", 0);
   await drainer(e);
+  vrai(ui.tabs.some(t => t.type === "msg"), "cliquer une ligne ouvre le message");
   const det = () => doc.getElementById("detail").innerHTML;
   vrai(det().length > 100, "le message se peint");
   await A.MessageService.traiter(A.Api.cache.message("m1"));
@@ -132,11 +155,41 @@ function serveur(vus) {
   await A.MessageService.statuer(A.Api.cache.message("m1"), "a_faire");
   eq(A.Api.cache.message("m1").statut, "a_faire", "le statut se pose");
 
+  /* les gestes du message ouvert, par leurs sélecteurs — jusqu'ici seuls les services étaient
+     appelés, donc le câblage entre le bouton et l'action n'était couvert par rien. */
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m1" }, false); await drainer(e);
+  n = vus.length;
+  geste("detail", "[data-x]", 0);
+  await drainer(e);
+  vrai(vus.slice(n).some(v => v.includes("/rattachement")), "un geste de file agit par l'API");
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m1" }, false); await drainer(e);
+  geste("detail", "[data-c]", 0);
+  await drainer(e);
+  vrai(ui.tabs.some(t => t.type === "compo"), "« répondre » ouvre une composition");
+  ui.tabs.filter(t => t.type === "compo").forEach(t => A.Controllers.Tabs.fermer(t.key));
+  geste("tabs", ".tab", 0);
+  await drainer(e);
+  vrai(ui.tabs.length >= 1, "un onglet se rouvre par son étiquette");
+
   await A.MessageService.ajouterTag(A.Api.cache.message("m1"), "client", "Acme");
   eq(A.Api.cache.message("m1").tags.length, 1, "un tag se pose par sa route");
   vrai(vus.includes("POST /messages/m1/tags"), "et c'est bien la route des tags qui sert");
+  /* le tag posé se retire par la croix de son étiquette, et engendre un dossier virtuel */
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m1" }, false); await drainer(e);
+  n = vus.length;
+  geste("detail", "[data-newv]", 0);
+  await drainer(e);
+  vrai(vus.slice(n).some(v => v.startsWith("POST /dossiers-virtuels")),
+       "« un dossier virtuel depuis ce tag » n'a rien à saisir (D143)");
+  /* DEUX chemins, deux choses différentes : le service (le contrat avec l'API) et le câblage (le
+     bouton atteint-il le service ?). Les six défauts de septembre étaient tous dans le second. */
   await A.MessageService.retirerTag(A.Api.cache.message("m1"), 0);
-  eq(A.Api.cache.message("m1").tags.length, 0, "et se retire");
+  eq(A.Api.cache.message("m1").tags.length, 0, "le service retire le tag");
+  await A.MessageService.ajouterTag(A.Api.cache.message("m1"), "client", "Acme");
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m1" }, false); await drainer(e);
+  geste("detail", "[data-untag]", 0);
+  await drainer(e);
+  eq(A.Api.cache.message("m1").tags.length, 0, "et la croix de l'étiquette y mène aussi");
 
   console.log("— composer : brouillon, pièce jointe, envoi ————————");
   A.Controllers.Compose.demarrer("new", null);
@@ -198,6 +251,23 @@ function serveur(vus) {
   vrai(!ui.formVirtuel, "et le formulaire se referme");
   const q = saisir("navq", "acme");
   vrai(!!q, "le filtre de l'arborescence existe");
+  /* les gestes de l'arborescence, par leur sélecteur : ouvrir une branche, épingler, dépublier */
+  ui.navq = ""; nav.peindre();
+  n = vus.length;
+  geste("nav", ".node", 0);
+  await drainer(e);
+  vrai(vus.slice(n).some(v => v.startsWith("GET /messages")), "cliquer une branche ouvre son dossier");
+  nav.peindre();
+  n = vus.length;
+  geste("nav", "[data-pin]", 0);
+  await drainer(e);
+  vrai(vus.slice(n).some(v => v.startsWith("PUT /parametres") || v.startsWith("GET /parametres")),
+       "épingler passe par les paramètres du compte (D106/D144)");
+  nav.peindre();
+  n = vus.length;
+  geste("nav", "[data-delv]", 0);
+  await drainer(e);
+  vrai(vus.slice(n).some(v => v.startsWith("DELETE /dossiers-virtuels")), "et un dossier virtuel se supprime");
 
   console.log("— l'administration : état, journal, règles ————————");
   A.Controllers.Tabs.ouvrir({ type: "admin", volet: "etat" }, false);
@@ -215,6 +285,19 @@ function serveur(vus) {
   saisir("r-nom", "Ma règle");
   clic("r-ok"); await drainer(e);
   vrai(vus.includes("POST /filtres"), "une règle se crée");
+  /* la règle créée se pilote depuis sa ligne — deux gestes délégués, jamais testés jusqu'ici */
+  n = vus.length;
+  geste("detail", "[data-rtoggle]", 0);
+  await drainer(e);
+  vrai(vus.slice(n).some(v => v.startsWith("PATCH /filtres")), "activer/désactiver une règle passe par l'API");
+  n = vus.length;
+  geste("detail", "[data-rdel]", 0);
+  await drainer(e);
+  vrai(vus.slice(n).some(v => v.startsWith("DELETE /filtres")), "et la supprimer aussi");
+  /* les volets se choisissent par une puce, pas par un id */
+  geste("detail", ".chip[data-vol]", 0);
+  await drainer(e);
+  vrai(det().length > 100, "changer de volet par sa puce repeint l'écran");
 
   console.log("— les raccourcis et la navigation ————————————————");
   const K = A.Controllers.Raccourcis;
