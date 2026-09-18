@@ -17,7 +17,7 @@ from ..schema.modeles import Adresse, Boite, Dossier, Evenement, Rattachement
 from ..sync.sync import appliquer_descendante
 from ..magasin import Magasin
 from ..uuid7 import uuid7
-from .imap import Releve
+from .imap import Releve, tls_imap
 from .ingestion import ingerer
 from ..modules import chargement
 from ..modules.accroches import accroches
@@ -94,6 +94,21 @@ def synchroniser_descendante(s, releve: Releve, boite_id, adresse: str, dossier,
     if n: s.commit()
     return n
 
+def _uid_suivant(s, boite_id, alias: str) -> int | None:
+    """le prochain UID qu'on attend dans ce dossier — ce que la relève a déjà vu"""
+    s.expire_all()
+    return s.scalar(select(Dossier.uid_suivant).where(Dossier.boite_id == boite_id, Dossier.alias_imap == alias))
+
+
+def _resynchroniser(s, releve: Releve, boite_id, adresse: str, alias: str) -> int:
+    """la synchronisation descendante d'UN dossier, déjà sélectionné"""
+    d = s.scalar(select(Dossier).where(Dossier.boite_id == boite_id, Dossier.alias_imap == alias))
+    if d is None: return 0
+    try: return synchroniser_descendante(s, releve, boite_id, adresse, d)
+    except Exception as e:
+        s.rollback(); log.error("%s/%s : synchronisation descendante en échec — %s", adresse, alias, e); return 0
+
+
 async def surveiller_boite(boite_id, adresse: str, config: dict):
     while True:
         try:
@@ -101,12 +116,23 @@ async def surveiller_boite(boite_id, adresse: str, config: dict):
             # compte master (chapitre 06) : « boite*master » ; sans master, ou si le master EST la boîte, le login est l'adresse
             master = (config.get("master") or "").strip()
             login = adresse if not master or master.lower() == adresse.lower() else "%s*%s" % (adresse, master)
-            releve = Releve(config["hote"], config["port"]).ouvrir(login, config["mot_de_passe"])
+            releve = Releve(config["hote"], config["port"], tls=tls_imap()).ouvrir(login, config["mot_de_passe"])
             try:
                 while True:
                     await asyncio.to_thread(relever_boite, s, magasin, releve, boite_id, adresse)
-                    releve.selectionner("INBOX")
-                    await asyncio.to_thread(releve.idle, 25 * 60)
+                    _, uidnext = releve.selectionner("INBOX")
+                    # UN MESSAGE ARRIVÉ PENDANT LA RELÈVE existe déjà quand IDLE commence, et IDLE ne
+                    # signale que ce qui arrive APRÈS (RFC 2177) : il attendait le réveil suivant, 25
+                    # minutes. UIDNEXT le dit — on relève encore au lieu de s'endormir (RM3188).
+                    if uidnext > (_uid_suivant(s, boite_id, "INBOX") or 1):
+                        log.debug("%s : du courrier est arrivé pendant la relève (uidnext %d) — on relève encore", adresse, uidnext)
+                        continue
+                    # MÊME FENÊTRE POUR LES DRAPEAUX : un état changé ailleurs PENDANT la relève, après la
+                    # synchronisation de ce dossier, est effacé de la session par l'EXAMINE — IDLE ne le
+                    # signalera pas. On relit les drapeaux d'INBOX juste avant de s'endormir. Le remède
+                    # industriel est CONDSTORE/QRESYNC (RFC 7162) : ne relire que ce qui a changé.
+                    await asyncio.to_thread(_resynchroniser, s, releve, boite_id, adresse, "INBOX")
+                    await asyncio.to_thread(releve.idle, int(os.environ.get("ATOMBOX_IDLE_SECONDES", str(25 * 60))))
             finally:
                 releve.fermer(); s.close()
         except Exception as e:
