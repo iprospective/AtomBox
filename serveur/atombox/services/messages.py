@@ -5,7 +5,7 @@ Les dossiers du webmail : des identifiants courts pour les spéciaux (inbox, sen
 trash — les alias IMAP protégés, D047), des vues calculées (traites, archives — D051), l'UUID
 d'un dossier utilisateur, et les dossiers virtuels personnels (perso:…, D143)."""
 from __future__ import annotations
-import email.message, email.policy, email.utils, os, re, socket, uuid
+import base64, email.message, email.policy, email.utils, os, re, socket, uuid
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, func, case, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -575,16 +575,62 @@ def _composer(compte: Compte, adresse: str, corps: dict, comm_id, quand, ip_clie
     m["Subject"] = corps.get("sujet") or "(sans sujet)"
     m["Date"] = email.utils.formatdate(localtime=True)
     m["Message-ID"] = email.utils.make_msgid(domain=adresse.split("@")[-1])
-    m.set_content(corps.get("corps") or "")
     """Le message transféré est ENCAPSULÉ, pas recopié dans le corps (D066/D167) : le commentaire
     reste dissocié, l'index ne voit que lui (D163), et l'octet du source part intact. Aucun en-tête
     ne porte le lien — la provenance vit en base, jamais dans le message (D067) : un marqueur
     partirait chez le destinataire et ne s'indexerait pas."""
     if source:
-        src = email.message_from_bytes(source, policy=email.policy.SMTP)
-        m.add_attachment(src, filename=(_nom_de_fichier(src["Subject"]) + ".eml"))
+        frontiere = "=_AtomBox_" + uuid.uuid4().hex
+        m["MIME-Version"] = "1.0"
+        m["Content-Type"] = 'multipart/mixed; boundary="%s"' % frontiere
+        entetes_de_relais(m, comm_id, adresse, quand, ip_client)   # D162
+        sujet = email.message_from_bytes(source, policy=email.policy.SMTP)["Subject"]
+        return _assembler_transfert(m, frontiere, corps.get("corps") or "", source, _nom_de_fichier(sujet) + ".eml")
+    m.set_content(corps.get("corps") or "")
     entetes_de_relais(m, comm_id, adresse, quand, ip_client)   # D162
     return m.as_bytes()
+
+
+def _entetes(msg) -> bytes:
+    """Les en-têtes SEULS, pliés et encodés par la politique (RFC 2047, 2231) — sans le générateur,
+    qui ne sait pas écrire un multipart dont on fournit soi-même une partie."""
+    return b"".join(msg.policy.fold_binary(k, v) for k, v in msg.items())
+
+
+def encodage_de_transport(brut: bytes) -> str:
+    """L'encodage qui transporte `brut` SANS LE TOUCHER, quand il existe.
+
+    `7bit` si c'est de l'ASCII à lignes courtes — le cas courant, puisque MIME a déjà encodé
+    l'intérieur du message ; `8bit` s'il porte des octets hauts ; `base64` en dernier recours, pour
+    ce que SMTP ne transporte pas tel quel : une ligne de plus de 998 octets (RFC 5322 § 2.1.1) ou un
+    octet nul. La RFC 2045 § 6.4 n'autorise pas `base64` pour un type `message/`, mais tous les
+    clients le lisent — et c'est le seul encodage qui garde encore l'octet exact (Q074)."""
+    if b"\0" in brut or any(len(l.rstrip(b"\r")) > 998 for l in brut.split(b"\n")):
+        return "base64"
+    return "8bit" if any(o > 0x7F for o in brut) else "7bit"
+
+
+def _assembler_transfert(m, frontiere: str, commentaire: str, source: bytes, nom: str) -> bytes:
+    """Le multipart écrit À LA MAIN, parce que c'est la seule façon de ne pas re-sérialiser le message
+    transmis (RM3213, D025, D148). La bibliothèque le relisait puis le réécrivait : 265 octets en
+    entrée, 254 en sortie — la signature DKIM du transmis ne se vérifiait plus chez le destinataire,
+    et la déduplication ne retrouvait pas le blob de l'original.
+
+    Le CRLF qui précède une frontière APPARTIENT à la frontière (RFC 2046 § 5.1.1) : il est ajouté
+    après la charge, sans quoi le dernier saut de ligne du message transmis serait mangé."""
+    texte = email.message.MIMEPart(policy=email.policy.SMTP)
+    texte.set_content(commentaire)
+    piece = email.message.MIMEPart(policy=email.policy.SMTP)
+    piece["Content-Type"] = "message/rfc822"
+    piece.add_header("Content-Disposition", "attachment", filename=nom)
+    cte = encodage_de_transport(source)
+    piece["Content-Transfer-Encoding"] = cte
+    charge = base64.encodebytes(source).replace(b"\n", b"\r\n") if cte == "base64" else source
+    F = frontiere.encode("ascii")
+    return (_entetes(m) + b"\r\n"
+            + b"--" + F + b"\r\n" + texte.as_bytes()
+            + b"\r\n--" + F + b"\r\n" + _entetes(piece) + b"\r\n" + charge
+            + b"\r\n--" + F + b"--\r\n")
 
 async def _poser_participants(s: AsyncSession, comm_id, participants) -> None:
     """Les destinataires sont une DONNÉE du message, pas un écho de la requête : sans eux,

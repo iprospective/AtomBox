@@ -5,7 +5,7 @@ le plus de courrier cassé). Ce fichier n'en fait qu'une lecture : ce qui rempli
 `comm_email`, `participant`, les pièces jointes — sans rien décider du stockage ni de la base.
 """
 from __future__ import annotations
-import email, email.policy, email.utils, re, unicodedata
+import base64, email, email.policy, email.utils, quopri, re, unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -52,6 +52,33 @@ class Analyse:
 MAGIES = [(b"%PDF", "application/pdf"), (b"\x89PNG", "image/png"), (b"\xff\xd8\xff", "image/jpeg"),
           (b"GIF8", "image/gif"), (b"PK\x03\x04", "application/zip"), (b"\x1f\x8b", "application/gzip"),
           (b"\x28\xb5\x2f\xfd", "application/zstd"), (b"Rar!", "application/vnd.rar"), (b"%!PS", "application/postscript")]
+
+def parties_brutes(octets: bytes, frontiere: str) -> list[bytes]:
+    """Le CORPS BRUT de chaque partie de premier niveau d'un multipart, tel qu'il est sur le fil.
+
+    Le parseur de la bibliothèque ne garde pas les octets d'une sous-partie : il la lit, puis la
+    réécrit quand on la lui redemande. Pour un message encapsulé, c'est rédhibitoire — l'octet exact
+    est ce qui fait foi (D025), ce que DKIM vérifie, et ce que la déduplication reconnaît (D066).
+
+    Le CRLF qui précède une frontière appartient à la frontière (RFC 2046 § 5.1.1) : il n'est pas
+    rendu avec la partie."""
+    sep = re.compile(rb"\r?\n--" + re.escape(frontiere.encode("ascii", "replace")) + rb"(--)?[ \t]*(?=\r?\n|$)")
+    fin_entetes = re.search(rb"\r?\n\r?\n", octets)
+    corps = b"\r\n" + (octets[fin_entetes.end():] if fin_entetes else b"")
+    out, debut = [], None
+    for mo in sep.finditer(corps):
+        if debut is not None:
+            partie = corps[debut:mo.start()]
+            if partie[:2] == b"\r\n": out.append(partie[2:])             # partie sans en-tête
+            elif partie[:1] == b"\n": out.append(partie[1:])
+            else:
+                h = re.search(rb"\r?\n\r?\n", partie)
+                out.append(partie[h.end():] if h else b"")
+        if mo.group(1): break                                              # « --frontière-- »
+        eol = corps.find(b"\n", mo.end())
+        debut = eol + 1 if eol >= 0 else len(corps)
+    return out
+
 
 def type_detecte(octets: bytes, declare: str | None) -> str:
     """détecté sur les octets (D032) ; à défaut le type déclaré ; à défaut octets quelconques"""
@@ -126,6 +153,15 @@ def analyser(octets: bytes, date_recue: datetime | None = None) -> Analyse:
         if part.is_multipart():
             for p in part.iter_parts(): yield from sans_descendre(p)
 
+    # l'octet brut des parties de premier niveau, pour les messages encapsulés (RM3213)
+    bruts = {}
+    if msg.is_multipart() and msg.get_boundary():
+        try:
+            for p, brut in zip(msg.iter_parts(), parties_brutes(octets, msg.get_boundary())):
+                bruts[id(p)] = brut
+        except Exception:
+            bruts = {}
+
     n = 0
     for part in sans_descendre(msg):
         ct = part.get_content_type().lower()
@@ -140,10 +176,22 @@ def analyser(octets: bytes, date_recue: datetime | None = None) -> Analyse:
             # une partie message/rfc822 n'a PAS de charge décodable : son contenu est un message
             # (D066). Sans ça, un .eml joint pesait zéro octet — et toutes les pièces encapsulées
             # partageaient l'empreinte du vide, donc le même blob dédupliqué.
-            try:
-                interne = part.get_payload(0)
-                charge = interne.as_bytes() if interne is not None else b""
-            except Exception: charge = b""
+            #
+            # L'OCTET BRUT d'abord (RM3213) : re-sérialiser le message lu en change les octets, donc
+            # l'empreinte et la signature. La re-sérialisation ne reste qu'en repli, pour un
+            # encapsulé enfoui plus profond qu'un premier niveau.
+            charge = bruts.get(id(part), b"")
+            cte = (part.get("Content-Transfer-Encoding") or "").strip().lower()
+            if charge and cte == "base64":                 # toléré pour message/ (RFC 2045 § 6.4) : Q074
+                try: charge = base64.b64decode(charge)
+                except Exception: charge = b""
+            elif charge and cte == "quoted-printable":
+                charge = quopri.decodestring(charge)
+            if not charge:
+                try:
+                    interne = part.get_payload(0)
+                    charge = interne.as_bytes() if interne is not None else b""
+                except Exception: charge = b""
         parties.append(charge)
         est_pj = part.is_attachment() or bool(part.get_filename()) or part.get("Content-ID") or ct in ("message/rfc822", "application/pdf") or (ct.startswith("image/") and part is not corps_part)
         if est_pj and part is not corps_part and ct != "text/plain" or (est_pj and part.get_filename()):
