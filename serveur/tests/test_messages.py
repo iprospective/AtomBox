@@ -22,6 +22,46 @@ def test_serialisation_porte_le_contrat():
     for k in ("sujet", "from_nom", "from_adresse", "date_recue", "thread_id", "nb_pieces_jointes", "taille", "sorti_le", "motif_sortie", "dossier_origine", "destinataires", "reponse_possible", "list_id", "lu", "sens", "nature", "snippet", "boite", "dossier", "statut", "tags"):
         assert k in o, k
 
+def _transfert_de(brut: bytes):
+    import email.policy
+    from atombox.ingestion.analyse import analyser
+
+    class FauxCompte:
+        nom, login = "Mathieu", "mathieu"
+    octets = svc._composer(FauxCompte(), "contact@exemple.fr",
+                           {"destinataires": ["jean@x.fr"], "sujet": "Tr: essai", "corps": "voir dessous"},
+                           uuid.uuid4(), datetime.now(timezone.utc), None, brut)
+    return octets, analyser(octets)
+
+
+def test_l_encapsule_porte_l_octet_exact_du_magasin():
+    """RM3213 (D025, D148, D168) — le message transmis était RE-SÉRIALISÉ par la bibliothèque : 265
+    octets en entrée, 254 en sortie. Sa signature DKIM ne se vérifiait plus chez le destinataire, et
+    la déduplication ne retrouvait pas le blob de l'original, stocké une seconde fois.
+
+    Trois cas, parce que l'encodage de transport dépend du contenu : un message en ASCII 7 bits (le
+    cas courant — MIME encode déjà l'intérieur), un message avec de l'UTF-8 brut, et un message à
+    lignes trop longues pour SMTP. Dans les trois, l'octet extrait est l'octet déposé."""
+    import email.policy
+    en_tetes = (b"From: Client <client@exemple.fr>\r\nTo: contact@exemple.fr\r\n"
+                b"Subject: Devis 2026\r\nMessage-ID: <abc@exemple.fr>\r\n"
+                b"DKIM-Signature: v=1; a=rsa-sha256; d=exemple.fr; s=k1;\r\n\tbh=abc; b=def\r\n"
+                b"MIME-Version: 1.0\r\n")
+    cas = {
+        "7bit": en_tetes + b"Content-Type: text/plain; charset=us-ascii\r\n\r\nBonjour,\r\n  deux espaces en tete.\r\n",
+        "8bit": en_tetes + b"Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n"
+                           + "Réponse attendue : 1 200 €\r\n".encode("utf-8"),
+        "base64": en_tetes + b"Content-Type: text/plain\r\n\r\n" + b"x" * 1200 + b"\r\n",
+    }
+    for attendu, brut in cas.items():
+        octets, a = _transfert_de(brut)
+        assert len(a.pieces) == 1 and a.pieces[0].type_declare == "message/rfc822", (attendu, a.structure_mime)
+        assert a.pieces[0].octets == brut, "%s : l'octet encapsulé n'est plus celui du magasin" % attendu
+        assert ("Content-Transfer-Encoding: " + attendu).encode() in octets, \
+            "%s : l'encodage de transport choisi n'est pas le bon" % attendu
+        assert a.corps_texte.strip() == "voir dessous", "le commentaire reste le seul texte indexé (D163)"
+
+
 def test_une_adresse_est_parsee_avant_d_entrer_en_base():
     """RM3214 — « Florian HENRY <florian.henry@scopen.fr> » est entré TEL QUEL en base, avec le nom
     dans la partie locale. smtplib parsait à la remise, donc le courrier partait : seul le suivi
@@ -230,6 +270,14 @@ def test_parcours_du_webmail(monde):
     # F137 — l'encapsulé qu'on POSSÈDE est résolu vers son message (D168), et n'est plus un fichier
     pj = relu_tr["pieces_jointes"][0]
     assert pj["comm_id"] == source, "la pièce message/rfc822 pointe le message AtomBox d'origine"
+    # RM3213 — l'encapsulé EST le blob de l'original : même octet, même empreinte, donc dédupliqué
+    from atombox.schema.modeles import CommEmail
+    monde["session"].expire_all()
+    blob_source = monde["session"].get(CommEmail, uuid.UUID(source)).blob_ref
+    assert pj["sha256"] == blob_source, "le message transmis est stocké une seconde fois (D066)"
+    from atombox.schema.modeles import Blob
+    assert monde["session"].get(Blob, blob_source).nb_references >= 2, \
+        "UN fichier au magasin, deux porteurs : l'original (comme message) et son transfert (comme pièce)"
     # F136 — et les octets d'une pièce se servent enfin : sans cette route, aucun clic n'aboutit
     rr = c.get("/api/v1/messages/%s/pieces-jointes/%s" % (tr["id"], pj["pj_id"]), headers=h)
     assert rr.status_code == 200 and rr.headers["content-type"].startswith("message/rfc822"), rr.headers
