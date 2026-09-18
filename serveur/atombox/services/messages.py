@@ -274,11 +274,18 @@ async def liste(s: AsyncSession, compte: Compte, dossier: str, kind: str | None,
     if not tout:
         if sens in ("in", "out"): q = q.where(Comm.sens == sens)
         if statut and statut != "tous": q = q.where(Rattachement.statut == statut)
-        # « tous » : rien n'est exclu — c'est le défaut d'une branche de CLASSEMENT (D166). La
-        # règle « traité sort de la file » (D014/D030) vaut pour une file de travail ; appliquée
+        # « tous » : en file, traités et archivés — c'est le défaut d'une branche de CLASSEMENT (D166).
+        # La règle « traité sort de la file » (D014/D030) vaut pour une file de travail ; appliquée
         # à un tag, elle fait disparaître un projet entier dès qu'il est terminé.
-        if not est_vue and filtre != "tous":
-            q = q.where(Rattachement.motif_sortie.isnot(None)) if filtre == "sortis" else q.where(Rattachement.motif_sortie.is_(None))
+        #
+        # Mais JAMAIS la corbeille : un message supprimé vit dans la vue Corbeille, nulle part
+        # ailleurs. « Tous » et « traités / archivés » le montraient dans son dossier d'origine,
+        # alors que les compteurs l'excluaient — compteur ≠ liste, ce que D166 interdit. Trouvé par
+        # le test de bout en bout : un brouillon envoyé restait dans « Brouillons » (RM3188).
+        if not est_vue:
+            q = q.where(or_(Rattachement.motif_sortie.is_(None), Rattachement.motif_sortie != "supprime"))
+            if filtre == "sortis": q = q.where(Rattachement.motif_sortie.isnot(None))
+            elif filtre != "tous": q = q.where(Rattachement.motif_sortie.is_(None))
         if filtre == "non_lus": q = q.where(Rattachement.lu_le.is_(None))
         if filtre == "recents": q = q.where(Comm.date_recue >= datetime.now(timezone.utc) - timedelta(days=30))
         if filtre == "pj": q = q.where(Comm.nb_pieces_jointes > 0)
@@ -299,7 +306,7 @@ def serialiser(r: Rattachement, c: Comm, ds: dict, boite_adresse: str | None, co
     o = { "id": str(c.comm_id), "sujet": c.sujet, "from_nom": c.from_nom, "from_adresse": c.from_adresse,
           "date_recue": iso(c.date_recue), "thread_id": str(c.thread_id) if c.thread_id else None,
           "nb_pieces_jointes": c.nb_pieces_jointes, "taille": c.taille, "sens": c.sens, "nature": c.nature, "snippet": c.snippet,
-          "boite": boite_adresse, "lu": r.lu_le is not None, "statut": r.statut, "sorti_le": iso(r.sorti_le), "motif_sortie": r.motif_sortie,
+          "boite": boite_adresse, "lu": r.lu_le is not None, "drapeau": bool(r.drapeau), "statut": r.statut, "sorti_le": iso(r.sorti_le), "motif_sortie": r.motif_sortie,
           "dossier_origine": origine or "inbox", "dossier": courant if courant != origine else None,
           "tags": [], "connu": False, "usurpation": False, "valide": False, "suppr": r.motif_sortie == "supprime",
           "reponse_possible": None, "list_id": None, "destinataires": [], "reference": None, "composition": None, "fiabilite": None, "contact_alternatif": None, "dsn": None, "dom": None }

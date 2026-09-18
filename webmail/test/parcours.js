@@ -96,7 +96,7 @@ function serveur(vus) {
       champs: [{ id: "from", label: "Expéditeur" }], operateurs: [{ id: "contient", label: "contient" }],
       actions: [{ id: "classer", label: "Classer" }] });
     if (nu === "/filtres" && m === "POST") { const f = { id: "f1", nom: corps.nom, actif: true, muette: true,
-      predicat: corps.predicat, action: corps.action }; etat.filtres.push(f); return rep({ ok: true, filtre: f }); }
+      predicat: corps.predicat, action: corps.action, portee: corps.portee }; etat.filtres.push(f); return rep({ ok: true, filtre: f }); }
     if (nu.startsWith("/filtres/") && m === "PATCH") { etat.filtres[0].actif = corps.actif; return rep({ ok: true, filtre: etat.filtres[0] }); }
     if (nu.startsWith("/filtres/") && m === "DELETE") { etat.filtres.length = 0; return rep({ ok: true, supprimes: 1 }); }
     if (nu === "/etat") return rep({ ingestion: [{ dossier: "INBOX", retard: 0 }], files: { en_attente: 0, en_echec: 0, abandonnes: 0 },
@@ -339,6 +339,8 @@ function serveur(vus) {
   saisir("r-nom", "Ma règle");
   clic("r-ok"); await drainer(e);
   vrai(vus.includes("POST /filtres"), "une règle se crée");
+  eq(etat.filtres[0] && etat.filtres[0].portee, "boite",
+     "l'écran crée la règle pour la BOÎTE (D171) — en « compte », elle ne s'appliquait à aucun courrier entrant");
   /* la règle créée se pilote depuis sa ligne — deux gestes délégués, jamais testés jusqu'ici */
   n = vus.length;
   geste("detail", "[data-rtoggle]", 0);

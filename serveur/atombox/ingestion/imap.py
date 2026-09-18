@@ -9,6 +9,14 @@ from ..journal import journal
 
 log = journal("imap")
 
+def tls_imap() -> bool:
+    """`ATOMBOX_IMAP_TLS=aucun` pour un IMAP sans chiffrement — un Dovecot sur la même machine (port
+    143, boucle locale) ou le serveur simulé des tests de bout en bout. Le défaut reste TLS : ne
+    rien dire ne doit jamais faire partir un mot de passe en clair."""
+    import os
+    return (os.environ.get("ATOMBOX_IMAP_TLS") or "ssl").strip().lower() != "aucun"
+
+
 class Releve:
     def __init__(self, hote: str, port: int = 993, tls: bool = True, delai: int = 60):
         self.hote, self.port, self.tls, self.delai = hote, port, tls, delai

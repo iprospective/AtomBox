@@ -316,6 +316,8 @@ def test_parcours_du_webmail(monde):
                                         "predicat": {"mode": "et", "criteres": [{"champ": "from", "operateur": "contient", "valeur": "tessier"}]},
                                         "action": {"type": "drapeau"}}, headers=h).json()
     assert f["ok"] and f["filtre"]["muette"] is True, "une règle neuve n'a jamais servi"
+    assert f["filtre"]["portee"] == "boite", \
+        "une règle qui agit est une règle de BOÎTE (D171) : en portée « compte », l'ingestion ne la voyait jamais"
     l = c.get("/api/v1/filtres", headers=h).json()
     assert l["total"] == 1 and "contient" in l["operateurs"] and "classer" in l["actions"]
     assert c.patch("/api/v1/filtres/" + f["filtre"]["id"], json={"actif": False}, headers=h).json()["filtre"]["actif"] is False

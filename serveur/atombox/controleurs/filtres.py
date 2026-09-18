@@ -42,11 +42,23 @@ class FiltresControleur(Controleur):
         if not (c.get("nom") or "").strip(): raise HTTPException(400, "un nom")
         if not ((c.get("predicat") or {}).get("criteres")): raise HTTPException(400, "au moins un critère")
         if not (c.get("action") or {}).get("type") in ACTIONS: raise HTTPException(400, "action inconnue : %s" % (c.get("action") or {}).get("type"))
-        portee, pid = c.get("portee", "compte"), compte.compte_id
-        if portee == "boite":
-            boites = [b.boite_id for b in await boites_du_compte(s, compte)]
-            pid = uuid.UUID(c["portee_id"]) if c.get("portee_id") else (boites[0] if boites else None)
-            if pid not in boites: raise HTTPException(404, "boîte inconnue")
+        # UNE RÈGLE QUI AGIT EST UNE RÈGLE DE BOÎTE (D171). Elle modifie le rattachement, qui est
+        # unique par boîte (D124) : elle vaut pour tous ceux qui la partagent, et c'est à la boîte
+        # que l'ingestion demande ses règles. Portée « compte », elle ne s'appliquait JAMAIS au
+        # courrier entrant — et l'écran des règles créait tout en portée « compte » (RM3188).
+        # Une règle de compte, sans action, c'est un dossier virtuel : il passe par sa propre route.
+        boites = [b.boite_id for b in await boites_du_compte(s, compte)]
+        if c.get("portee_id"):
+            pid = uuid.UUID(c["portee_id"])
+        elif len(boites) == 1:
+            pid = boites[0]
+        else:
+            raise HTTPException(400, "précisez la boîte (portee_id) : une règle trie le courrier D'UNE boîte")
+        if pid not in boites: raise HTTPException(404, "boîte inconnue")
+        if c.get("portee", "boite") != "boite":
+            log.info("règle « %s » : portée « %s » demandée, rattachée à la boîte — une règle qui agit est une règle de boîte (D171)",
+                     (c.get("nom") or "").strip(), c.get("portee"))
+        portee = "boite"
         dernier = await s.scalar(select(Filtre).where(Filtre.portee_type == portee, Filtre.portee_id == pid).order_by(Filtre.ordre.desc()).limit(1))
         f = Filtre(filtre_id=uuid7(), portee_type=portee, portee_id=pid, nom=c["nom"].strip(),
                    ordre=c.get("ordre") or ((dernier.ordre + 1) if dernier else 1),

@@ -7,7 +7,7 @@ file réessaie (D161), et IMAP finira par recevoir l'état."""
 from __future__ import annotations
 import os, uuid
 from sqlalchemy import select
-from ..ingestion.imap import Releve
+from ..ingestion.imap import Releve, tls_imap
 from ..journal import journal
 from ..modules import Module, evenement
 from ..schema.modeles import Adresse, Boite, Dossier, Rattachement
@@ -44,7 +44,7 @@ class ModuleSync(Module):
         cible = s.get(Dossier, r.dossier_id)
         if source is None or cible is None:
             log.warning("%s : dossier IMAP inconnu — rien à pousser", comm_id); return
-        releve = Releve(cfg["hote"], cfg["port"]).ouvrir(login_de(adresse, cfg["master"]), cfg["mot_de_passe"])
+        releve = Releve(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_de(adresse, cfg["master"]), cfg["mot_de_passe"])
         try:
             releve.selectionner(source.alias_imap or source.nom, ecriture=True)
             poser, retirer = drapeaux_voulus(r)

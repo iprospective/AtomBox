@@ -124,6 +124,15 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
                            lu_le=datetime.now(timezone.utc) if p.get("lu") else None,
                            drapeau=bool(p.get("drapeau")), statut=p.get("statut", "nouveau"),
                            personnel=False, gele=False, dossier_id=cible, uid_imap=uid))
+        # CE QU'UNE RÈGLE POSE DOIT PARTIR VERS IMAP (RM3188). Sans cet ordre, la synchronisation
+        # descendante — qui tourne dans la MÊME relève — lisait un IMAP sans \Flagged ni \Seen, et
+        # « IMAP fait foi » défaisait la règle 50 ms après qu'elle eut agi. Tant que l'ordre est en
+        # vol, la descendante l'épargne : c'est la garde qu'elle a déjà. Un classement suit le même
+        # chemin, et le message est DÉPLACÉ côté IMAP — sinon Thunderbird ne voyait rien du tri.
+        if uid is not None and (p.get("lu") or p.get("drapeau") or cible != dossier_id):
+            s.flush()
+            evenements.emettre(s, "rattachement.change", {"comm_id": str(comm_id), "boite_id": str(boite_id),
+                               "dossier_avant": str(dossier_id) if cible != dossier_id else None}, cible=None)
     elif r.uid_imap is None and uid is not None:
         r.uid_imap = uid
     s.commit()

@@ -94,7 +94,9 @@
         const f = V._nouvelle;
         const action = { type: f.action };
         if (f.action === "classer" && f.dossier) action.dossier = f.dossier;
-        ABX.Api.creerFiltre({ nom: f.nom, portee: "compte",
+        /* « boite », pas « compte » : une règle qui agit trie le courrier D'UNE boîte (D171). En
+           « compte », aucune règle créée ici ne s'appliquait au courrier entrant. */
+        ABX.Api.creerFiltre({ nom: f.nom, portee: "boite",
                               predicat: { mode: f.mode, criteres: f.criteres.filter(c => c.valeur || c.operateur === "existe") },
                               action })
           .then(recharger, e => { alert("Règle refusée : " + (e && e.message || e)); });
