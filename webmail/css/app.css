@@ -650,6 +650,17 @@ header {
   text-align: center;
 }
 
+/* Le drapeau (RM3244) — synchronisé avec les autres clients : visible, pas criard. */
+.meta .drapeau {
+  color: var(--warn, #c77700);
+  font-size: 13px;
+  margin-right: 4px;
+}
+
+.hbtn.ic.on {
+  color: var(--warn, #c77700);
+}
+
 /* ---- arborescence ---- */
 .navsearch {
   position: sticky;

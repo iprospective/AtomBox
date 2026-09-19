@@ -186,6 +186,21 @@ function serveur(vus) {
   await drainer(e);
   vrai(ui.tabs.some(t => t.type === "compo"), "« répondre » ouvre une composition");
   ui.tabs.filter(t => t.type === "compo").forEach(t => A.Controllers.Tabs.fermer(t.key));
+  /* RM3244 (D140c) — le drapeau : posé sur le téléphone, il descend en base ; il doit se VOIR ici,
+     et se poser d'ici. Avant, il existait partout sauf à l'écran. */
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m2" }, false); await drainer(e);
+  const boutons = doc.getElementById("detail").querySelectorAll("[data-x]");
+  const iDrapeau = boutons.findIndex(b => b.dataset.x === "drapeau");
+  vrai(iDrapeau >= 0, "le message propose un bouton drapeau");
+  n = vus.length;
+  geste("detail", "[data-x]", iDrapeau);
+  await drainer(e);
+  vrai(vus.slice(n).includes("PATCH /messages/m2/rattachement"), "poser le drapeau passe par le rattachement");
+  eq(etat.messages.m2.drapeau, true, "le serveur a reçu drapeau = true — c'est lui qui le pousse vers IMAP");
+  A.Controllers.List.charger(); await drainer(e);
+  const carte = id => (doc.getElementById("list").innerHTML.split('data-id="' + id + '"')[1] || "").split('data-id="')[0];
+  vrai(carte("m2").includes("⚑"), "la ligne du message drapeauté montre le drapeau");
+  vrai(carte("m1") !== "" && !carte("m1").includes("⚑"), "…et seulement elle");
   geste("tabs", ".tab", 0);
   await drainer(e);
   vrai(ui.tabs.length >= 1, "un onglet se rouvre par son étiquette");

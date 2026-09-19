@@ -41,6 +41,14 @@
       "une ÉCRITURE à chaque ouverture — le prix d'un compteur de non-lus juste, et d'un début " +
       "de workflow de traitement (D041). Le IS NULL évite de réécrire une ligne déjà lue"]),
 
+    /* LE DRAPEAU (RM3244, D140c) — un concept IMAP (\\Flagged), que la transition oblige à montrer :
+       posé sur le téléphone, il doit se voir ici ; posé ici, il doit se voir sur le téléphone. Le
+       suivi propre à AtomBox reste le STATUT et la file de travail (D093, D013). */
+    drapeau: m => appliquer(m, { drapeau: !m.drapeau }, [m.drapeau ? "Retirer le drapeau" : "Poser un drapeau",
+`UPDATE rattachement SET drapeau = NOT drapeau WHERE comm_id = :id AND boite_id = :boite;
+-- puis l'ordre montant : rattachement.change → STORE ±FLAGS (\\Flagged) sur l'UID source (F113)`,
+      "le drapeau vit sur le RATTACHEMENT, pas sur le message : deux boîtes, deux drapeaux"]),
+
     nonLu: m => appliquer(m, { lu: false }, ["Marquer non lu",
 `UPDATE rattachement SET lu_le = NULL WHERE comm_id = :id AND compte_id = :moi;`,
       "le compteur redevient juste sans toucher au journal : la lecture reste tracée dans " +
