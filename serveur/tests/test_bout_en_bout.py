@@ -140,6 +140,7 @@ def chaine(tmp_path_factory):
     r = client.post("/api/v1/session", json={"utilisateur": "mathieu", "mot_de_passe": "secret"})
     assert r.status_code == 200, r.text
     ch = Chaine(client, {"Authorization": "Bearer " + r.json()["jeton"]}, imap, relais, logs, procs)
+    ch.boite = str(boite.boite_id)
 
     # le démon a fait sa première relève quand chaque dossier IMAP a son UIDVALIDITY
     def releve():
@@ -213,6 +214,14 @@ def test_1_un_courrier_arrive_et_se_traite(chaine):
                     "le suivi d'envoi passe à « remis »")
     assert {d["etat"] for d in e["destinataires"]} == {"remis"}
 
+    # D140c — l'envoi est COPIÉ dans « Sent » côté IMAP, marqué lu : sinon le téléphone ne voit aucun
+    # message envoyé depuis AtomBox, et l'utilisateur croit que rien n'est parti
+    copies = lambda: [x for x in ch.imap.boites["Sent"]["messages"] if b"Re: Commande 4412" in x["octets"]]
+    ch.attendre(lambda: copies() and "\\Seen" in copies()[0]["flags"],
+                "l'envoi est copié dans « Sent » côté IMAP, marqué lu (D140c)")
+    assert copies()[0]["octets"].replace(b"\r\n", b"\n") == remises[-1]["octets"].replace(b"\r\n", b"\n"), \
+        "ce qui est copié est ce qui est parti — les mêmes octets"
+
     # un AUTRE client (Thunderbird, le téléphone) RETIRE le drapeau : le retrait descend…
     ch.imap.retirer("INBOX", uid, "\\Flagged")
     ch.imap.poser("INBOX", uid, "\\Answered")      # un mot-clé qu'AtomBox ne traduit pas : il ne doit pas gêner
@@ -220,6 +229,29 @@ def test_1_un_courrier_arrive_et_se_traite(chaine):
                 "un drapeau retiré dans un autre client descend dans AtomBox (F113) — IDLE a signalé le FETCH")
     # …et la relève n'a PAS défait ce qu'on a fait ici
     assert ch.get("/messages/" + m["id"]).json()["lu"] is True, "la synchronisation descendante a défait « lu »"
+
+    # la relève suivante voit la copie dans « Sent » : elle ne doit PAS en faire un second message
+    ch.imap.deposer(message("Réveil"))
+    ch.attendre(lambda: any(x["sujet"] == "Réveil" for x in ch.liste("inbox", filtre="tous")), "une relève complète a eu lieu")
+    assert len([x for x in ch.liste("sent", filtre="tous") if x["sujet"] == "Re: Commande 4412"]) == 1, \
+        "la copie IMAP de l'envoi a été réingérée comme un second message"
+    assert len(copies()) == 1, "l'envoi n'est copié qu'UNE fois dans IMAP"
+
+    # « au moins une fois » (D161) : une tâche peut être REJOUÉE — IMAP a reçu la copie, puis le
+    # processus est tombé avant d'enregistrer l'UID. Rejouée, elle doit retrouver sa copie par le
+    # Message-ID, pas en faire une seconde.
+    import psycopg
+    from atombox.modules import evenements
+    from atombox.db import session as ouvrir
+    with psycopg.connect(os.environ["DATABASE_URL"]) as cnx:
+        cnx.execute("update rattachement set uid_imap = null where comm_id = %s", (r["message"]["id"],)); cnx.commit()
+    with ouvrir(os.environ["DATABASE_URL"]) as s:
+        evenements.emettre(s, "message.envoye", {"comm_id": r["message"]["id"], "boite_id": ch.boite, "refuses": []}); s.commit()
+    def uid_repose():
+        with psycopg.connect(os.environ["DATABASE_URL"]) as cnx:
+            return cnx.execute("select uid_imap from rattachement where comm_id = %s", (r["message"]["id"],)).fetchone()[0]
+    ch.attendre(uid_repose, "la tâche rejouée retrouve la copie et repose l'UID")
+    assert len(copies()) == 1, "une tâche rejouée a copié l'envoi une SECONDE fois dans IMAP"
 
 
 def test_2_un_brouillon_vit(chaine):

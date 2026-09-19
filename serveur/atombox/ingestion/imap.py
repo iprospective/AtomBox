@@ -124,6 +124,27 @@ class Releve:
         log.info("uid %d déplacé vers %s%s", uid, vers, " (nouvel uid %d)" % neuf if neuf else "")
         return neuf
 
+    def chercher_message_id(self, message_id: str) -> int | None:
+        """l'UID du message qui porte ce Message-ID dans le dossier sélectionné, s'il y est — ce qui rend
+        une écriture IMAP IDEMPOTENTE : une tâche rejouée (D161) retrouve ce qu'elle a déjà fait"""
+        if not message_id: return None
+        typ, data = self.cnx.uid("search", None, "HEADER", "Message-ID", '"%s"' % message_id.replace('"', ""))
+        if typ != "OK" or not data or not data[0]: return None
+        uids = [int(u) for u in data[0].split()]
+        return uids[-1] if uids else None
+
+    def ajouter(self, dossier: str, octets: bytes, drapeaux: tuple = ("\\Seen",)) -> int | None:
+        """APPEND (D140c) — la seule CRÉATION que la transition s'autorise : un message envoyé depuis
+        AtomBox, copié là où les autres clients le cherchent. Rend l'UID (APPENDUID, RFC 4315) si le
+        serveur le donne ; sans lui, la relève le retrouvera par son empreinte (D064)."""
+        typ, data = self.cnx.append(self._quoter(dossier), "(%s)" % " ".join(drapeaux), None, octets)
+        if typ != "OK":
+            log.warning("APPEND %s : %s", dossier, typ); raise RuntimeError("APPEND %s : %s" % (dossier, typ))
+        m = re.search(rb"APPENDUID \d+ (\d+)", b" ".join(x for x in (data or []) if isinstance(x, bytes)))
+        uid = int(m.group(1)) if m else None
+        log.info("copié dans %s (%d octets)%s", dossier, len(octets), " — uid %d" % uid if uid else "")
+        return uid
+
     def creer_dossier(self, nom: str) -> None:
         """CREATE (F013) : tant qu'IMAP est la vérité (D140b), un dossier créé ici doit y exister"""
         typ, data = self.cnx.create(self._quoter(nom))

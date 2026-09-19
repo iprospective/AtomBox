@@ -83,6 +83,12 @@ class FauxImap(threading.Thread):
         annonce = {"n": 0, "ch": 0}
         try:
             for brut in f:
+                litteral = None
+                lit = re.search(rb"\{(\d+)\+?\}\r?\n$", brut)
+                if lit:                          # un littéral : « + » puis exactement n octets (RFC 3501 § 4.3)
+                    ecrire("+ prêt")
+                    litteral = f.read(int(lit.group(1))); f.readline()
+                    brut = brut[:lit.start()] + b"\r\n"
                 ligne = brut.decode("utf-8", "replace").rstrip("\r\n")
                 if not ligne: continue
                 tag, _, reste = ligne.partition(" ")
@@ -109,6 +115,16 @@ class FauxImap(threading.Thread):
                         ecrire("* OK [UIDNEXT %d] ok" % b["suivant"])
                     ecrire(tag + " OK [%s] ok" % ("READ-WRITE" if cmd == "SELECT" else "READ-ONLY"))
                 elif cmd == "IDLE": self._idle(c, f, ecrire, tag, courant, annonce)
+                elif cmd == "APPEND":
+                    m = re.match(r'\s*("([^"]*)"|\S+)\s*(\(([^)]*)\))?', args)
+                    nom = (m.group(2) if m.group(2) is not None else m.group(1)).strip('"')
+                    if nom not in self.boites or litteral is None: ecrire(tag + " NO [TRYCREATE] dossier inconnu"); continue
+                    flags = set((m.group(4) or "").split())
+                    with self.verrou:
+                        b = self.boites[nom]; uid = b["suivant"]; b["suivant"] += 1
+                        b["messages"].append({"uid": uid, "octets": litteral, "flags": flags, "date": "19-Sep-2026 10:00:00 +0200"})
+                        self.verrou.notify_all()
+                    ecrire(tag + " OK [APPENDUID %d %d] APPEND terminé" % (b["validity"], uid))
                 elif cmd == "LOGOUT": ecrire("* BYE"); ecrire(tag + " OK fait"); break
                 elif cmd in ("NOOP", "CHECK", "CLOSE", "EXPUNGE", "SUBSCRIBE", "UNSUBSCRIBE", "CREATE"): ecrire(tag + " OK fait")
                 else: ecrire(tag + " BAD commande inconnue du faux IMAP : " + cmd)
@@ -142,7 +158,13 @@ class FauxImap(threading.Thread):
         with self.verrou:
             msgs = self.boites[courant]["messages"]
             seq = {m["uid"]: i + 1 for i, m in enumerate(msgs)}
-            if sous == "SEARCH":
+            if sous == "SEARCH" and args.upper().startswith("HEADER"):
+                h = re.match(r'HEADER\s+(\S+)\s+"?([^"]*)"?', args, re.I)
+                cle, val = h.group(1).lower().encode(), h.group(2).encode()
+                trouves = [m["uid"] for m in msgs
+                           if any(l.lower().startswith(cle + b":") and val in l for l in m["octets"].split(b"\r\n\r\n")[0].split(b"\r\n"))]
+                ecrire("* SEARCH" + "".join(" %d" % u for u in trouves)); ecrire(tag + " OK fait")
+            elif sous == "SEARCH":
                 m = re.search(r"UID\s+(\S+)", args)
                 ecrire("* SEARCH" + "".join(" %d" % u for u in self._uids(m.group(1) if m else "1:*", msgs)))
                 ecrire(tag + " OK fait")
