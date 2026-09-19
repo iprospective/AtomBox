@@ -23,15 +23,37 @@ cd "$RACINE"
 # Le service tourne sur CE worktree : s'il est en retard sur `dev`, on déploie une interface
 # qui parle à un serveur d'avant-hier. Arrivé le 15/09 : RM3197 mergé côté forge, worktree local
 # jamais mis à jour, et les branches d'axes restaient vides malgré « c'est corrigé ».
-if [ "${1:-}" != "--quand-meme" ] && git -C "$RACINE" rev-parse --git-dir >/dev/null 2>&1; then
+#
+# CES DEUX GARDES-LÀ NE SE LÈVENT JAMAIS (RM3253). `--quand-meme` levait aussi celle du retard : le
+# 19/09, le site est parti avec le code de trois livraisons plus tôt, sans que rien ne le dise.
+# Déployer un worktree en retard, ou un fichier modifié à la main, ce n'est pas « forcer » : c'est
+# ne pas savoir ce qu'on met en ligne.
+if git -C "$RACINE" rev-parse --git-dir >/dev/null 2>&1; then
   git -C "$RACINE" fetch -q origin 2>/dev/null || true
   RETARD=$(git -C "$RACINE" rev-list --count HEAD..origin/dev 2>/dev/null || echo 0)
   if [ "${RETARD:-0}" -gt 0 ]; then
     echo "✗ ce worktree a $RETARD commit(s) de retard sur origin/dev — c'est LUI que le service exécute."
-    echo "  → git -C \"$RACINE\" merge origin/dev  puis  sudo systemctl restart atombox-api"
+    echo "  → git -C \"$RACINE\" merge --ff-only origin/dev  puis  sudo systemctl restart atombox-api"
     exit 4
   fi
+  SALE=$(git -C "$RACINE" status --porcelain --untracked-files=no)
+  if [ -n "$SALE" ]; then
+    echo "✗ des fichiers SUIVIS sont modifiés dans ce worktree — on déploie ce qui est commité :"
+    echo "$SALE" | sed 's/^/    /'
+    exit 6
+  fi
 fi
+
+# Le déploiement régénère l'index du CDC EN PLACE : il le remet comme il l'a trouvé en sortant, sinon
+# le fichier diffère du dépôt et le `merge --ff-only` suivant refuse — c'est ainsi que le worktree servi
+# est resté trois livraisons en arrière (RM3253).
+ENGENDRE="$RACINE/src/poc/cdc-index.js"
+ENVOI=""
+nettoyer() {
+  [ -n "$ENVOI" ] && rm -rf "$ENVOI"
+  git -C "$RACINE" checkout -q -- "$ENGENDRE" 2>/dev/null || true
+}
+trap nettoyer EXIT
 
 SERVEUR_DIR="$(cd "$RACINE/../serveur" 2>/dev/null && pwd || true)"
 if [ -n "$SERVEUR_DIR" ] && [ -d "$SERVEUR_DIR/atombox" ] && [ "${1:-}" != "--quand-meme" ]; then
@@ -72,7 +94,7 @@ node test/pwa.js    | tail -1
 # reçoit ?v=<version> dans les copies ENVOYÉES (jamais dans les sources : le harnais et le
 # bundle lisent des chemins nus) — un navigateur qui a l'ancien index recharge tout le reste.
 VERSION="$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M)"
-ENVOI="$(mktemp -d)"; trap 'rm -rf "$ENVOI"' EXIT
+ENVOI="$(mktemp -d)"                     # nettoyé par le trap posé plus haut, avec le fichier engendré
 cp -r css src README.md icones manifest.webmanifest hors-ligne.html "$ENVOI"/
 # L'APPLICATION INSTALLÉE (RM3251) : sw.js porte la version, pour que CHAQUE livraison change ses
 # octets — c'est à ce changement que le téléphone reconnaît un nouveau service worker, qui emporte
