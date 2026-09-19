@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#2f6fed">
+<title>AtomBox — pas de réseau</title>
+<!-- Cette page est la seule que le service worker garde : elle doit tenir SEULE, sans rien charger. -->
+<style>
+  :root { color-scheme: light dark; --accent:#2f6fed; --fg:#1b1f24; --muted:#6b7580; --bg:#f6f7f9; }
+  @media (prefers-color-scheme: dark) { :root { --accent:#5b8dff; --fg:#e6e9ed; --muted:#8b95a1; --bg:#14171c; } }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--bg); color:var(--fg);
+         font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding:24px; box-sizing:border-box; }
+  main { max-width:340px; text-align:center; }
+  .logo { font-weight:700; font-size:22px; } .logo span { color:var(--accent); }
+  p { color:var(--muted); }
+  button { font:inherit; border:0; border-radius:8px; padding:10px 18px; background:var(--accent); color:#fff; cursor:pointer; }
+</style>
+</head><body>
+<main>
+  <div class="logo">Atom<span>Box</span></div>
+  <h1 style="font-size:18px;margin:18px 0 6px">Pas de réseau</h1>
+  <p>AtomBox a besoin d'une connexion pour afficher votre courrier. Rien n'est perdu : il sera là
+     dès que le réseau revient.</p>
+  <button onclick="location.reload()">Réessayer</button>
+</main>
+</body></html>
