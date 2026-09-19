@@ -66,3 +66,4 @@ webmail:
     - node test/couverture.js    # et le contrôle qui refuse un bouton sans parcours
     - node test/bundle.js
     - node test/style.js
+    - node test/pwa.js

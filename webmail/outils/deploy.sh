@@ -66,21 +66,27 @@ node test/smoke.js  | tail -1
 node test/bundle.js | tail -1
 node test/prod.js   | tail -1
 node test/style.js  | tail -1
+node test/pwa.js    | tail -1
 
 # La VERSION servie : commit court + date. Chaque <script src="js/…"> et <link href="css/…">
 # reçoit ?v=<version> dans les copies ENVOYÉES (jamais dans les sources : le harnais et le
 # bundle lisent des chemins nus) — un navigateur qui a l'ancien index recharge tout le reste.
 VERSION="$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M)"
 ENVOI="$(mktemp -d)"; trap 'rm -rf "$ENVOI"' EXIT
-cp -r css src README.md "$ENVOI"/
+cp -r css src README.md icones manifest.webmanifest hors-ligne.html "$ENVOI"/
+# L'APPLICATION INSTALLÉE (RM3251) : sw.js porte la version, pour que CHAQUE livraison change ses
+# octets — c'est à ce changement que le téléphone reconnaît un nouveau service worker, qui emporte
+# les caches de l'ancien. Un sw.js identique d'une livraison à l'autre ne serait jamais relu.
+sed "s/^const VERSION = \"dev\";/const VERSION = \"$VERSION\";/" sw.js > "$ENVOI/sw.js"
+grep -q "const VERSION = \"$VERSION\";" "$ENVOI/sw.js" || { echo "✗ sw.js n'a pas reçu la version $VERSION"; exit 5; }
 for f in index.html; do
   sed -E "s#(src|href)=\"((src|css)/[^\"?]+)\"#\1=\"\2?v=$VERSION\"#g; s#(<meta name=\"abx-version\" content=\")[^\"]*#\1$VERSION#" "$f" > "$ENVOI/$f"
 done
 echo "→ version $VERSION : $(grep -c "?v=$VERSION" "$ENVOI/index.html") références estampillées dans index.html"
 echo "→ envoi vers $HOTE:$CIBLE"
 printf 'User-agent: *\nDisallow: /\n' > /tmp/atombox-robots.txt
-ssh -o BatchMode=yes "$HOTE" "mkdir -p '$CIBLE' && cd '$CIBLE' && rm -rf css js src index.html index.prod.html README.md autonome.html robots.txt"
-tar czf - -C "$ENVOI" index.html README.md css src | ssh -o BatchMode=yes "$HOTE" "tar xzf - -C '$CIBLE'"
+ssh -o BatchMode=yes "$HOTE" "mkdir -p '$CIBLE' && cd '$CIBLE' && rm -rf css js src index.html index.prod.html README.md autonome.html robots.txt icones manifest.webmanifest sw.js hors-ligne.html"
+tar czf - -C "$ENVOI" index.html README.md css src icones manifest.webmanifest sw.js hors-ligne.html | ssh -o BatchMode=yes "$HOTE" "tar xzf - -C '$CIBLE'"
 scp -q dist/index.html "$HOTE:$CIBLE/autonome.html"
 # le MODE PRODUIT (D141, D157) : la même page sans rien du POC — poc/poc y est refusé, et sans API il dit « service indisponible »
 scp -q dist/prod.html "$HOTE:$CIBLE/prod.html"
@@ -88,7 +94,7 @@ scp -q /tmp/atombox-robots.txt "$HOTE:$CIBLE/robots.txt"
 ssh -o BatchMode=yes "$HOTE" "chown -R root:siteadm /home/siteadm/atombox && chmod -R a+rX /home/siteadm/atombox"
 
 echo "→ vérification"
-for p in "" css/app.css src/noyau/amorcage.js src/noyau/chargeur.js autonome.html prod.html; do
+for p in "" css/app.css src/noyau/amorcage.js src/noyau/chargeur.js autonome.html prod.html manifest.webmanifest sw.js hors-ligne.html icones/atombox-192.png; do
   printf '   %-16s ' "/${p}"
   curl -s -o /dev/null -w '%{http_code} %{size_download}o\n' "${URL}${p}"
 done
