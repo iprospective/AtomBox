@@ -83,7 +83,8 @@
      <div class="snip">${F.esc(m.snippet)}</div>`);
 
   R.define("message.card.meta", ({ m }) =>
-    `<div class="meta">${m.nb_pieces_jointes ? `<span class="pj">📎 ${m.nb_pieces_jointes} · ${F.poids(m.pj_ko)}</span>` : ""}
+    `<div class="meta">${m.drapeau ? `<span class="drapeau" title="Drapeau — synchronisé avec vos autres clients (D140c)">⚑</span>` : ""}
+       ${m.nb_pieces_jointes ? `<span class="pj">📎 ${m.nb_pieces_jointes} · ${F.poids(m.pj_ko)}</span>` : ""}
        ${R.render("statut.chip", { m })}
        ${m.tags.map(tag => R.render("tag.chip", { tag })).join("")}</div>`);
 

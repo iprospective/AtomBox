@@ -227,6 +227,10 @@ def test_1_un_courrier_arrive_et_se_traite(chaine):
     ch.imap.poser("INBOX", uid, "\\Answered")      # un mot-clé qu'AtomBox ne traduit pas : il ne doit pas gêner
     ch.attendre(lambda: ch.get("/messages/" + m["id"]).json()["drapeau"] is False,
                 "un drapeau retiré dans un autre client descend dans AtomBox (F113) — IDLE a signalé le FETCH")
+    # …et dans l'autre sens : posé dans AtomBox (RM3244), il arrive sur le téléphone
+    assert ch.patch("/messages/%s/rattachement" % m["id"], {"drapeau": True}).json()["ok"]
+    ch.attendre(lambda: "\\Flagged" in ch.imap.drapeaux("INBOX", uid),
+                "un drapeau posé dans AtomBox remonte à IMAP — le téléphone le voit (D140c)")
     # …et la relève n'a PAS défait ce qu'on a fait ici
     assert ch.get("/messages/" + m["id"]).json()["lu"] is True, "la synchronisation descendante a défait « lu »"
 

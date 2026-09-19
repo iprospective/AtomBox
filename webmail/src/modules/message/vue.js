@@ -30,6 +30,8 @@
             ${ABX.Views.Message.statutHtml(m)}
             <button class="hbtn ic" data-x="${m.lu ? "nonLu" : "lire"}"
               title="${m.lu ? "Marquer non lu" : "Marquer lu"}">${m.lu ? "◻" : "◼"}</button>
+            <button class="hbtn ic${m.drapeau ? " on" : ""}" data-x="drapeau"
+              title="${m.drapeau ? "Retirer le drapeau" : "Poser un drapeau"} — synchronisé avec votre téléphone">${m.drapeau ? "⚑" : "⚐"}</button>
             <span class="pousse"></span>
             <button class="hbtn ic" id="plus" title="Autres actions">⋯</button>
             ${(m.dossier || m.dossier_origine) === "trash"
