@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "fr.iprospective.atombox",
+      "sha256_cert_fingerprints": [
+        "13:55:66:70:55:E1:2C:3A:44:85:C5:E9:1B:DF:94:27:F6:58:B5:43:C3:BF:34:35:D8:A0:71:94:DE:29:EF:4E"
+      ]
+    }
+  }
+]

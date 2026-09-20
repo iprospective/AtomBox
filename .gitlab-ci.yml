@@ -67,3 +67,4 @@ webmail:
     - node test/bundle.js
     - node test/style.js
     - node test/pwa.js
+    - node test/android.js
