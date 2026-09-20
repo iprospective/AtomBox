@@ -1,0 +1,15 @@
+# Le projet Android est ENGENDRÉ par `bubblewrap update` (outils/android.sh) : seul
+# twa-manifest.json est versionné. Rien de ce qui suit n'est écrit à la main.
+app/
+gradle/
+gradlew
+gradlew.bat
+build.gradle
+settings.gradle
+gradle.properties
+manifest-checksum.txt
+store_icon.png
+*.apk
+*.aab
+*.idsig
+*.keystore
