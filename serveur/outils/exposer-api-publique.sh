@@ -17,6 +17,7 @@
 #   bash exposer-api-publique.sh --verifier   # constater, sans rien changer
 #   bash exposer-api-publique.sh --proxy      # le ProxyPass côté serveur (ssh root, pas de sudo)
 #   bash exposer-api-publique.sh --tunnel     # le tunnel, tout de suite, en tâche de fond
+#   bash exposer-api-publique.sh --cle        # la clé DÉDIÉE du service, autorisée (restreinte) sur le serveur
 #   bash exposer-api-publique.sh --permanent  # le tunnel en service systemd (demande sudo)
 #   bash exposer-api-publique.sh --retirer    # referme la porte des deux côtés
 set -uo pipefail
@@ -40,6 +41,33 @@ verifier() {
     404)     echo "  API par le vhost public            ✗ (404 — pas de proxy, le vhost sert les fichiers seuls)" ;;
     *)       echo "  API par le vhost public            ✗ (HTTP $code)" ;;
   esac
+}
+
+CLE="$HOME/.config/atombox/tunnel_ed25519"
+
+cle() {
+  # UNE CLÉ POUR CE SEUL TUNNEL (RM3267). Le service n'a pas d'agent SSH : il lui faut une clé sans
+  # passphrase. Une telle clé, posée telle quelle, donnerait un accès root complet au serveur public
+  # à qui sait lire le fichier — on l'autorise donc AVEC DES MENOTTES : `restrict` ferme tout,
+  # `permitlisten` rouvre la seule écoute dont le tunnel a besoin, et `command` lui refuse un shell.
+  mkdir -p "$(dirname "$CLE")"; chmod 700 "$(dirname "$CLE")"
+  [ -f "$CLE" ] || { ssh-keygen -t ed25519 -N "" -f "$CLE" -C "atombox-tunnel@$(hostname)" >/dev/null; echo "  clé créée : $CLE"; }
+  chmod 600 "$CLE"
+  local ligne
+  ligne="restrict,port-forwarding,permitlisten=\"127.0.0.1:8010\",command=\"/bin/false\" $(cat "$CLE.pub")"
+  # la pose se fait avec VOTRE accès (agent chargé) : accorder un accès est une décision, pas une commodité
+  ssh -o BatchMode=yes "$HOTE" "install -d -m 700 /root/.ssh && touch /root/.ssh/authorized_keys && \
+      grep -q '$(cut -d' ' -f2 < "$CLE.pub")' /root/.ssh/authorized_keys \
+      || printf '%s\\n' '$ligne' >> /root/.ssh/authorized_keys" \
+    && echo "  autorisée, restreinte à l'écoute de 127.0.0.1:8010 (aucun shell)"
+  echo "  vérification depuis ici, SANS agent :"
+  if env -u SSH_AUTH_SOCK ssh -i "$CLE" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=8 \
+       -O check "$HOTE" 2>/dev/null || env -u SSH_AUTH_SOCK ssh -i "$CLE" -o IdentitiesOnly=yes \
+       -o BatchMode=yes -o ConnectTimeout=8 "$HOTE" true 2>&1 | grep -q "Permission denied"; then
+    echo "    ✗ la clé n'ouvre pas encore $HOTE"
+  else
+    echo "    ✓ la clé est acceptée (et elle ne peut QUE tenir ce tunnel)"
+  fi
 }
 
 proxy() {
@@ -81,6 +109,8 @@ case "${1:---verifier}" in
   --verifier)  echo "== état =="; verifier ;;
   --proxy)     echo "-- proxy ($HOTE)"; proxy; verifier ;;
   --tunnel)    echo "-- tunnel"; tunnel; verifier ;;
+  --cle)       echo "-- la clé dédiée du service, autorisée sur $HOTE"
+               cle ;;
   --permanent) echo "-- tunnel en service systemd (sudo)"
                sudo install -m 0644 "$ICI/atombox-tunnel.service" /etc/systemd/system/atombox-tunnel.service \
                  && sudo systemctl daemon-reload && sudo systemctl enable --now atombox-tunnel && verifier ;;
@@ -89,5 +119,5 @@ case "${1:---verifier}" in
                sudo systemctl disable --now atombox-tunnel 2>/dev/null || true
                ssh -o BatchMode=yes "$HOTE" "test -f '$VHOST.avant-api' && cp '$VHOST.avant-api' '$VHOST' && apache2ctl configtest && systemctl reload apache2 && echo '  vhost restauré'"
                verifier ;;
-  *) echo "usage : $0 [--verifier|--proxy|--tunnel|--permanent|--retirer]"; exit 2 ;;
+  *) echo "usage : $0 [--verifier|--proxy|--tunnel|--cle|--permanent|--retirer]"; exit 2 ;;
 esac
