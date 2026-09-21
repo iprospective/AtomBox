@@ -33,6 +33,31 @@ vrai(/<meta name="theme-color"/.test(index), "et la couleur de la barre système
 const iPwa = index.indexOf("src/noyau/pwa.js"), iAmorce = index.indexOf("src/noyau/amorcage.js");
 vrai(iPwa > 0 && iPwa < iAmorce, "pwa.js est chargé AVANT l'amorçage — qui s'arrête net sans session");
 
+console.log("— l'onglet et l'en-tête : le logo aux VRAIES tailles (RM3294) ——————————");
+/* Le navigateur rétrécit volontiers une grande icône pour l'onglet, et le @ n'y est plus qu'une
+   tache : le dessin change de proportions avec la taille, donc il faut lui fournir les petites. */
+for (const px of [16, 32, 192]) {
+  const f = "icones/atombox-" + px + ".png";
+  vrai(new RegExp('<link rel="icon"[^>]+sizes="' + px + 'x' + px + '"[^>]+href="' + f + '"').test(index),
+       "index.html déclare l'icône " + px + " px");
+  eq(dims(f), px + "x" + px, f + " fait vraiment " + px + " px — une taille déclarée fausse est ignorée");
+}
+vrai(/<div class="logo"><img src="icones\/atombox-marque-96\.png"[^>]*>/.test(index),
+     "l'en-tête porte la marque, pas seulement le mot");
+vrai(/width="26"/.test(index) && dims("icones/atombox-marque-96.png") === "96x96",
+     "elle est rendue bien au-dessus de sa taille d'affichage : nette sur un écran à forte densité");
+
+console.log("— les icônes sont ENGENDRÉES, et reproductibles ——————————————————————");
+{
+  const cp = require("child_process"), crypto = require("crypto");
+  const noms = fs.readdirSync(path.join(RACINE, "icones")).filter(n => n.endsWith(".png")).sort();
+  const somme = () => noms.map(n => crypto.createHash("sha256")
+      .update(fs.readFileSync(path.join(RACINE, "icones", n))).digest("hex")).join(" ");
+  const avant = somme();
+  cp.execFileSync("python3", [path.join(RACINE, "outils", "icones.py")], { cwd: RACINE, stdio: "ignore" });
+  eq(somme(), avant, "rejouer outils/icones.py rend les MÊMES octets — sinon chaque livraison fait du bruit");
+}
+
 console.log("— l'enregistrement : jamais bloquant, jamais hors HTTPS ——————————————");
 const pwa = fs.readFileSync(path.join(RACINE, "src/noyau/pwa.js"), "utf8");
 const enregistrer = (loc, nav) => { const vus = [];

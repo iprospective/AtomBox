@@ -80,6 +80,16 @@ header {
 .logo {
   font-weight: 700;
   letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* la marque est rendue au double (96 px pour 26 affichés) : sur un écran à forte
+   densité, une image à sa taille exacte est floue */
+.logo img {
+  display: block;
+  flex: none;
 }
 
 .logo span {
@@ -261,6 +271,11 @@ header {
   }
   .logo {
     font-size: 12px;
+    gap: 5px;
+  }
+  .logo img {
+    width: 20px;
+    height: 20px;
   }
   .main, .main.qopen {
     grid-template-columns: 1fr;
