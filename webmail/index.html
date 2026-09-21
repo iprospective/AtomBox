@@ -5,6 +5,10 @@
 <meta name="abx-version" content="dev">
 <meta name="theme-color" content="#2f6fed">
 <link rel="manifest" href="manifest.webmanifest">
+<!-- Trois tailles VRAIES : laissé à lui-même, le navigateur rétrécit le 192 pour l'onglet et le @
+     n'y est plus qu'une tache. Le 32 et le 16 sont dessinés POUR ces tailles (RM3294). -->
+<link rel="icon" type="image/png" sizes="16x16" href="icones/atombox-16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icones/atombox-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icones/atombox-192.png">
 <link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
 <link rel="stylesheet" href="css/app.css">
@@ -15,7 +19,7 @@
 <div class="app">
  <header>
   <button class="hbtn" id="bnav" style="display:none" title="Dossiers">☰</button>
-  <div class="logo">Atom<span>Box</span></div>
+  <div class="logo"><img src="icones/atombox-marque-96.png" width="26" height="26" alt="">Atom<span>Box</span></div>
   <button class="hbtn prim" id="bnew" title="Nouveau message">✚ Nouveau</button>
   <div class="hsearch"><input id="gsearch" placeholder="Rechercher dans tous les messages…"></div>
   <div class="hspacer"></div>

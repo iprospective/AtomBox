@@ -24,7 +24,10 @@ button,input,select{font:inherit;color:inherit}
 /* ---- header ---- */
 header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(--panel);
   border-bottom:1px solid var(--line)}
-.logo{font-weight:700;letter-spacing:-.3px}
+.logo{font-weight:700;letter-spacing:-.3px;display:flex;align-items:center;gap:7px}
+/* la marque est rendue au double (96 px pour 26 affichés) : sur un écran à forte
+   densité, une image à sa taille exacte est floue */
+.logo img{display:block;flex:none}
 .logo span{color:var(--accent)}
 .hsearch{flex:1;max-width:520px;position:relative}
 .hsearch input{width:100%;padding:7px 11px 7px 30px;border:1px solid var(--line);border-radius:7px;
@@ -71,7 +74,8 @@ header{display:flex;align-items:center;gap:12px;padding:8px 14px;background:var(
 @media (max-width:760px){
   header{padding:7px 10px;gap:8px}
   .hsearch{max-width:none}
-  .logo{font-size:12px}
+  .logo{font-size:12px;gap:5px}
+  .logo img{width:20px;height:20px}
   .main,.main.qopen{grid-template-columns:1fr}
   #list,#detail{display:none}
   .main[data-vue=liste]  #list  {display:block}
