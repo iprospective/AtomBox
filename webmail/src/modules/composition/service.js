@@ -82,18 +82,21 @@ VALUES (:sha, :octets, :mime, :ref) ON CONFLICT (sha256) DO NOTHING RETURNING pj
       if (!envoyer) m.composition = d;              // un brouillon se rouvre en composition
       /* la création passe par la couche d'accès (D141) : on rend la PROMESSE du
          message créé — l'appelant n'ouvre l'onglet qu'une fois la réponse là.
-         Un brouillon déjà enregistré se MET À JOUR (PUT) : il garde son identifiant, donc
-         son onglet ; il n'est recréé que s'il devient un envoi. */
-      const reprise = brouillonId && !envoyer;
+         Un brouillon reste LE MÊME message jusqu'au bout, qu'on le réenregistre (PUT) ou qu'on
+         l'envoie (POST …/envoyer) : il garde son identifiant, donc son onglet. L'envoi passait
+         par « créer + détacher » : il fabriquait un SECOND message et mettait le brouillon à la
+         CORBEILLE, où l'utilisateur retrouvait chacun de ses brouillons envoyés (RM3246, D089). */
+      const reprise = !!brouillonId;
       if (reprise) m.id = brouillonId;
       /* C'EST LE SERVEUR QUI NOMME. Le message fabriqué ici porte un identifiant d'attente ;
          celui qui compte est celui que la réponse rapporte (D141). En les confondant, l'onglet
          ouvert après l'envoi pointait sur un message que le serveur n'avait jamais eu — « ça
          part, mais rien ne change à l'écran ». Le POC ne le montrait pas : son serveur simulé
          acceptait l'identifiant du client. */
-      const cree = (reprise ? ABX.Api.reenregistrer(brouillonId, m) : ABX.Api.creer(m))
+      const cree = (reprise ? (envoyer ? ABX.Api.envoyerBrouillon(brouillonId, m)
+                                       : ABX.Api.reenregistrer(brouillonId, m))
+                            : ABX.Api.creer(m))
         .then(r => (r && r.message) ? r.message : m)
-        .then(vrai => (envoyer && brouillonId) ? ABX.Api.detacher(brouillonId).then(() => vrai) : vrai)
         .then(vrai => ABX.Api.compteurs().then(() => {
           ABX.Bus.emit("corpus:changed", { message: vrai });
           return vrai;

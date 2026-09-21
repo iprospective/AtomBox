@@ -120,6 +120,10 @@
         .then(r => { if (r && r.message) garde(r.message); return r; }),
     creer: m => req("POST", "/messages", m).then(r => { if (r && r.message) garde(r.message); return r; }),
     reenregistrer: (id, m) => req("PUT", "/messages/" + encodeURIComponent(id), m).then(r => { if (r && r.message) garde(r.message); return r; }),
+    /* ENVOYER un brouillon : c'est le MÊME message qui part (D089). Une action à part, pas un
+       `reenregistrer` deviné : expédier du courrier ne doit jamais être un effet de bord. */
+    envoyerBrouillon: (id, m) => req("POST", "/messages/" + encodeURIComponent(id) + "/envoyer", m)
+        .then(r => { if (r && r.message) garde(r.message); return r; }),
     /* F136 — les OCTETS d'une pièce. Un `<a href>` ne conviendrait pas : la session est un jeton
        porté par l'en-tête, pas un cookie — le lien partirait sans authentification. On rapatrie
        donc la pièce et on en fait une URL d'objet, que l'appelant ouvre ou enregistre. */

@@ -58,6 +58,13 @@ class MessagesControleur(Controleur):
         if r is None: raise HTTPException(404, "message inconnu")
         return {"ok": True, **r}
 
+    @action("POST", "/{id}/envoyer")
+    async def envoyer(self, id: str, request: Request, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
+        """Envoyer un BROUILLON : c'est le même message qui part (D089, RM3246)."""
+        m = await svc.remplacer_brouillon(s, compte, _uuid(id), await request.json() or {}, magasin(), envoi=True)
+        if m is None: raise HTTPException(404, "aucun brouillon à ce nom")
+        return {"ok": True, "message": m}
+
     @action("DELETE", "/{id}/rattachement")
     async def detacher(self, id: str, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
         if not await svc.detacher(s, compte, _uuid(id)): raise HTTPException(404, "message inconnu")
