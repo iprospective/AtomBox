@@ -649,10 +649,21 @@ async def _poser_participants(s: AsyncSession, comm_id, participants) -> None:
         s.add(Participant(comm_id=comm_id, role=role, adresse_id=(await _adresse(s, adr)).adresse_id, nom_affiche=nom, ordre=ordre))
 
 
-async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: dict, magasin=None) -> dict | None:
+async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: dict, magasin=None, envoi: bool = False) -> dict | None:
     """Un brouillon réenregistré GARDE son identité (D089 : un brouillon est un message marqué).
     Le webmail supprimait puis recréait : le message changeait d'identifiant à chaque frappe
-    enregistrée, et l'onglet ouvert pointait sur un mort."""
+    enregistrée, et l'onglet ouvert pointait sur un mort.
+
+    ENVOYER un brouillon passe par le même chemin, avec `envoi=True` : le message est écrit une
+    dernière fois, puis PROMU — il quitte « Brouillons » pour « Envoyés » et part au relais. Le
+    webmail créait auparavant un SECOND message puis « détachait » le brouillon, ce qui le mettait à
+    la corbeille : on retrouvait chacun de ses brouillons envoyés dans sa Corbeille (RM3246). Deux
+    identifiants pour une seule rédaction, et un faux supprimé — alors que D089 dit qu'un brouillon
+    est un message marqué, donc un seul objet du début à la fin.
+
+    L'intention est un PARAMÈTRE, pas une déduction. J'avais d'abord lu l'envoi dans l'absence de
+    `composition` : or un simple réenregistrement n'en envoie pas non plus, et il serait parti tout
+    seul. Une action qui expédie du courrier ne se devine pas."""
     boites = [b.boite_id for b in await boites_du_compte(s, compte)]
     r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, Rattachement.boite_id.in_(boites)).limit(1))
     if not r: return None
@@ -674,8 +685,23 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
     await _poser_participants(s, comm_id, a.participants)
     await _poser_pieces(s, comm_id, a.pieces, magasin, maintenant)
     await _poser_provenance(s, comm_id, src_id, maintenant)
+    if envoi:
+        # La date d'un message parti est celle du DÉPART, pas celle de la première ébauche : sinon
+        # il s'enterre dans « Envoyés » sous des messages plus récents que lui.
+        c.date_recue = c.date_declaree = maintenant
+        cible = next((d for d in ds.values() if dossier_id_court(d) == "sent"), None)
+        r.dossier_id = cible.dossier_id if cible else None
+        r.dossier_origine_id = None
+        r.motif_sortie, r.sorti_le = None, None
+        from ..modules import evenements
+        # L'enveloppe vient des participants ANALYSÉS, comme à la création (RM3214) : le `cc` du
+        # client n'est pas dans le corps de la requête, il est dans les en-têtes qu'on vient d'écrire.
+        vus, enveloppe = set(), []
+        for role, _nom, adr, _ordre in a.participants:
+            if role in ("to", "cc", "bcc") and adr and adr not in vus: vus.add(adr); enveloppe.append(adr)
+        await evenements.emettre_async(s, "message.a_envoyer", {"comm_id": str(comm_id), "boite_id": str(r.boite_id), "destinataires": enveloppe})
     await s.commit()
-    log.info("brouillon %s réenregistré par %s", comm_id, compte.login)
+    log.info("brouillon %s %s par %s", comm_id, "envoyé" if envoi else "réenregistré", compte.login)
     return serialiser(r, c, ds, adresse, extra={"destinataires": corps.get("destinataires") or [], "corps": corps.get("corps") or "",
                                                 "composition": corps.get("composition"), "reference": str(src_id) if src_id else None})
 

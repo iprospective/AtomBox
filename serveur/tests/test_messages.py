@@ -252,6 +252,30 @@ def test_parcours_du_webmail(monde):
     assert compo, "un brouillon relu porte sa composition — sinon on ne peut pas le reprendre"
     assert compo["a"] == "jean@x.fr" and compo["cc"] == "paul@x.fr", "le Cc survit à la relecture"
     assert compo["sujet"] == "Avec copie" and "texte" in compo["corps"]
+    # RM3246 — ENVOYER un brouillon le CONSOMME : c'est le MÊME message qui part (D089).
+    # Le webmail créait un second message puis « détachait » le brouillon, ce qui le mettait à la
+    # corbeille : l'utilisateur retrouvait chacun de ses brouillons envoyés dans sa Corbeille.
+    br3 = c.post("/api/v1/messages", json={"destinataires": ["jean@x.fr"], "sujet": "À finir",
+                                           "corps": "ébauche", "composition": {"a": "jean@x.fr"}},
+                 headers=h).json()["message"]
+    reenr = c.put("/api/v1/messages/" + br3["id"], json={"destinataires": ["jean@x.fr"], "sujet": "À finir",
+                                                         "corps": "ébauche"}, headers=h).json()
+    assert reenr["message"]["dossier_origine"] == "drafts", \
+        "réenregistrer n'envoie PAS : une action qui expédie du courrier ne se devine pas"
+    envoi = c.post("/api/v1/messages/" + br3["id"] + "/envoyer",
+                   json={"destinataires": ["jean@x.fr", "paul@x.fr"], "sujet": "Fini", "corps": "voilà"},
+                   headers=h).json()
+    assert envoi["ok"] and envoi["message"]["id"] == br3["id"], "envoyé, le brouillon garde son identité"
+    assert envoi["message"]["dossier_origine"] == "sent", "il est passé dans « Envoyés »"
+    parti = c.get("/api/v1/messages/" + br3["id"], headers=h).json()
+    assert parti["composition"] is None, "ce n'est plus un brouillon : il ne se rouvre plus en composition"
+    assert parti["suppr"] is False and parti["motif_sortie"] is None, "et il n'est PAS à la corbeille"
+    assert parti["destinataires"] == ["jean@x.fr", "paul@x.fr"], "ses destinataires sont en base"
+    liste = lambda d, f: [x["id"] for x in c.get("/api/v1/messages", params={"dossier": d, "filtre": f}, headers=h).json()["messages"]]
+    assert br3["id"] not in liste("drafts", "tous"), "il a quitté « Brouillons », même avec la puce « Tout »"
+    assert br3["id"] in liste("sent", "tous"), "et il est dans « Envoyés »"
+    assert br3["id"] not in liste("trash", "tous"), "la Corbeille ne le contient pas"
+
     # F132 — TRANSFÉRER : le source encapsulé, la provenance en base, le commentaire à part (D167)
     source = str(monde["ids"][2])                      # pieces.eml — avec ses propres pièces jointes
     tr = c.post("/api/v1/messages", json={"destinataires": ["jean@x.fr"], "sujet": "Tr: Devis",

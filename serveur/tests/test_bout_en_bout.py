@@ -276,14 +276,15 @@ def test_2_un_brouillon_vit(chaine):
     assert maj["message"]["id"] == br["id"], "réenregistré, il garde son identité (D089)"
     assert ch.get("/messages/" + br["id"]).json()["composition"]["cc"] == "patron@exemple.org"
 
-    # envoyer, comme le fait le webmail : le message part, puis le brouillon est détaché
-    env = ch.post("/messages", {"destinataires": ["client@exemple.org"], "cc": "patron@exemple.org",
-                                "sujet": "Devis révisé", "corps": "seconde version"}).json()["message"]
-    assert ch.delete("/messages/%s/rattachement" % br["id"]).json().get("ok")
+    # envoyer, comme le fait le webmail : le MÊME message est promu (RM3246, D089). L'ancien
+    # chemin créait un second message puis détachait le brouillon, ce qui le mettait à la corbeille.
+    env = ch.post("/messages/%s/envoyer" % br["id"], {"destinataires": ["client@exemple.org"], "cc": "patron@exemple.org",
+                                                      "sujet": "Devis révisé", "corps": "seconde version"}).json()["message"]
+    assert env["id"] == br["id"], "envoyé, le brouillon garde son identité"
     assert not any(x["id"] == br["id"] for x in ch.liste("drafts", filtre="tous")), \
-        "le brouillon a disparu de « Brouillons », même avec la puce « Tout »"
-    assert not any(x["id"] == br["id"] for x in ch.liste("drafts", filtre="sortis")), \
-        "et « traités / archivés » ne montre pas la corbeille"
+        "le brouillon a quitté « Brouillons », même avec la puce « Tout »"
+    assert not any(x["id"] == br["id"] for x in ch.liste("trash", filtre="tous")), \
+        "et il n'est PAS à la corbeille : l'envoi le consomme, il ne le supprime pas"
     envoye = next(x for x in ch.liste("sent", filtre="tous") if x["id"] == env["id"])
     relu = ch.get("/messages/" + envoye["id"]).json()
     assert relu["destinataires"] == ["client@exemple.org", "patron@exemple.org"], "les destinataires sont en BASE"
@@ -291,7 +292,7 @@ def test_2_un_brouillon_vit(chaine):
     remises = ch.relais.attendre(avant + 1, REVEIL)
     assert len(remises) == avant + 1, "l'envoi n'est jamais parti au relais\n" + ch.journaux()
     assert set(remises[-1]["pour"]) == {"client@exemple.org", "patron@exemple.org"}
-    assert len(ch.relais.remises) == avant + 1, "le brouillon, lui, n'est JAMAIS parti"
+    assert len(ch.relais.remises) == avant + 1, "un seul message est parti : le brouillon promu"
 
 
 def test_3_un_tag_remplit_un_dossier(chaine):
