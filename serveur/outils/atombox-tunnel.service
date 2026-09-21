@@ -9,7 +9,11 @@ User=mathieu
 # au lieu de tourner sans rien faire — un tunnel qui se croit ouvert est pire qu'un tunnel fermé.
 # Le port distant n'écoute que sur 127.0.0.1 (GatewayPorts no par défaut) : seul Apache y accède,
 # jamais internet en direct.
-ExecStart=/usr/bin/ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -R 127.0.0.1:8010:127.0.0.1:8010 root@dev.iprospective.net
+# -i + IdentitiesOnly : une CLÉ À LUI (RM3267). Un service n'a pas d'agent SSH — la clé de la
+# session, chargée à la main et sous passphrase, ne lui est pas accessible : il échouait en boucle
+# sur « Permission denied (publickey) ». Cette clé-ci est sans passphrase, donc restreinte côté
+# serveur à la seule écoute de 127.0.0.1:8010, sans shell (voir exposer-api-publique.sh --cle).
+ExecStart=/usr/bin/ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -i %h/.config/atombox/tunnel_ed25519 -o IdentitiesOnly=yes -R 127.0.0.1:8010:127.0.0.1:8010 root@dev.iprospective.net
 Restart=always
 RestartSec=10
 
