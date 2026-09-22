@@ -317,3 +317,124 @@ def test_3_un_tag_remplit_un_dossier(chaine):
     assert ch.delete("/messages/%s/tags/projet=dupont" % m["id"]).json()["ok"]
     assert ch.liste(vid, filtre="tous") == [], "retirer le tag vide le dossier"
     assert (ch.compteur(vid).get("t") or 0) == 0, "et son compteur redescend"
+
+
+def test_4_les_regles_tiennent_sur_le_flux(chaine):
+    """RM3166 — le moteur de règles éprouvé sur la CHAÎNE, pas en mémoire : trois règles écrites
+    comme l'écran les écrit, sur du courrier qui arrive par IMAP.
+
+    Le test unitaire (`test_filtres.py`) prouve que le moteur évalue juste. Il ne prouve rien de ce
+    qui casse en vrai : qu'une règle s'applique à l'ingestion, que son compteur tient en BASE, qu'une
+    règle muette se voie depuis la page d'état, que l'ordre et « arrêter » survivent au passage par
+    l'API — et surtout ce qu'une règle ne doit PAS faire : boucler sur sa propre action, ou revenir
+    sur du courrier déjà arrivé (Q067)."""
+    ch = chaine
+
+    def regle(nom, champ, valeur, action, ordre=None, operateur="contient"):
+        corps = {"nom": nom, "portee": "boite", "action": action,
+                 "predicat": {"mode": "et", "criteres": [{"champ": champ, "operateur": operateur, "valeur": valeur}]}}
+        if ordre is not None: corps["ordre"] = ordre
+        r = ch.post("/filtres", corps).json()
+        assert r["ok"], r
+        return r["filtre"]["id"]
+
+    def compteur_regle(nom):
+        return next(f["nb_declenchements"] for f in ch.get("/filtres").json()["filtres"] if f["nom"] == nom)
+
+    # ── trois règles, comme un utilisateur les écrit : un expéditeur, un sujet, une liste ───────
+    compta = regle("Compta : à traiter", "from", "compta.example", {"type": "statut", "statut": "a_faire"})
+    regle("Factures : corbeille", "sujet", "Facture n°", {"type": "corbeille"})
+    regle("Lettres d'information", "liste", None, {"type": "classer", "dossier": "Junk"}, operateur="existe")
+    muette = regle("Jamais vue", "from", "personne-de-ce-nom.invalid", {"type": "drapeau"})
+
+    ch.imap.deposer(message("Situation de compte", de="Compta <compta@compta.example>"))
+    ch.imap.deposer(message("Facture n°2026-118", de="Ventes <ventes@autre.example>"))
+    ch.imap.deposer(("From: Lettre <news@liste.example>\r\nTo: contact@exemple.fr\r\n"
+                     "Subject: Nouveautés de septembre\r\nDate: Fri, 18 Sep 2026 10:00:00 +0200\r\n"
+                     "Message-ID: <lettre-1@liste.example>\r\nList-Id: <nouveautes.liste.example>\r\n"
+                     "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nBonjour.\r\n").encode())
+
+    compte = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Situation de compte"), None),
+                         "le courrier de la compta arrive")
+    assert compte["statut"] == "a_faire", "la règle d'EXPÉDITEUR a posé le statut à l'ingestion"
+
+    facture = ch.attendre(lambda: next((x for x in ch.liste("trash", filtre="tous") if x["sujet"] == "Facture n°2026-118"), None),
+                          "la règle de SUJET a mis la facture à la corbeille")
+    assert not any(x["sujet"] == "Facture n°2026-118" for x in ch.liste("inbox", filtre="tous")), \
+        "et elle n'est PAS restée dans la boîte de réception"
+
+    ch.attendre(lambda: next((x for x in ch.liste("junk", filtre="tous") if x["sujet"] == "Nouveautés de septembre"), None),
+                "la règle de LISTE a classé la lettre d'information")
+
+    # ── les compteurs tiennent en base : c'est eux qui rendent une règle muette visible ─────────
+    for nom in ("Compta : à traiter", "Factures : corbeille", "Lettres d'information"):
+        assert compteur_regle(nom) == 1, "« %s » compte son déclenchement (D075 § 1)" % nom
+    assert compteur_regle("Jamais vue") == 0
+    etat = ch.get("/etat").json()
+    assert any(r["nom"] == "Jamais vue" for r in etat["regles_muettes"]), \
+        "une règle qui n'a jamais rien attrapé se voit depuis la page d'état — c'est TOUT l'intérêt du compteur"
+    assert not any(r["nom"] == "Compta : à traiter" for r in etat["regles_muettes"]), \
+        "et une règle qui travaille n'y figure pas"
+
+    # ── une règle ne BOUCLE PAS sur sa propre action ────────────────────────────────────────────
+    # La facture a été DÉPLACÉE dans IMAP par la règle. À la relève suivante, le démon la retrouve
+    # dans sa nouvelle place, avec un UID neuf : si le moteur repassait, le compteur doublerait et
+    # chaque tour de relève referait le travail.
+    avant = compteur_regle("Factures : corbeille")
+    ch.imap.deposer(message("Réveil", de="Quelconque <rien@autre.example>"))
+    ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Réveil"), None),
+                "une relève complète a eu lieu")
+    assert compteur_regle("Factures : corbeille") == avant, \
+        "la règle ne s'est pas redéclenchée sur le message qu'elle avait elle-même déplacé"
+
+    # ── une règle n'a PAS d'effet rétroactif (Q067) ─────────────────────────────────────────────
+    # Écrite après coup, elle ne touche pas ce qui est déjà arrivé : sinon elle déferait ce que
+    # l'utilisateur a fait depuis, sans qu'il l'ait demandé.
+    regle("Rétroactive ?", "sujet", "Situation de compte", {"type": "corbeille"})
+    ch.imap.deposer(message("Second réveil", de="Quelconque <rien@autre.example>"))
+    ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Second réveil"), None),
+                "une seconde relève complète a eu lieu")
+    assert any(x["id"] == compte["id"] for x in ch.liste("inbox", filtre="tous")), \
+        "le courrier déjà arrivé n'est pas repris par une règle écrite après lui (Q067)"
+    assert compteur_regle("Rétroactive ?") == 0, "et elle n'a rien compté"
+
+    # ── l'ordre et « arrêter » survivent au passage par l'API ───────────────────────────────────
+    regle("1 — drapeau", "sujet", "Chaîne de règles", {"type": "drapeau"}, ordre=1)
+    regle("2 — stop", "sujet", "Chaîne de règles", {"type": "marquer_lu", "arreter": True}, ordre=2)
+    regle("3 — jamais atteinte", "sujet", "Chaîne de règles", {"type": "corbeille"}, ordre=3)
+    ch.imap.deposer(message("Chaîne de règles", de="Quelconque <rien@autre.example>"))
+    enchaine = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Chaîne de règles"), None),
+                           "le message soumis à la chaîne de règles arrive")
+    assert enchaine["drapeau"] is True and enchaine["lu"] is True, "les deux premières règles ont agi, dans l'ordre"
+    assert compteur_regle("3 — jamais atteinte") == 0, "« arrêter » a interrompu la chaîne — comme le stop de Sieve"
+    assert not any(x["sujet"] == "Chaîne de règles" for x in ch.liste("trash", filtre="tous")), \
+        "la troisième règle n'a donc pas mis le message à la corbeille"
+
+    # ── une règle ne se CASSE pas après coup : PATCH valide comme POST ──────────────────────────
+    # Le trou : on créait une règle correcte, puis on lui posait d'un PATCH une action que le moteur
+    # ne connaît pas. Elle continuait à compter ses déclenchements — son prédicat correspondait
+    # toujours — et ne faisait plus rien. Elle avait l'air de travailler, et le compteur de
+    # D075 § 1, qui existe précisément pour débusquer les règles sans effet, ne la voyait pas.
+    assert ch.post("/filtres", {"nom": "Bidon", "portee": "boite", "action": {"type": "n_importe_quoi"},
+                                "predicat": {"criteres": [{"champ": "from", "operateur": "contient", "valeur": "x"}]}}
+                   ).status_code == 400, "POST refuse une action inconnue"
+    assert ch.patch("/filtres/" + muette, {"action": {"type": "n_importe_quoi"}}).status_code == 400, \
+        "et PATCH la refuse aussi — sinon la règle se casse en silence"
+    assert ch.patch("/filtres/" + muette, {"predicat": {"criteres": []}}).status_code == 400, \
+        "un prédicat vide n'attrape rien : le refuser vaut mieux que le compter muet"
+    assert ch.patch("/filtres/" + muette, {"predicat": {"criteres": [{"champ": "champ_qui_n_existe_pas",
+                                                                      "operateur": "contient", "valeur": "x"}]}}).status_code == 400, \
+        "et un champ inconnu aussi : une règle qu'on ne comprend pas ne doit pas exister"
+    assert ch.patch("/filtres/" + muette, {"nom": "Toujours jamais vue"}).json()["ok"], \
+        "une modification légitime passe toujours"
+
+    # ── désactiver une règle l'arrête pour de bon ───────────────────────────────────────────────
+    avant_compta = compteur_regle("Compta : à traiter")
+    assert ch.patch("/filtres/" + compta, {"actif": False}).json()["ok"]
+    ch.imap.deposer(message("Second relevé", de="Compta <compta@compta.example>"))
+    apres = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Second relevé"), None),
+                        "un second courrier de la compta arrive")
+    assert apres["statut"] == "nouveau", "la règle désactivée n'a pas posé son statut"
+    assert compteur_regle("Compta : à traiter") == avant_compta, "et elle n'a rien compté"
+
+    assert ch.delete("/filtres/" + muette).json()["ok"], "une règle se supprime"
