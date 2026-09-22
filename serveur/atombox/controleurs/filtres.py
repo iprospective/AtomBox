@@ -24,6 +24,30 @@ def _serialiser(f: Filtre) -> dict:
             "dernier_declenchement": iso(f.dernier_declenchement),
             "muette": not (f.nb_declenchements or 0), "importe_de": f.importe_de}
 
+def _valider(c: dict, complet: bool) -> None:
+    """Ce qu'une règle doit être pour avoir un sens. `complet` : à la création, tout est exigé ; à
+    la modification, seuls les champs envoyés sont contrôlés.
+
+    Partagé entre POST et PATCH, et c'est le point : POST validait, PATCH ne validait RIEN. On
+    pouvait donc créer une règle correcte puis la CASSER d'un coup de PATCH — lui poser une action
+    que le moteur ne connaît pas. La règle continuait à compter ses déclenchements (le prédicat,
+    lui, correspondait toujours) et ne faisait plus rien : elle avait l'air de travailler. C'est
+    exactement l'angle mort que le compteur de D075 § 1 est censé éclairer, et il ne le voyait pas.
+    """
+    if complet or "nom" in c:
+        if not (c.get("nom") or "").strip(): raise HTTPException(400, "un nom")
+    if complet or "predicat" in c:
+        if not ((c.get("predicat") or {}).get("criteres")):
+            raise HTTPException(400, "au moins un critère — un prédicat vide n'attrape rien")
+        for crit in c["predicat"]["criteres"]:
+            if crit.get("champ") not in CHAMPS: raise HTTPException(400, "champ inconnu : %s" % crit.get("champ"))
+            if crit.get("operateur", "contient") not in OPERATEURS:
+                raise HTTPException(400, "opérateur inconnu : %s" % crit.get("operateur"))
+    if complet or "action" in c:
+        if (c.get("action") or {}).get("type") not in ACTIONS:
+            raise HTTPException(400, "action inconnue : %s" % (c.get("action") or {}).get("type"))
+
+
 class FiltresControleur(Controleur):
     prefixe = "/filtres"
 
@@ -39,9 +63,7 @@ class FiltresControleur(Controleur):
     @action("POST", "")
     async def creer(self, request: Request, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
         c = await request.json() or {}
-        if not (c.get("nom") or "").strip(): raise HTTPException(400, "un nom")
-        if not ((c.get("predicat") or {}).get("criteres")): raise HTTPException(400, "au moins un critère")
-        if not (c.get("action") or {}).get("type") in ACTIONS: raise HTTPException(400, "action inconnue : %s" % (c.get("action") or {}).get("type"))
+        _valider(c, complet=True)
         # UNE RÈGLE QUI AGIT EST UNE RÈGLE DE BOÎTE (D171). Elle modifie le rattachement, qui est
         # unique par boîte (D124) : elle vaut pour tous ceux qui la partagent, et c'est à la boîte
         # que l'ingestion demande ses règles. Portée « compte », elle ne s'appliquait JAMAIS au
@@ -72,6 +94,7 @@ class FiltresControleur(Controleur):
     async def modifier(self, id: str, request: Request, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
         f = await self._mien(s, compte, id)
         c = await request.json() or {}
+        _valider(c, complet=False)
         for champ in ("nom", "ordre", "actif", "predicat", "action"):
             if champ in c: setattr(f, champ, c[champ])
         await s.commit()
