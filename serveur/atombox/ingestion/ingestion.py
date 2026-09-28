@@ -120,7 +120,8 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
             d2 = s.scalar(select(Dossier).where(Dossier.boite_id == boite_id, Dossier.alias_imap == regles["dossier"]))
             if d2 is not None: cible = d2.dossier_id
             else: log.warning("règle « %s » : dossier %r inconnu dans cette boîte", ", ".join(regles["regles"]), regles["dossier"])
-        s.add(Rattachement(comm_id=comm_id, boite_id=boite_id,
+        from ..uid_servi import attribuer as attribuer_uid
+        s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, uid_servi=attribuer_uid(s, cible),
                            lu_le=datetime.now(timezone.utc) if p.get("lu") else None,
                            drapeau=bool(p.get("drapeau")), statut=p.get("statut", "nouveau"),
                            personnel=False, gele=False, dossier_id=cible, uid_imap=uid))
