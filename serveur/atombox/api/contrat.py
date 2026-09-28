@@ -225,6 +225,7 @@ class Rattachement(BaseModel):
     dossier_id: uuid.UUID | None = None
     dossier_origine_id: uuid.UUID | None = None
     uid_imap: int | None = None
+    uid_servi: int | None = None
     personnel: bool
     reveil_le: datetime.datetime | None = None
     echeance_le: datetime.datetime | None = None
@@ -297,6 +298,8 @@ class Dossier(BaseModel):
     ordre: int | None = None
     uid_validity: int | None = None
     uid_suivant: int | None = None
+    uid_validity_servie: int | None = None
+    uid_servi_suivant: int | None = None
 
 class Filtre(BaseModel):
     model_config = ConfigDict(from_attributes=True)

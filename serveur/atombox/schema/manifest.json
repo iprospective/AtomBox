@@ -1063,6 +1063,11 @@
      "obligatoire": false
     },
     {
+     "nom": "uid_servi",
+     "type": "bigint",
+     "obligatoire": false
+    },
+    {
      "nom": "personnel",
      "type": "boolean",
      "obligatoire": true
@@ -1410,6 +1415,16 @@
     },
     {
      "nom": "uid_suivant",
+     "type": "bigint",
+     "obligatoire": false
+    },
+    {
+     "nom": "uid_validity_servie",
+     "type": "bigint",
+     "obligatoire": false
+    },
+    {
+     "nom": "uid_servi_suivant",
      "type": "bigint",
      "obligatoire": false
     }

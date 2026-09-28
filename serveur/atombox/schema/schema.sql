@@ -274,6 +274,7 @@ CREATE TABLE "rattachement" (
   "dossier_id" uuid,
   "dossier_origine_id" uuid,
   "uid_imap" bigint,
+  "uid_servi" bigint,
   "personnel" boolean NOT NULL,
   "reveil_le" timestamptz,
   "echeance_le" timestamptz,
@@ -363,6 +364,8 @@ CREATE TABLE "dossier" (
   "ordre" bigint,
   "uid_validity" bigint,
   "uid_suivant" bigint,
+  "uid_validity_servie" bigint,
+  "uid_servi_suivant" bigint,
   CONSTRAINT "pk_dossier" PRIMARY KEY ("dossier_id")
 );
 

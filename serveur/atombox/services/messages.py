@@ -449,6 +449,10 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
                 cible = next((d for d in ds.values() if d.boite_id == r.boite_id and dossier_id_court(d) == v), None)
                 if cible is None: log.warning("PATCH %s : dossier inconnu %r", comm_id, v); continue
                 r.dossier_id = cible.dossier_id
+            # DÉPLACER, C'EST CHANGER DE BOÎTE AUX LETTRES : l'UID appartient au dossier, pas au
+            # message (Q024). En garder l'ancien ferait lire au client un message pour un autre.
+            from ..uid_servi import attribuer_async as attribuer_uid
+            r.uid_servi = await attribuer_uid(s, r.dossier_id)
             n += 1
         elif k == "suppr" and v:
             r.motif_sortie = "supprime"; r.sorti_le = datetime.now(timezone.utc); r.supprime_par = compte.compte_id
@@ -690,7 +694,10 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
         # il s'enterre dans « Envoyés » sous des messages plus récents que lui.
         c.date_recue = c.date_declaree = maintenant
         cible = next((d for d in ds.values() if dossier_id_court(d) == "sent"), None)
+        # un déplacement donne un UID NEUF, pris au dossier d'arrivée (sémantique IMAP)
+        from ..uid_servi import attribuer_async as attribuer_uid
         r.dossier_id = cible.dossier_id if cible else None
+        r.uid_servi = await attribuer_uid(s, r.dossier_id)
         r.dossier_origine_id = None
         r.motif_sortie, r.sorti_le = None, None
         from ..modules import evenements
@@ -754,8 +761,10 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_c
              taille=len(octets), nb_pieces_jointes=len(a.pieces), est_chiffre=False, est_signe=False, snippet=a.snippet, corps_texte=a.corps_texte or None)
     s.add(c)
     s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, headers=a.headers, blob_ref=brut, empreinte=empreinte_identite(a), structure_mime=a.structure_mime, reponse_possible="oui"))
+    from ..uid_servi import attribuer_async as attribuer_uid
     s.add(Rattachement(comm_id=comm_id, boite_id=boite.boite_id, compte_id=compte.compte_id, lu_le=maintenant, drapeau=False, statut="nouveau", personnel=False, gele=False,
-                       dossier_id=cible.dossier_id if cible else None))
+                       dossier_id=cible.dossier_id if cible else None,
+                       uid_servi=await attribuer_uid(s, cible.dossier_id if cible else None)))
     await s.flush()
     await _poser_participants(s, comm_id, a.participants)
     await _poser_pieces(s, comm_id, a.pieces, magasin, maintenant)

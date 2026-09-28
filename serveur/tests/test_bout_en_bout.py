@@ -438,3 +438,78 @@ def test_4_les_regles_tiennent_sur_le_flux(chaine):
     assert compteur_regle("Compta : à traiter") == avant_compta, "et elle n'a rien compté"
 
     assert ch.delete("/filtres/" + muette).json()["ok"], "une règle se supprime"
+
+
+def test_5_les_uid_servis_tiennent_leurs_invariants(chaine):
+    """RM3321 / Q024 — l'UID qu'AtomBox sert à ses propres clients IMAP.
+
+    Deux invariants que le CDC réclame d'installer AVANT d'écrire quoi que ce soit d'IMAP, parce
+    qu'ils se rattrapent très mal : un UID croissant et JAMAIS réutilisé dans un dossier, et un
+    UIDVALIDITY par dossier. Un client IMAP indexe son cache par UID : en réutiliser un après une
+    suppression lui fait lire un message pour un autre, sans qu'il s'en aperçoive."""
+    ch = chaine
+    import psycopg
+
+    def uid(mid):
+        with psycopg.connect(os.environ["DATABASE_URL"]) as cnx:
+            return cnx.execute("select uid_servi from rattachement where comm_id = %s", (mid,)).fetchone()[0]
+
+    def uid_fournisseur(mid):
+        with psycopg.connect(os.environ["DATABASE_URL"]) as cnx:
+            return cnx.execute("select uid_imap from rattachement where comm_id = %s", (mid,)).fetchone()[0]
+
+    def compteurs():
+        with psycopg.connect(os.environ["DATABASE_URL"]) as cnx:
+            return dict(cnx.execute("select alias_imap, uid_servi_suivant from dossier").fetchall())
+
+    def validites():
+        with psycopg.connect(os.environ["DATABASE_URL"]) as cnx:
+            return dict(cnx.execute("select alias_imap, uid_validity_servie from dossier").fetchall())
+
+    # ── croissance stricte à l'arrivée ──────────────────────────────────────────────────────────
+    ch.imap.deposer(message("UID un", de="Suite <suite@exemple.org>"))
+    a = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "UID un"), None), "le premier arrive")
+    ch.imap.deposer(message("UID deux", de="Suite <suite@exemple.org>"))
+    b = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "UID deux"), None), "le second arrive")
+    ua, ub = uid(a["id"]), uid(b["id"])
+    assert ua and ub and ub > ua, "les UID servis croissent dans l'ordre d'arrivée (%r puis %r)" % (ua, ub)
+
+    # ── jamais réutilisé, même après suppression ────────────────────────────────────────────────
+    avant = compteurs()["INBOX"]
+    assert ch.delete("/messages/%s/rattachement" % b["id"]).json()["ok"]
+    ch.imap.deposer(message("UID trois", de="Suite <suite@exemple.org>"))
+    c = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "UID trois"), None), "le troisième arrive")
+    uc = uid(c["id"])
+    assert uc > ub, "l'UID d'un message supprimé n'est JAMAIS resservi (%r après %r)" % (uc, ub)
+    assert compteurs()["INBOX"] > avant, "le compteur du dossier ne fait qu'avancer"
+
+    # ── déplacer, c'est changer de boîte aux lettres : UID neuf, pris à l'arrivée ────────────────
+    # Attention : comparer les VALEURS ne prouve rien — l'UID 1 d'INBOX et l'UID 1 de Junk sont deux
+    # choses différentes, l'UID vit dans l'espace de nommage de son dossier. Ce qui se teste, c'est
+    # que le compteur du dossier d'ARRIVÉE a servi, et que c'est bien lui qu'on a servi.
+    junk_avant = compteurs()["Junk"] or 1
+    assert ch.patch("/messages/%s/rattachement" % a["id"], {"dossier": "junk"}).json()["ok"]
+    assert uid(a["id"]) == junk_avant, "le message déplacé prend l'UID que le dossier d'ARRIVÉE allait servir"
+    assert compteurs()["Junk"] == junk_avant + 1, "et le compteur de Junk a avancé d'un"
+    assert compteurs()["INBOX"] > ua, "celui d'INBOX n'est PAS revenu en arrière : un UID quitté ne se resert pas"
+
+    # ── l'UIDVALIDITY : posé une fois, et STABLE ────────────────────────────────────────────────
+    # C'est sa stabilité qui compte, pas sa valeur : s'il change, le client jette tout son cache et
+    # resynchronise. Un dossier qui a servi un UID en a forcément un.
+    v1 = validites()
+    assert v1["INBOX"] and v1["Junk"], "un dossier qui a servi un UID a un UIDVALIDITY (%r)" % v1
+    ch.imap.deposer(message("UID quatre", de="Suite <suite@exemple.org>"))
+    ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "UID quatre"), None), "le quatrième arrive")
+    assert validites()["INBOX"] == v1["INBOX"], "et il ne bouge PAS quand du courrier arrive"
+
+    # ── notre numérotation ne dépend PAS de celle du fournisseur ────────────────────────────────
+    # Comparer les valeurs ne prouverait rien : dans ce harnais les deux numérotations démarrent à 1
+    # dans le même ordre, elles coïncident par hasard. Et suivre un déplacement n'y aide pas non
+    # plus — déplacer chez nous déplace AUSSI chez le fournisseur (F113, pour que le client IMAP
+    # voie le tri), donc les deux bougent.
+    # Ce qui le prouve : AtomBox sert un UID à un message que le fournisseur n'a JAMAIS vu.
+    sent_avant = compteurs()["Sent"] or 1
+    ecrit = ch.post("/messages", {"destinataires": ["ailleurs@exemple.org"], "sujet": "Écrit ici",
+                                  "corps": "sans passer par IMAP"}).json()["message"]
+    assert uid(ecrit["id"]) == sent_avant, "un message écrit dans AtomBox reçoit un UID tout de suite"
+    assert compteurs()["Sent"] == sent_avant + 1, "pris au compteur des envoyés, sans rien demander au fournisseur"
