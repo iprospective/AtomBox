@@ -32,6 +32,12 @@ donc la lecture :
 
 Le compte de ce qui n'a pas pu être attribué est JOURNALISÉ par la migration : sans ça, la décision
 ci-dessus serait invisible à celui qui constate le lendemain que sa boîte partagée est toute en gras.
+
+`(array_agg(compte_id))[1]` et non `min(compte_id)` : PostgreSQL n'a pas de `min()` sur `uuid`
+(jusqu'à la 17 incluse). Comme on ne prend cette valeur que là où `count(*) = 1`, « le premier »
+et « le plus petit » désignent la même ligne — l'unique. Trouvé en rejouant la migration sur une
+COPIE des données réelles : les bases de test sont montées de `schema.sql`, donc elles n'exécutent
+jamais ce code, et le harnais était vert.
 """
 from alembic import op
 from atombox.journal import journal
@@ -225,7 +231,7 @@ INSERT INTO "read_state" ("compte_id", "comm_id", "boite_id", "opened_at", "last
 SELECT COALESCE(r."compte_id", seul."compte_id"), r."comm_id", r."boite_id",
        r."lu_le", r."lu_le", CASE WHEN r."lu_le" IS NULL THEN 0 ELSE 1 END, r."drapeau"
   FROM "rattachement" r
-  LEFT JOIN (SELECT "boite_id", min("compte_id") AS "compte_id", count(*) AS n
+  LEFT JOIN (SELECT "boite_id", (array_agg("compte_id"))[1] AS "compte_id", count(*) AS n
                FROM "acces" WHERE "fin" IS NULL GROUP BY "boite_id") seul
          ON seul."boite_id" = r."boite_id" AND seul.n = 1
  WHERE (r."lu_le" IS NOT NULL OR r."drapeau")
@@ -237,7 +243,7 @@ ON CONFLICT DO NOTHING""")
 INSERT INTO "marker_personal" ("compte_id", "comm_id", "boite_id", "marker_id", "set_at", "due_at")
 SELECT COALESCE(r."compte_id", seul."compte_id"), r."comm_id", r."boite_id", '%s', now(), r."reveil_le"
   FROM "rattachement" r
-  LEFT JOIN (SELECT "boite_id", min("compte_id") AS "compte_id", count(*) AS n
+  LEFT JOIN (SELECT "boite_id", (array_agg("compte_id"))[1] AS "compte_id", count(*) AS n
                FROM "acces" WHERE "fin" IS NULL GROUP BY "boite_id") seul
          ON seul."boite_id" = r."boite_id" AND seul.n = 1
  WHERE r."reveil_le" IS NOT NULL AND COALESCE(r."compte_id", seul."compte_id") IS NOT NULL

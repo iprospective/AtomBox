@@ -41,12 +41,17 @@ def monde(tmp_path):
     ici = os.path.dirname(os.path.abspath(__file__))
     with psycopg.connect(u) as c:
         c.execute(open(os.path.join(ici, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read()); c.commit()
-    avant = {k: os.environ.get(k) for k in ("DATABASE_URL", "ATOMBOX_STORE", "ATOMBOX_IMAP_HOST", "ATOMBOX_IMAP_HOTE")}
+    # Le harnais ne parle PAS à un vrai serveur IMAP : la création de dossier y enverrait un ordre,
+    # et le test dépendrait d'une machine tierce pour éprouver une règle de notre modèle. On neutralise
+    # le réglage ET son nom d'hier — que l'on DEMANDE à settings plutôt que de l'écrire ici : un test
+    # qui recopie un nom déprécié le fait vivre, et la convention de langue le lui reproche (D181).
+    from atombox import settings
+    coupees = ["ATOMBOX_IMAP_HOST"]
+    coupees += [v for k, v in settings.FORMER_NAMES.items() if k in coupees]
+    avant = {k: os.environ.get(k) for k in ["DATABASE_URL", "ATOMBOX_STORE"] + coupees}
     os.environ["DATABASE_URL"] = u
     os.environ["ATOMBOX_STORE"] = str(tmp_path / "magasin")
-    # Le harnais ne parle PAS à un vrai serveur IMAP : la création de dossier y enverrait un ordre,
-    # et le test dépendrait d'une machine tierce pour éprouver une règle de notre modèle.
-    for k in ("ATOMBOX_IMAP_HOST", "ATOMBOX_IMAP_HOTE"): os.environ.pop(k, None)
+    for k in coupees: os.environ.pop(k, None)
     s = ouvrir(u); Magasin(os.environ["ATOMBOX_STORE"])
     a = adresse_de(s, "contact@exemple.fr")
     boite = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(boite)

@@ -145,7 +145,15 @@ def monde(tmp_path_factory):
     u = re.sub(r"/[^/?]*(\?|$)", "/" + nom + r"\1", url, count=1)
     ici = os.path.dirname(os.path.abspath(__file__))
     with psycopg.connect(u) as c: c.execute(open(os.path.join(ici, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read()); c.commit()
-    avant = {k: os.environ.get(k) for k in ("DATABASE_URL", "ATOMBOX_STORE")}
+    # LE HARNAIS NE PARLE PAS À UN VRAI SERVEUR IMAP. Sans cela, ce test échouait dès que
+    # /etc/atombox/env était chargé : créer un dossier utilisateur envoie un ordre au fournisseur
+    # (D140b), et le test dépendait alors d'une machine tierce et d'un mot de passe. On coupe le
+    # réglage et son nom d'hier — demandé à settings, jamais recopié (D181).
+    from atombox import settings
+    coupees = ["ATOMBOX_IMAP_HOST"]
+    coupees += [v for k, v in settings.FORMER_NAMES.items() if k in coupees]
+    avant = {k: os.environ.get(k) for k in ["DATABASE_URL", "ATOMBOX_STORE"] + coupees}
+    for k in coupees: os.environ.pop(k, None)
     os.environ["DATABASE_URL"] = u; os.environ["ATOMBOX_STORE"] = str(tmp_path_factory.mktemp("magasin"))
     s = ouvrir(u); m = Magasin(os.environ["ATOMBOX_STORE"])
     a = adresse(s, "contact@exemple.fr")
