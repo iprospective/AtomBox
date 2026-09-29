@@ -24,6 +24,21 @@ DATABASE_URL=postgresql://…/atombox .venv/bin/alembic upgrade head
 
 Le schéma n'est **jamais** édité à la main : on corrige le dictionnaire, on régénère, on migre.
 
+## Le serveur IMAP (D180) — lecture seule
+
+```
+bash outils/imapd.sh start|stop|restart|status|logs|fg
+```
+
+Les réglages viennent de `/etc/atombox/env` (`ATOMBOX_IMAPD_LISTEN`, `ATOMBOX_IMAPD_PORT`) et se
+surchargent par l'environnement. Le port par défaut est **1143**, pas 143 : un Dovecot peut tourner
+sur la même machine. Et `127.0.0.1` est la boucle locale **du conteneur** — un client sur la machine
+hôte ne voit rien, il faut l'adresse du conteneur.
+
+`status` répond à la question qui coûte du temps : *le processus qui tourne porte-t-il le code
+d'aujourd'hui ?* Et `stop` ne tue que ce que le script a lancé — un port occupé par quelqu'un
+d'autre est signalé, jamais forcé.
+
 ## La base, l'ORM et les migrations (D158)
 
 - **ORM** : SQLAlchemy 2 sur `psycopg` 3 — les modèles sont **engendrés** du dictionnaire
