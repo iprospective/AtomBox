@@ -20,7 +20,11 @@ import pytest
 MESSAGE = (b"From: Fournisseur <achats@fournisseur.example>\r\nTo: contact@exemple.fr\r\n"
            b"Subject: Commande 4412\r\nDate: Fri, 18 Sep 2026 10:00:00 +0200\r\n"
            b"Message-ID: <c4412@fournisseur.example>\r\nMIME-Version: 1.0\r\n"
-           b"Content-Type: text/plain; charset=utf-8\r\n\r\nBonjour,\r\nci-joint le devis.\r\n")
+           b"Content-Type: text/plain; charset=utf-8\r\n\r\n"
+           # DES ACCENTS, EXPRÈS. Le corpus d'essai n'en avait aucun, et c'est pour ça qu'un
+           # double encodage est passé jusqu'en produit : tout l'ASCII survit à n'importe quelle
+           # conversion. Un jeu d'essai sans caractère non ASCII ne teste pas l'encodage.
+           b"Audit, Conseil, D\xc3\xa9veloppement, Int\xc3\xa9gration, S\xc3\xa9curit\xc3\xa9\r\n")
 
 
 @pytest.fixture(scope="module")
@@ -127,6 +131,34 @@ def test_un_vrai_client_se_connecte_liste_et_lit(serveur_imap):
         rendu = data[0].decode() if isinstance(data[0], bytes) else " ".join(map(str, data[0]))
         assert "RFC822.SIZE %d" % len(attendu) in rendu, rendu
         assert "Commande 4412" in rendu, "l'enveloppe porte le sujet"
+    finally:
+        c.logout()
+
+
+def test_l_octet_servi_est_celui_du_magasin_MEME_avec_des_accents(serveur_imap):
+    """Le défaut trouvé en produit : « DÃ©veloppement » au lieu de « Développement ».
+
+    La cause n'était pas le message — il déclarait UTF-8 et ses octets étaient justes. C'était
+    l'écrivain du serveur : les octets bruts entraient dans une `str` par `latin-1` et en
+    sortaient par `utf-8`, donc chaque octet ≥ 0x80 en devenait deux.
+
+    Le symptôme visible était l'accent. LE SYMPTÔME GRAVE était que la taille annoncée du littéral
+    ne correspondait plus aux octets envoyés — trente annoncés, trente-deux transmis —, ce qui
+    décale tout ce que le client lit ensuite. C'est pourquoi ce test compare les DEUX."""
+    c = imaplib.IMAP4("127.0.0.1", serveur_imap["port"], timeout=10)
+    try:
+        c.login("mathieu", "secret")
+        c.select("INBOX", readonly=True)
+        uid = c.uid("SEARCH", None, "ALL")[1][0].split()[0]
+        code, data = c.uid("FETCH", uid, "(BODY.PEEK[])")
+        servi = data[0][1]
+        attendu = serveur_imap["magasin"].lire(_blob(serveur_imap["session"], int(uid)))
+        assert b"D\xc3\xa9veloppement" in servi, "l'accent est double-encodé : %r" % servi[-60:]
+        assert servi == attendu, "l'octet servi n'est pas celui du magasin"
+        entete = data[0][0].decode("latin-1")
+        annonce = int(entete[entete.rindex("{") + 1:entete.rindex("}")])
+        assert annonce == len(servi), \
+            "le littéral annonce %d octets et en transporte %d : le client se désynchronise" % (annonce, len(servi))
     finally:
         c.logout()
 

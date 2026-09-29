@@ -173,7 +173,44 @@ class Session:
     def _c_capability(self, tag, args):
         return ["* CAPABILITY " + " ".join(self._capacites()), "%s OK CAPABILITY" % tag]
 
-    def _c_noop(self, tag, args): return ["%s OK NOOP" % tag]
+    def _c_noop(self, tag, args): return self._rafraichir() + ["%s OK NOOP" % tag]
+
+    def _c_check(self, tag, args): return self._rafraichir() + ["%s OK CHECK" % tag]
+
+    def _rafraichir(self) -> list[str]:
+        """dit au client ce qui a DISPARU depuis sa dernière nouvelle, et ce qui est arrivé.
+
+        Sans ça, un message retiré chez nous reste affiché chez lui pour toujours : rien ne le lui
+        apprend. IMAP a un mot pour ça — `* n EXPUNGE` —, et un client qui ne le reçoit jamais ne
+        peut que garder sa liste d'hier.
+
+        DEUX RÈGLES QUI NE SE DEVINENT PAS :
+
+        - on n'envoie JAMAIS d'EXPUNGE pendant un FETCH, un STORE ou un SEARCH (RFC 3501 § 5.2) :
+          le client y compte les messages par leur NUMÉRO DE SÉQUENCE, et retirer une ligne au
+          milieu décale tout ce qu'il est en train de lire. D'où l'envoi sur NOOP et CHECK, qui
+          existent exactement pour ça ;
+        - les numéros s'entendent sur la liste qui RÉTRÉCIT au fur et à mesure. Retirer les
+          messages 2 et 5 d'une liste de six, c'est annoncer « 2 » puis « 4 » — pas « 2 » puis
+          « 5 ». Les annoncer sur la liste d'origine décale le client d'un cran par suppression,
+          en silence."""
+        if self.boite is None: return []
+        frais = self.vue.ouvrir(self.compte, self.boite.nom)
+        if frais is None: return []
+        anciens, nouveaux = list(self.uids), list(frais.uids)
+        presents, lignes = set(nouveaux), []
+        courant = list(anciens)
+        for uid in anciens:
+            if uid not in presents:
+                rang = courant.index(uid) + 1
+                lignes.append("* %d EXPUNGE" % rang)
+                courant.pop(rang - 1)
+        if len(nouveaux) != len(courant):
+            lignes.append("* %d EXISTS" % len(nouveaux))
+        if lignes: log.info("boîte « %s » : %d disparu(s), %d au total", self.boite.nom,
+                            len(anciens) - len(courant), len(nouveaux))
+        self.boite, self.uids = frais, nouveaux
+        return lignes
 
     def _c_logout(self, tag, args):
         self.fini = True

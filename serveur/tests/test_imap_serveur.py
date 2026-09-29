@@ -109,6 +109,50 @@ def test_l_etoile_est_le_plus_grand_uid_pas_l_infini():
     assert sequence("5:1", [1, 3, 7], True) == [1, 3], "les bornes peuvent être données à l'envers"
 
 
+def test_le_client_apprend_ce_qui_a_disparu():
+    """Sans EXPUNGE, un message retiré chez nous reste affiché chez le client POUR TOUJOURS :
+    rien ne le lui apprend. C'est ce qui s'est vu en produit — un message supprimé au webmail
+    restait dans l'INBOX de Thunderbird."""
+    v = FausseVue(); s = Session(v, magasin=None)
+    s.ligne("a0 LOGIN mathieu secret")
+    assert "* 3 EXISTS" in s.ligne("a1 SELECT INBOX")
+    del v.b["INBOX"].messages[4]; v.b["INBOX"].uids = sorted(v.b["INBOX"].messages)
+    r = s.ligne("a2 NOOP")
+    assert r[0] == "* 2 EXPUNGE", "l'UID 4 était le 2e de la liste : c'est son RANG qu'on annonce, pas son UID"
+    assert s.ligne("a3 NOOP") == ["a3 OK NOOP"], "et on ne le répète pas au tour suivant"
+
+
+def test_les_rangs_d_expunge_s_entendent_sur_la_liste_qui_retrecit():
+    """Retirer les 2e et 5e d'une liste de six, c'est annoncer « 2 » puis « 4 » — pas « 2 » puis
+    « 5 ». Les annoncer sur la liste d'origine décale le client d'un cran par suppression, en
+    silence : il croit avoir retiré le bon, et se trompe de message à chaque fois."""
+    v = FausseVue()
+    brut = b"From: a@x.fr\r\n\r\nx\r\n"
+    v.b["INBOX"] = FausseBoite("INBOX", [FauxMessage(u, brut) for u in (1, 2, 3, 4, 5, 6)])
+    s = Session(v, magasin=None); s.ligne("a0 LOGIN mathieu secret"); s.ligne("a1 SELECT INBOX")
+    for u in (2, 5): del v.b["INBOX"].messages[u]
+    v.b["INBOX"].uids = sorted(v.b["INBOX"].messages)
+    assert [l for l in s.ligne("a2 NOOP") if "EXPUNGE" in l] == ["* 2 EXPUNGE", "* 4 EXPUNGE"]
+
+
+def test_un_message_qui_ARRIVE_est_annonce_aussi():
+    v = FausseVue(); s = Session(v, magasin=None)
+    s.ligne("a0 LOGIN mathieu secret"); s.ligne("a1 SELECT INBOX")
+    b = v.b["INBOX"]
+    b.messages[12] = FauxMessage(12, b"From: a@x.fr\r\n\r\nneuf\r\n"); b.uids = sorted(b.messages)
+    assert "* 4 EXISTS" in s.ligne("a2 NOOP")
+
+
+def test_aucun_expunge_pendant_un_fetch_ou_un_search():
+    """RFC 3501 § 5.2 : le client y compte par NUMÉRO DE SÉQUENCE, et retirer une ligne au milieu
+    décale tout ce qu'il est en train de lire."""
+    v = FausseVue(); s = Session(v, magasin=None)
+    s.ligne("a0 LOGIN mathieu secret"); s.ligne("a1 SELECT INBOX")
+    del v.b["INBOX"].messages[4]; v.b["INBOX"].uids = sorted(v.b["INBOX"].messages)
+    for commande in ("a2 UID FETCH 1:* (UID)", "a3 UID SEARCH ALL"):
+        assert not any("EXPUNGE" in l for l in s.ligne(commande)), commande
+
+
 def test_un_critere_de_recherche_inconnu_est_une_ERREUR_pas_une_liste_vide():
     """Rendre « rien trouvé » ferait conclure à l'utilisateur que son message a disparu."""
     _, (_, r) = dialogue("a1 SELECT INBOX", "a2 UID SEARCH YOUNGER 3600")

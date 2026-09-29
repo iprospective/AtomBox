@@ -22,17 +22,22 @@ OPTIONS_FR = ("--boite", "--mot-de-passe", "--nom", "--partagee", "--email-secou
               "--racine", "--quand-meme", "--cle")
 
 
+# Ce fichier-ci PORTE la liste des mots interdits, et `settings.py` porte celle des anciens noms :
+# tous deux se détecteraient eux-mêmes. Ils s'excluent, et c'est la seule exception.
+DICTIONNAIRES = ("settings.py", "test_convention_langue.py")
+
+
 def _fichiers(*motifs):
     sortie = subprocess.run(["git", "ls-files"] + list(motifs), cwd=RACINE.parent,
                             capture_output=True, text=True).stdout.split()
-    return [RACINE.parent / f for f in sortie]
+    return [RACINE.parent / f for f in sortie if pathlib.Path(f).name not in DICTIONNAIRES]
 
 
 def test_aucune_variable_d_environnement_en_francais():
     """La table de repli de `settings.py` est la seule exception : elle NOMME les anciens."""
     fautives = {}
     for f in _fichiers("*.py", "*.sh", "*.service", "*.exemple", "*.md"):
-        if f.name == "settings.py" or not f.exists(): continue
+        if not f.exists(): continue
         texte = f.read_text(errors="replace")
         for nom in set(re.findall(r"\bATOMBOX_[A-Z_]+\b", texte)):
             if any(mot in nom for mot in FRANCAIS):
