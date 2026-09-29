@@ -1,0 +1,19 @@
+[Unit]
+Description=AtomBox — serveur IMAP en LECTURE SEULE (D180, RM3322)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+User=mathieu
+WorkingDirectory=__SERVEUR__
+EnvironmentFile=/etc/atombox/env
+# Le port vient de /etc/atombox/env (ATOMBOX_IMAPD_PORT). PAS 143 ni 993 : un Dovecot tourne sur
+# cette machine, et deux serveurs sur le même port, c'est le second qui ne démarre pas.
+# L'écoute est sur 127.0.0.1 par défaut : tant que le service est en clair et en lecture seule,
+# il n'a rien à faire sur un réseau.
+ExecStart=__SERVEUR__/.venv/bin/python -m atombox.imap.serveur
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
