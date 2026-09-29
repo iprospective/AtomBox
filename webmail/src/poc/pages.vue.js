@@ -221,7 +221,9 @@
     const C = ABX.CDC, M = ABX.Markdown, ui = ABX.Store.ui.cdc || {};
     const lien = id => `<a href="#" class="cdc-lien" data-sec="${F.esc(id)}"><b>${F.esc(id)}</b></a>`;
     const parUrg = u => C.questions.filter(q => q.urgence === u);
-    const plan = C.plan || {}, vrac = C.vrac || [], modele = C.modele || {};
+    /* Il n'y a plus de « modèle » ici : le gabarit réutilisable a UNE source, côté PM (RM3047).
+       Le lecteur lui a survécu et montrait un onglet vide — on l'a retiré (RM3342). */
+    const plan = C.plan || {}, vrac = C.vrac || [];
     let lecture = "";
     if (ui.sec && C.sections[ui.sec])
       lecture = `<div class="box lecture"><div class="hint"><a href="#" class="cdc-lien" data-sec="">‹ fermer</a>
@@ -229,10 +231,6 @@
     else if (ui.chap && C.textes[ui.chap])
       lecture = `<div class="box lecture"><div class="hint"><a href="#" class="cdc-lien" data-chap="">‹ fermer</a>
         · chapitre <b>${F.esc(ui.chap)}</b> — tel qu'il est dans <span class="hash">docs/</span></div>${M.rendre(C.textes[ui.chap])}</div>`;
-    else if (ui.modele && modele[ui.modele])
-      lecture = `<div class="box lecture"><div class="hint"><a href="#" class="cdc-lien" data-modele="">‹ fermer</a>
-        · modèle <span class="hash">modele-cdc/${F.esc(ui.modele)}</span></div>${
-        ui.modele.endsWith(".yml") ? `<pre class="md-code">${F.esc(modele[ui.modele])}</pre>` : M.rendre(modele[ui.modele])}</div>`;
     const etatDec = d => ({ valide:"✅ validé", propose:"🟡 proposé", amendee:"❌ amendée" }[d.etat] || d.etat);
     const clsDec = d => d.etat === "valide" ? "ok" : d.etat === "propose" ? "wait" : d.etat === "amendee" ? "due" : "";
     const notes = vrac.filter(n => !/tranch|✅|❌/.test(n.etat));
@@ -273,10 +271,7 @@
         </tr>`).join("")).join("")}
       ${parUrg("tranchee").map(q => `<tr class="hint"><td>${lien(q.id)}</td><td><s>${F.esc(q.objet)}</s></td>
         <td class="hash">${M.inline(q.bloque)}</td><td><span class="st ok">tranchée</span></td></tr>`).join("")}</table></div>
-    <div class="box"><h4>modele-cdc/ — le modèle réutilisable</h4>
-      <div class="hint">Les gabarits issus de ce CDC, à copier dans un nouveau projet (RM2967). ${Object.keys(modele).length} fichiers.</div>
-      <div class="chips" style="margin-top:8px">${Object.keys(modele).map(f =>
-        `<span class="chip cdc-lien${ui.modele === f ? " on" : ""}" data-modele="${F.esc(f)}">${F.esc(f)}</span>`).join("")}</div></div>`;
+`;
   }
 
   /* ---- DICTIONNAIRE DES DONNÉES : les treize tables, en entier ----------
