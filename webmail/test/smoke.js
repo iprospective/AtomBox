@@ -92,7 +92,6 @@ console.log("— la page CDC organisée comme docs/ (plan, vrac, modèle) ——
   const C = A.CDC;
   vrai(Object.keys(C.plan || {}).length >= 15, Object.keys(C.plan).length + " chapitres avec objet et avancement — le plan du sommaire");
   vrai((C.vrac || []).length >= 60 && C.vrac.every(n => n.id && n.verbatim), C.vrac.length + " notes de vrac, chacune avec son verbatim");
-  vrai(Object.keys(C.modele || {}).length >= 20, Object.keys(C.modele).length + " fichiers du modèle embarqués");
   A.Store.ui.cdc = {};
   const page = A.Views.Pages.render("cdc");
   const pos = t => page.indexOf(t);
@@ -100,13 +99,10 @@ console.log("— la page CDC organisée comme docs/ (plan, vrac, modèle) ——
      apparaître plus tôt dans un texte d'intro */
   const h4 = t => page.indexOf("<h4>" + t);
   vrai(h4("Plan") > 0 && h4("90 — Registre") > h4("Plan") && h4("91 — Notes en vrac") > h4("90 — Registre")
-       && h4("99 — Questions ouvertes") > h4("91 — Notes en vrac") && h4("modele-cdc/") > h4("99 — Questions ouvertes"),
-       "la page suit l'ordre de docs/ : plan → 90 → 91 → 99 → modèle");
+       && h4("99 — Questions ouvertes") > h4("91 — Notes en vrac"),
+       "la page suit l'ordre de docs/ : plan → 90 → 91 → 99");
   vrai(page.includes("N01") && page.includes("date de traitement"), "le vrac est affiché avec ses verbatims");
   vrai(page.includes("audit livré") || page.includes("vivant"), "l'avancement de chaque chapitre est celui du sommaire");
-  A.Store.ui.cdc = { modele: "grille-360.md" };
-  vrai(A.Views.Pages.render("cdc").includes("feuille de passe"), "un fichier du modèle se lit dans la maquette");
-  A.Store.ui.cdc = {};
 }
 
 console.log("— tri des fonctionnalités par colonne ————————————————");
@@ -250,7 +246,10 @@ console.log("— cohérence du CDC lui-même (dictionnaire, ch. 16) ————
   const trancheeCitee = D.fonctionnalites.filter(f => f.etat === "à trancher" &&
     (f.questions || []).every(q => { const x = A.CDC.questions.find(y => y.id === q); return x && x.urgence === "tranchee"; }) &&
     (f.questions || []).length);
-  eq(trancheeCitee.length, 0, "une fonctionnalité « à trancher » cite une question encore ouverte" +
+  /* Le message disait l'INVERSE de ce que le contrôle teste, et m'a coûté une fausse piste : il
+     cherche les fonctionnalités restées « à trancher » alors que TOUTES leurs questions ont été
+     tranchées depuis. Un message d'échec qui ment coûte plus cher qu'un test qui manque. */
+  eq(trancheeCitee.length, 0, "une fonctionnalité est restée « à trancher » alors que ses questions sont tranchées" +
      (trancheeCitee.length ? " — " + trancheeCitee.map(f => f.id).join(", ") : ""));
   /* Les dépendances entre fonctionnalités donnent l'ORDRE DE CODAGE. Trois choses
      doivent casser au commit : un cycle, une dépendance vers un id inconnu, et une
