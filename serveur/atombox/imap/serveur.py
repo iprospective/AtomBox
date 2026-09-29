@@ -82,8 +82,24 @@ class Ecouteur:
                 except Exception: pass
 
     async def _envoyer(self, ecrivain, lignes):
+        """Les lignes sont encodées en LATIN-1, et ce n'est pas un choix de langue.
+
+        IMAP transporte des OCTETS. Les corps de messages arrivent bruts du magasin, et on les
+        glisse dans une `str` par `.decode("latin-1")` — la seule correspondance qui fasse
+        correspondre un octet à un caractère, sans rien interpréter. L'encodage inverse doit donc
+        être le même, sinon les octets changent en chemin.
+
+        Avec un `.encode("utf-8")`, l'octet 0xC3 d'un « é » devenait le caractère « Ã », qui se
+        réencode en DEUX octets : le client recevait du double-encodé (« DÃ©veloppement »), et —
+        bien pire — la taille annoncée du littéral ne correspondait plus aux octets envoyés.
+        Trente annoncés, trente-deux transmis : le client lit deux octets de trop, et tout ce qui
+        suit est décalé. Le symptôme visible était l'accent ; le symptôme grave était la
+        désynchronisation.
+
+        Le texte du protocole est de l'ASCII, donc indifférent au choix. Les quelques mots français
+        des réponses tiennent dans le latin-1 ; `replace` couvre le reste sans fausser le compte."""
         for l in lignes:
-            ecrivain.write(l.encode("utf-8", "replace") + b"\r\n")
+            ecrivain.write(l.encode("latin-1", "replace") + b"\r\n")
         await ecrivain.drain()
 
 
