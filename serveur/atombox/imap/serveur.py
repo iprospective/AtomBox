@@ -8,7 +8,7 @@ sur les UID ; on ne la refait pas :
 
 | Réglage | Défaut | Rôle |
 |---|---|---|
-| `ATOMBOX_IMAPD_ECOUTE` | `127.0.0.1` | l'interface. Locale par défaut : tant qu'on est en lecture seule et sans TLS, ce service n'a rien à faire sur un réseau |
+| `ATOMBOX_IMAPD_ECOUTE` | `127.0.0.1` | l'interface. Locale par défaut : sans TLS, ce service n'a rien à faire sur un réseau. **En conteneur, cette boucle locale est celle DU CONTENEUR** — un client sur la machine hôte ne voit rien ; il faut alors écouter sur l'adresse du conteneur, et tout passe en clair |
 | `ATOMBOX_IMAPD_PORT` | `1143` | **pas 143** : un Dovecot tourne déjà sur cette machine, et deux serveurs sur le même port, c'est le second qui ne démarre pas |
 | `ATOMBOX_IMAPD_CERT` / `_CLE` | — | si les deux sont donnés, le port sert du TLS implicite (à mettre alors sur 1993) |
 | `ATOMBOX_IMAPD_MAX` | `20` | connexions simultanées ; au-delà, on refuse proprement au lieu de s'effondrer |
