@@ -44,9 +44,9 @@
     ABX.log("Recherche globale plein texte",
 `SELECT m.comm_id, ts_rank(m.corps_tsv, plainto_tsquery('french', :q)) AS rang
   FROM rattachement r JOIN comm m USING (comm_id)
- WHERE r.compte_id = :moi                      -- la portée d'abord (D036)
+ WHERE r.boite_id = ANY (:mes_boites)          -- la portée d'abord (D036)
    AND m.corps_tsv @@ plainto_tsquery('french', :q)
-   AND r.sorti_le > now() - interval '2 years'  -- fenêtre par défaut : sans elle, pas d'élagage
+   AND m.date_recue > now() - interval '2 years' -- fenêtre par défaut : sans elle, pas d'élagage
  ORDER BY rang DESC LIMIT 50;`,
       "GIN sur corps_tsv, chaud sur la zone active seulement (D034) — archives sur disque lent");
   };

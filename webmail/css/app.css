@@ -1035,21 +1035,23 @@ header {
   cursor: pointer;
 }
 
-.statsel.st-a_faire {
+/* Les classes portent l'identifiant du statut, qui est en anglais (D181) — le libellé affiché
+   reste français, c'est le code qui voyage. */
+.statsel.st-todo {
   border-color: var(--warn);
   color: var(--warn);
 }
 
-.statsel.st-en_cours {
+.statsel.st-doing {
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.statsel.st-attente {
+.statsel.st-waiting {
   border-color: var(--muted);
 }
 
-.statsel.st-traite {
+.statsel.st-processed {
   border-color: var(--ok);
   color: var(--ok);
 }

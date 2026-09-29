@@ -28,8 +28,11 @@
               ${m.reponse_possible === "non" ? "disabled" : ""}>↩↩ Tous</button>
             <button class="hbtn" data-c="tr">➦ Transférer</button>
             ${ABX.Views.Message.statutHtml(m)}
-            <button class="hbtn ic" data-x="${m.lu ? "nonLu" : "lire"}"
-              title="${m.lu ? "Marquer non lu" : "Marquer lu"}">${m.lu ? "◻" : "◼"}</button>
+            <!-- MÊME BOUTON, SENS PLUS JUSTE (D175 § 2) : « à revoir » a remplacé « marquer non
+                 lu », qui effaçait la date d'ouverture — la seule trace que quelqu'un avait regardé
+                 le message. Le geste, lui, ne change pas : un clic, et il repasse en gras. -->
+            <button class="hbtn ic${m.a_revoir ? " on" : ""}" data-x="${m.lu ? "nonLu" : "lire"}"
+              title="${m.a_revoir ? "Ne plus le revoir" : m.lu ? "À revoir — il repasse en gras, sans effacer que vous l'avez ouvert" : "Marquer lu"}">${m.lu && !m.a_revoir ? "◻" : "◼"}</button>
             <button class="hbtn ic${m.drapeau ? " on" : ""}" data-x="drapeau"
               title="${m.drapeau ? "Retirer le drapeau" : "Poser un drapeau"} — synchronisé avec votre téléphone">${m.drapeau ? "⚑" : "⚐"}</button>
             <span class="pousse"></span>
@@ -66,17 +69,17 @@
     statutHtml(m) {
       if (ABX.V0()) return "";          // V0 : pas de workflow, IMAP n'a que lu/drapeau (D140)
       /* SORTI de la file (D030) : le sélecteur ne suffit pas — un message traité doit pouvoir
-         redevenir non traité d'un geste, et un archivé être désarchivé. Deux sorties, un même
-         retour : `refile` efface motif_sortie et sorti_le (D014). */
+         redevenir non traité d'un geste, et un archivé être désarchivé. Quatre sorties, un même
+         retour : `refile` efface l'ÉTAT (exit_reason) et garde les DATES, qui sont des faits. */
       if (m.motif_sortie) {
-        const archive = m.motif_sortie === "archive";
+        const archive = m.motif_sortie === "archived";
         return `<span class="tag">${archive ? "archivé" : "traité"}</span>
           <button class="hbtn" data-x="refile"
             title="${archive ? "Le remettre dans la file de travail"
                              : "Il redevient à faire, dans la file de travail"}">↺ ${
             archive ? "Désarchiver" : "Marquer non traité"}</button>${R.contexte("statut", { m })}`;
       }
-      return `<select class="statsel st-${F.esc(m.statut || "nouveau")}" id="stat"
+      return `<select class="statsel st-${F.esc(m.statut || "new")}" id="stat"
           title="Statut de traitement">
         ${ABX.Ref.statuts.map(x => `<option value="${x.id}"${x.id === m.statut ? " selected" : ""}
           >${x.ic} ${F.esc(x.label)}</option>`).join("")}</select>${R.contexte("statut", { m })}`;

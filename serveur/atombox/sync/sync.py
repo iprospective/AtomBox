@@ -17,13 +17,19 @@ def en_descendante():
     try: yield
     finally: _local.descendante = avant
 
-def drapeaux_voulus(ratt) -> tuple[list[str], list[str]]:
+def drapeaux_voulus(ratt, etat=None) -> tuple[list[str], list[str]]:
     """(à poser, à retirer) — la traduction de l'état AtomBox vers les FLAGS IMAP.
-    On ne touche QUE ce qu'on sait traduire : \\Seen et \\Flagged. Les mots-clés d'un autre
-    client ne sont jamais effacés (D140b : IMAP est la vérité, pas notre copie)."""
+
+    `etat` est la ligne read_state du membre qui relève (D175) : les drapeaux sont PERSONNELS depuis
+    que l'IMAP sortant existe, et le fournisseur n'a qu'un jeu de drapeaux pour toute la boîte. On y
+    envoie donc l'état de celui qui relève, et à défaut on ne prétend rien : sans ligne, le message
+    n'a été ni ouvert ni marqué, donc les deux drapeaux se retirent.
+
+    On ne touche QUE ce qu'on sait traduire : \\Seen et \\Flagged. Les mots-clés d'un autre client
+    ne sont jamais effacés (D140b : IMAP est la vérité, pas notre copie)."""
     poser, retirer = [], []
-    (poser if ratt.lu_le else retirer).append("\\Seen")
-    (poser if ratt.drapeau else retirer).append("\\Flagged")
+    (poser if (etat and etat.vu) else retirer).append("\\Seen")
+    (poser if (etat and etat.flagged) else retirer).append("\\Flagged")
     return poser, retirer
 
 def etat_imap(flags: list[str]) -> dict:
@@ -32,14 +38,34 @@ def etat_imap(flags: list[str]) -> dict:
             "supprime": "\\Deleted" in flags}
 
 def appliquer_descendante(s, ratt, flags: list[str]) -> list[str]:
-    """Met le rattachement au diapason des FLAGS. Rend la liste des champs modifiés — vide si
-    rien ne bouge, ce qui est le cas courant et doit rester silencieux."""
+    """Met l'état PERSONNEL du membre qui relève au diapason des FLAGS du fournisseur.
+
+    CE N'EST PLUS UNE SOURCE DE VÉRITÉ, c'est une COMPATIBILITÉ (D175 § 3). Deux conséquences qu'il
+    faut assumer explicitement :
+
+      * l'état va sur le compte qui relève, pas sur le rattachement — et s'ils sont plusieurs sur la
+        boîte, il ne va nulle part : le fournisseur ne dit pas QUI a lu, et on ne l'invente pas ;
+      * un `\\Seen` retiré chez le fournisseur ne DÉTRUIT PLUS `opened_at`. Il pose « à revoir ».
+        C'est tout le propos de D175 § 2 : le geste « marquer non lu » existe encore, mais il
+        n'efface plus la trace que quelqu'un a regardé le message.
+
+    Rend la liste des champs modifiés — vide si rien ne bouge, ce qui est le cas courant et doit
+    rester silencieux."""
+    from ..services import personal_state as perso
     e = etat_imap(flags); change = []
+    compte_id = perso.compte_releveur(s, ratt.boite_id)
+    if compte_id is None:
+        log.debug("boîte %s : pas de relève unique, les drapeaux du fournisseur ne sont imputés à personne", ratt.boite_id)
+        return change
+    etat = perso.etat_sync(s, compte_id, ratt.comm_id, ratt.boite_id)
     with en_descendante():
-        if e["lu"] and not ratt.lu_le:
-            ratt.lu_le = datetime.now(timezone.utc); change.append("lu")
-        elif not e["lu"] and ratt.lu_le:
-            ratt.lu_le = None; change.append("non lu")
-        if e["drapeau"] != bool(ratt.drapeau):
-            ratt.drapeau = e["drapeau"]; change.append("drapeau")
+        if e["lu"] and not (etat and etat.opened_at):
+            s.execute(perso.ordre_ouvrir(compte_id, ratt.comm_id, ratt.boite_id)); change.append("lu")
+        elif not e["lu"] and etat and etat.opened_at:
+            # on ne rend pas le message « non ouvert » — ça n'existe pas. On dit « à revoir ».
+            perso.poser_sync(s, compte_id, ratt.comm_id, ratt.boite_id, perso.A_REVOIR)
+            change.append("à revoir")
+        if e["drapeau"] != bool(etat.flagged if etat else False):
+            s.execute(perso.ordre_drapeau(compte_id, ratt.comm_id, ratt.boite_id, e["drapeau"]))
+            change.append("drapeau")
     return change

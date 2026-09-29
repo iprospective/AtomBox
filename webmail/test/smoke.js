@@ -73,9 +73,9 @@ const hDiff = A.Registry.render("expediteur", { m: diff });
 vrai(!hDiff.includes("adr-av"),
      "une diffusion n'est PAS affichée comme un inconnu suspect");
 vrai(hDiff.includes("diffusion"), "sa nature est dite, en clair");
-vrai(A.Corpus.tous.every(m => m.nature !== "liste" || m.statut === "nouveau"),
+vrai(A.Corpus.tous.every(m => m.nature !== "liste" || m.statut === "new"),
      "aucune diffusion n'entre dans la file de travail (D130)");
-vrai(A.Corpus.tous.some(m => m.nature === "notification" && m.statut !== "nouveau"),
+vrai(A.Corpus.tous.some(m => m.nature === "notification" && m.statut !== "new"),
      "des notifications y entrent — une facture attend un paiement");
 vrai(!A.Views.Message.repondHtml(connu),
      "aucun bandeau de réponse sur un message humain");
@@ -438,7 +438,7 @@ console.log("— actions réelles ———————————————�
 const cible = A.Corpus.par(lignes[3].dataset.id);
 eq(cible.lu, cible.lu, "état initial lu = " + cible.lu);
 A.MessageService.archiver(cible); await tick(p);
-eq(cible.motif_sortie, "archive", "archivé");
+eq(cible.motif_sortie, "archived", "archivé");
 vrai(A.Corpus.cnt("archives").t >= 1, "la vue Archives compte le message");
 vrai(A.Corpus.vue({ id: dossier.id, kind: "virtuel" }).includes(cible),
      "un message archivé reste dans son dossier");
@@ -524,7 +524,9 @@ eq(A.Corpus.filtrer(dossierAxe, "file", "date_desc", "out").every(m => m.sens ==
 eq(A.Corpus.filtrer(dossierAxe, "file", "date_desc", "in").every(m => m.sens === "in"), true,
    "et « reçus » que les entrants");
 const croise = A.Corpus.filtrer(dossierAxe, "non_lus", "date_desc", "in");
-eq(croise.every(m => !m.lu && m.sens === "in"), true, "sens et filtre se CROISENT");
+eq(croise.every(m => (!m.lu || m.a_revoir) && m.sens === "in"), true, "sens et filtre se CROISENT");
+vrai(croise.some(m => m.lu && m.a_revoir) || A.Corpus.tous.every(m => !m.a_revoir),
+     "« non lus » montre aussi ce qui est À REVOIR : même geste, même gras, sans effacer l'ouverture (D175 § 2)");
 eq(A.Views.List.variante(sortants[0]), "sent",
    "un sortant s'affiche comme dans Envoyés, quel que soit son dossier");
 vrai(A.Registry.render("message.card", { m: sortants[0], variant: "sent" }).includes("À :"),
@@ -609,20 +611,20 @@ vrai(rendu.includes("réseau — aller-retour"), "et marque le passage du résea
 console.log("— workflow de statut ————————————————————————————");
 const w = A.Corpus.par(lignes[6].dataset.id);
 eq(w.statut, w.statut, "statut initial : " + w.statut);
-A.MessageService.statuer(w, "a_faire"); await tick(p);
-eq(w.statut, "a_faire", "passé à faire");
+A.MessageService.statuer(w, "todo"); await tick(p);
+eq(w.statut, "todo", "passé à faire");
 eq(w.motif_sortie, null, "à faire ne sort PAS de la file");
 const qw = A.QueryLog.entrees[0];
-vrai(qw.etapes.some(e => (e.detail || "").includes("SET statut")), "le statut est une colonne");
+vrai(qw.etapes.some(e => (e.detail || "").includes("SET status")), "le statut est une colonne");
 vrai(qw.etapes.some(e => e.t === "note" && (e.index || "").includes("un tag est ouvert")),
      "la trace explique pourquoi ce n'est pas un tag");
-A.MessageService.statuer(w, "en_cours"); await tick(p);
-eq(w.statut, "en_cours", "puis en cours");
-A.MessageService.statuer(w, "traite"); await tick(p);
-eq(w.motif_sortie, "traite", "« traité » sort de la file");
+A.MessageService.statuer(w, "doing"); await tick(p);
+eq(w.statut, "doing", "puis en cours");
+A.MessageService.statuer(w, "processed"); await tick(p);
+eq(w.motif_sortie, "processed", "« traité » sort de la file");
 vrai(w.sorti_le > 0, "et pose sorti_le");
 vrai(A.QueryLog.entrees[0].etapes.some(e => e.warn), "en avertissant du changement de partition");
-A.MessageService.statuer(w, "a_faire"); await tick(p);
+A.MessageService.statuer(w, "todo"); await tick(p);
 eq(w.motif_sortie, null, "revenir en arrière remet dans la file (Q009)");
 vrai(A.Corpus.aFaire().includes(w), "il apparaît dans la file de travail");
 eq(A.Corpus.filtrer(dossierAxe, "file", "date_desc", "tous", "en_cours")
@@ -844,17 +846,17 @@ console.log("— sortir de la file, et y revenir (D030) ————————
   A.Controllers.Tabs.ouvrir({ type: "msg", id: m.id }); await tick(); await tick();
   const detail = () => p.doc.getElementById("detail").innerHTML;
   vrai(detail().includes('id="stat"'), "tant qu'il est dans la file, le sélecteur de statut");
-  await A.MessageService.statuer(m, "traite"); await tick();
-  eq(m.motif_sortie, "traite", "« traité » sort de la file (D014)");
+  await A.MessageService.statuer(m, "processed"); await tick();
+  eq(m.motif_sortie, "processed", "« traité » sort de la file (D014)");
   A.Controllers.Message.peindre(A.Store.ui.tabs.find(t => t.id === m.id)); await tick();
   vrai(detail().includes("Marquer non traité"), "un message traité propose de redevenir non traité");
   vrai(!detail().includes('id="stat"'), "et le sélecteur laisse la place au retour");
   vrai(!detail().includes("Archiver sans traiter"), "on n'archive pas ce qui est déjà sorti");
   clic(p.doc.getElementById("detail").querySelector('[data-x="refile"]')); await tick(); await tick();
   eq(m.motif_sortie, null, "il revient dans la file");
-  eq(m.statut, "a_faire", "et il n'y revient pas « traité » : il redevient à faire");
+  eq(m.statut, "todo", "et il n'y revient pas « traité » : il redevient à faire");
   /* la CARTE de la liste dit la même chose que le message ouvert : ce qui est sorti propose d'y revenir */
-  await A.MessageService.statuer(m, "traite"); await tick();
+  await A.MessageService.statuer(m, "processed"); await tick();
   const carte = A.Registry.render("message.card.actions", { m });
   vrai(carte.includes('data-act="refile"') && carte.includes("Marquer non traité"),
        "dans la liste aussi, un message traité propose d'y revenir");
@@ -866,7 +868,7 @@ console.log("— sortir de la file, et y revenir (D030) ————————
   await A.Controllers.List.charger(); A.Controllers.List.peindre();
   vrai(p.doc.getElementById("list").innerHTML.includes('data-act="refile"'), "et la liste « traités / archivés » le montre");
   A.Store.ui.filtre = "file"; await A.Controllers.List.charger();
-  const cArchive = A.Registry.render("message.card.actions", { m: { ...m, motif_sortie: "archive" } });
+  const cArchive = A.Registry.render("message.card.actions", { m: { ...m, motif_sortie: "archived" } });
   vrai(cArchive.includes("Désarchiver"), "un archivé propose de désarchiver");
   await A.MessageService.refile(m); await tick();
   await A.MessageService.archiver(m); await tick();
@@ -966,7 +968,7 @@ console.log("— raccourcis clavier (F111) ————————————�
 
   const vise = A.Api.cache.message(liste[0].id);
   touche("e"); await tick();
-  eq(A.Api.cache.message(vise.id).motif_sortie, "traite", "e marque traité le message ouvert");
+  eq(A.Api.cache.message(vise.id).motif_sortie, "processed", "e marque traité le message ouvert");
   touche("u"); await tick();
   eq(A.Api.cache.message(vise.id).motif_sortie, null, "u le remet dans la file");
 

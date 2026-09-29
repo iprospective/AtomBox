@@ -23,9 +23,10 @@
         Nav.peindre();
         const i2 = D.byId("navq"); i2.focus(); i2.setSelectionRange(pos, pos);
         if (ui.navq.length === 1) ABX.log("Recherche dans l'arborescence",
-`SELECT axe_id, valeur, count(*) FILTER (WHERE r.lu_le IS NULL)
+`SELECT axe_id, valeur, count(*) FILTER (WHERE s.opened_at IS NULL)
   FROM tag t JOIN comm_tag mt USING (tag_id) JOIN rattachement r USING (comm_id)
- WHERE r.compte_id = :moi AND t.valeur ILIKE :q || '%'
+  LEFT JOIN read_state s ON s.comm_id = r.comm_id AND s.boite_id = r.boite_id AND s.compte_id = :moi
+ WHERE r.boite_id = ANY (:mes_boites) AND t.valeur ILIKE :q || '%'
  GROUP BY axe_id, valeur LIMIT 50;`,
           "index (valeur text_pattern_ops) — sinon balayage de tous les tags", true);
       };
@@ -133,13 +134,17 @@
     logCompteurs() {
       ABX.log("Compteurs de non-lus de TOUTE l'arborescence",
 `-- une seule requête pour les ~300 branches, pas une par dossier
-SELECT t.axe_id, t.valeur, count(*) AS non_lus
+SELECT t.axe_id, t.valeur, count(*) AS a_voir
   FROM rattachement r
   JOIN comm_tag mt ON mt.comm_id = r.comm_id
   JOIN tag t          ON t.tag_id      = mt.tag_id
- WHERE r.compte_id = :moi AND r.lu_le IS NULL AND r.sorti_le IS NULL
+ WHERE r.boite_id = ANY (:mes_boites) AND r.exit_reason IS NULL
+   AND NOT EXISTS (SELECT 1 FROM read_state s
+                    WHERE s.comm_id = r.comm_id AND s.boite_id = r.boite_id
+                      AND s.compte_id = :moi AND s.opened_at IS NOT NULL)
  GROUP BY t.axe_id, t.valeur;`,
-        "index (compte_id, lu_le) partiel + (tag_id, comm_id) — un seul parcours groupé");
+        "index (compte_id, comm_id, boite_id) sur read_state — c'est sa clé primaire — plus " +
+        "(tag_id, comm_id) : un seul parcours groupé, et l'anti-jointure ne lit qu'une table creuse");
     },
   };
 

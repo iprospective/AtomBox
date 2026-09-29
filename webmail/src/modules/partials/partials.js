@@ -13,8 +13,11 @@
   R.define("tag.chip", ({ tag }) => ABX.V0() ? "" :
     `<span class="tag ax">${F.esc(tag.axe)}=${F.esc(tag.val)}</span>`);
 
+  /* Les CINQ boîtes aux lettres sont les valeurs d'une colonne (D175 § 4) : la puce les nomme,
+     et « rien » veut dire INBOX — il reste à traiter. */
   R.define("statut.chip", ({ m }) => ABX.V0() ? "" : m.motif_sortie
-    ? `<span class="tag">${m.motif_sortie === "archive" ? "archivé" : "traité"}</span>` : "");
+    ? `<span class="tag">${ { processed:"traité", archived:"archivé", deleted:"corbeille",
+                              junk:"indésirable" }[m.motif_sortie] || m.motif_sortie }</span>` : "");
 
   /* ---- l'expediteur, normalise (D126) ------------------------------------
      Le nom affiche n'est PAS une identite : il est choisi par l'emetteur et rien
@@ -100,7 +103,7 @@
         ? `<button data-act="nonJunk" title="Ce n'est pas un indésirable">✓ ham</button>
            <button data-act="corbeille" title="Mettre à la corbeille">🗑</button>`
         : m.motif_sortie
-          ? `<button data-act="refile" title="${m.motif_sortie === "archive"
+          ? `<button data-act="refile" title="${m.motif_sortie === "archived"
                ? "Désarchiver — le remettre dans la file" : "Marquer non traité — il redevient à faire"}">↺</button>
            ${jetables}`
           : `<button data-act="traiter" title="Marquer traité">✓</button>
@@ -111,7 +114,9 @@
 
   R.define("message.card", ctx => {
     const { m, selection } = ctx;
-    return `<div class="msg${m.lu ? "" : " unread"}${selection === m.id ? " sel" : ""}"
+    /* LE GRAS DIT « À VOIR » : jamais ouvert, OU remis de côté par « à revoir ». C'est la même
+       règle que celle du compteur côté serveur (a_voir_par) — D166 interdit qu'ils divergent. */
+    return `<div class="msg${m.lu && !m.a_revoir ? "" : " unread"}${selection === m.id ? " sel" : ""}"
         data-id="${F.esc(m.id)}">
         ${R.render("message.card.header", ctx)}
         ${R.render("message.card.body", ctx)}

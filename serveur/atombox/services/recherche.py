@@ -21,10 +21,14 @@ async def rechercher(s: AsyncSession, compte: Compte, q: str, sortis: bool = Fal
     stmt = (select(Rattachement, Comm).join(Comm, Comm.comm_id == Rattachement.comm_id)
             .where(Rattachement.boite_id.in_(boites), or_(texte.op("@@")(requete), Comm.from_adresse.ilike("%" + q + "%"), Comm.from_nom.ilike("%" + q + "%")))
             .order_by(func.ts_rank(texte, requete).desc(), Comm.date_recue.desc()).limit(limite))
-    if not sortis: stmt = stmt.where(Rattachement.motif_sortie.is_(None))
+    if not sortis: stmt = stmt.where(Rattachement.exit_reason.is_(None))
     adresses = {b: (await s.get(Adresse, (await s.get(Boite, b)).adresse_id)).adresse_complete for b in boites}
+    lignes = (await s.execute(stmt)).all()
+    from . import personal_state as perso
+    etats = await perso.etats_de(s, compte.compte_id, [c.comm_id for _, c in lignes])
     vus, out = set(), []
-    for r, c in (await s.execute(stmt)).all():
+    for r, c in lignes:
         if c.comm_id in vus: continue
-        vus.add(c.comm_id); out.append(svcm.serialiser(r, c, ds, adresses.get(r.boite_id)))
+        vus.add(c.comm_id)
+        out.append(svcm.serialiser(r, c, ds, adresses.get(r.boite_id), etat=etats.get((r.comm_id, r.boite_id))))
     return out

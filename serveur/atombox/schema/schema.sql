@@ -1,6 +1,6 @@
 -- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py depuis le dictionnaire des données.
 -- NE PAS ÉDITER : la source est .mmi-pm/docs/dict/*.yml (F114, D154). PostgreSQL ≥ 14 (D027).
--- 36 tables, 71 clés étrangères, 60 index, 8 unicités. Identifiants : uuid v7 engendrés par
+-- 40 tables, 88 clés étrangères, 74 index, 9 unicités. Identifiants : uuid v7 engendrés par
 -- l'application (D145). Le tronc comm n'est PAS partitionné en V0 : la partition par canal (D138)
 -- se pose quand un second canal existe — l'uuid rend la clé indépendante de la partition.
 
@@ -256,32 +256,89 @@ CREATE TABLE "boite" (
   CONSTRAINT "ck_boite_type" CHECK ("type" IN ('personnelle', 'partagee', 'alias', 'collecte', 'groupe'))
 );
 
--- rattachement — LE lien entre une communication et une boîte/un compte : c'est ici que vivent les flags de lecture, le statut 
+-- rattachement — LE lien entre une communication et une boîte : c'est ici que vit l'ACTE COLLECTIF — le statut de traitement, l
 CREATE TABLE "rattachement" (
   "comm_id" uuid NOT NULL,
   "boite_id" uuid NOT NULL,
   "compte_id" uuid,
   "correspondant_id" uuid,
-  "lu_le" timestamptz,
   "repondu_le" timestamptz,
   "transfere_le" timestamptz,
-  "drapeau" boolean NOT NULL,
-  "statut" text NOT NULL,
-  "sorti_le" timestamptz,
-  "motif_sortie" text,
-  "supprime_par" uuid,
+  "status" text NOT NULL,
+  "status_at" timestamptz,
+  "status_by" uuid,
+  "exit_reason" text,
+  "processed_at" timestamptz,
+  "processed_by" uuid,
+  "archived_at" timestamptz,
+  "archived_by" uuid,
+  "deleted_at" timestamptz,
+  "deleted_by" uuid,
+  "junk_at" timestamptz,
+  "junk_by" uuid,
   "restaurable_jusqu_au" timestamptz,
   "dossier_id" uuid,
   "dossier_origine_id" uuid,
   "uid_imap" bigint,
   "uid_servi" bigint,
   "personnel" boolean NOT NULL,
-  "reveil_le" timestamptz,
   "echeance_le" timestamptz,
   "gele" boolean NOT NULL,
   CONSTRAINT "pk_rattachement" PRIMARY KEY ("comm_id", "boite_id"),
-  CONSTRAINT "ck_rattachement_statut" CHECK ("statut" IN ('nouveau', 'a_faire', 'en_cours', 'attente', 'traite')),
-  CONSTRAINT "ck_rattachement_motif_sortie" CHECK ("motif_sortie" IN ('traite', 'archive', 'supprime'))
+  CONSTRAINT "ck_rattachement_status" CHECK ("status" IN ('new', 'todo', 'doing', 'waiting', 'processed')),
+  CONSTRAINT "ck_rattachement_exit_reason" CHECK ("exit_reason" IN ('processed', 'archived', 'deleted', 'junk'))
+);
+
+-- read_state — LES FAITS DE LECTURE, par personne (D175 § 1) : ouvert quand, revu quand, combien de fois, et le drapeau — per
+CREATE TABLE "read_state" (
+  "compte_id" uuid NOT NULL,
+  "comm_id" uuid NOT NULL,
+  "boite_id" uuid NOT NULL,
+  "opened_at" timestamptz,
+  "last_seen_at" timestamptz,
+  "open_count" bigint NOT NULL,
+  "flagged" boolean NOT NULL,
+  CONSTRAINT "pk_read_state" PRIMARY KEY ("compte_id", "comm_id", "boite_id")
+);
+
+-- marker — LA DÉCLARATION d'un marqueur (D178) : son code, ce qu'il porte, sa portée, qui peut le poser. Le workflow est 
+CREATE TABLE "marker" (
+  "marker_id" uuid NOT NULL,
+  "code" text NOT NULL,
+  "libelle" text NOT NULL,
+  "scope" text NOT NULL,
+  "value_type" text NOT NULL,
+  "domaine_id" uuid,
+  "options" jsonb,
+  "actif" boolean NOT NULL,
+  "integre" boolean NOT NULL,
+  CONSTRAINT "pk_marker" PRIMARY KEY ("marker_id"),
+  CONSTRAINT "ck_marker_scope" CHECK ("scope" IN ('collective', 'personal')),
+  CONSTRAINT "ck_marker_value_type" CHECK ("value_type" IN ('presence', 'moment', 'choix'))
+);
+
+-- marker_collective — Un marqueur de portée COLLECTIVE posé sur un message dans une boîte : signé, daté (D178).
+CREATE TABLE "marker_collective" (
+  "comm_id" uuid NOT NULL,
+  "boite_id" uuid NOT NULL,
+  "marker_id" uuid NOT NULL,
+  "set_at" timestamptz NOT NULL,
+  "set_by" uuid,
+  "due_at" timestamptz,
+  "value" text,
+  CONSTRAINT "pk_marker_collective" PRIMARY KEY ("comm_id", "boite_id", "marker_id")
+);
+
+-- marker_personal — Un marqueur de portée PERSONNELLE posé par un compte sur un message dans une boîte (D178) : « à revoir », mise
+CREATE TABLE "marker_personal" (
+  "compte_id" uuid NOT NULL,
+  "comm_id" uuid NOT NULL,
+  "boite_id" uuid NOT NULL,
+  "marker_id" uuid NOT NULL,
+  "set_at" timestamptz NOT NULL,
+  "due_at" timestamptz,
+  "value" text,
+  CONSTRAINT "pk_marker_personal" PRIMARY KEY ("compte_id", "comm_id", "boite_id", "marker_id")
 );
 
 -- acces — Un droit d'un compte sur une boîte (ou une identité), DATÉ : début, fin, rôle, révocation tracée. La trace ne 
@@ -292,6 +349,8 @@ CREATE TABLE "acces" (
   "debut" timestamptz NOT NULL,
   "fin" timestamptz,
   "accorde_par" uuid NOT NULL,
+  "stands_in_for" uuid,
+  "options" jsonb,
   CONSTRAINT "pk_acces" PRIMARY KEY ("compte_id", "boite_id"),
   CONSTRAINT "ck_acces_role" CHECK ("role" IN ('lecteur', 'membre', 'gestionnaire', 'admin_domaine', 'admin_instance'))
 );
@@ -490,7 +549,7 @@ CREATE TABLE "journal" (
   "cible_id" uuid NOT NULL,
   "details" jsonb,
   CONSTRAINT "pk_journal" PRIMARY KEY ("journal_id"),
-  CONSTRAINT "ck_journal_action" CHECK ("action" IN ('lu', 'traite', 'partage', 'revoque', 'supprime', 'restaure', 'valide_expediteur', 'desabonne', 'vers_personnel', 'libere_quarantaine', 'admin_lecture'))
+  CONSTRAINT "ck_journal_action" CHECK ("action" IN ('opened', 'processed', 'archived', 'deleted', 'junked', 'refiled', 'status_changed', 'marked', 'shared', 'revoked', 'restored', 'sender_trusted', 'unsubscribed', 'to_personal', 'quarantine_released', 'admin_read'))
 );
 
 -- modele — Un MODÈLE de message : gabarit de sujet et de corps avec variables, une catégorie (commande fournisseur, courr
@@ -578,12 +637,29 @@ ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_comm_id" FOREIGN KEY 
 ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_boite_id" FOREIGN KEY ("boite_id") REFERENCES "boite" ("boite_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_compte_id" FOREIGN KEY ("compte_id") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_correspondant_id" FOREIGN KEY ("correspondant_id") REFERENCES "correspondant" ("correspondant_id") DEFERRABLE INITIALLY IMMEDIATE;
-ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_supprime_par" FOREIGN KEY ("supprime_par") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_status_by" FOREIGN KEY ("status_by") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_processed_by" FOREIGN KEY ("processed_by") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_archived_by" FOREIGN KEY ("archived_by") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_deleted_by" FOREIGN KEY ("deleted_by") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_junk_by" FOREIGN KEY ("junk_by") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_dossier_id" FOREIGN KEY ("dossier_id") REFERENCES "dossier" ("dossier_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "rattachement" ADD CONSTRAINT "fk_rattachement_dossier_origine_id" FOREIGN KEY ("dossier_origine_id") REFERENCES "dossier" ("dossier_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "read_state" ADD CONSTRAINT "fk_read_state_compte_id" FOREIGN KEY ("compte_id") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "read_state" ADD CONSTRAINT "fk_read_state_comm_id" FOREIGN KEY ("comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "read_state" ADD CONSTRAINT "fk_read_state_boite_id" FOREIGN KEY ("boite_id") REFERENCES "boite" ("boite_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "marker" ADD CONSTRAINT "fk_marker_domaine_id" FOREIGN KEY ("domaine_id") REFERENCES "domaine" ("domaine_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "marker_collective" ADD CONSTRAINT "fk_marker_collective_comm_id" FOREIGN KEY ("comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "marker_collective" ADD CONSTRAINT "fk_marker_collective_boite_id" FOREIGN KEY ("boite_id") REFERENCES "boite" ("boite_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "marker_collective" ADD CONSTRAINT "fk_marker_collective_marker_id" FOREIGN KEY ("marker_id") REFERENCES "marker" ("marker_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "marker_collective" ADD CONSTRAINT "fk_marker_collective_set_by" FOREIGN KEY ("set_by") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "marker_personal" ADD CONSTRAINT "fk_marker_personal_compte_id" FOREIGN KEY ("compte_id") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "marker_personal" ADD CONSTRAINT "fk_marker_personal_comm_id" FOREIGN KEY ("comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "marker_personal" ADD CONSTRAINT "fk_marker_personal_boite_id" FOREIGN KEY ("boite_id") REFERENCES "boite" ("boite_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "marker_personal" ADD CONSTRAINT "fk_marker_personal_marker_id" FOREIGN KEY ("marker_id") REFERENCES "marker" ("marker_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "acces" ADD CONSTRAINT "fk_acces_compte_id" FOREIGN KEY ("compte_id") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "acces" ADD CONSTRAINT "fk_acces_boite_id" FOREIGN KEY ("boite_id") REFERENCES "boite" ("boite_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "acces" ADD CONSTRAINT "fk_acces_accorde_par" FOREIGN KEY ("accorde_par") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "acces" ADD CONSTRAINT "fk_acces_stands_in_for" FOREIGN KEY ("stands_in_for") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "lecture_groupe" ADD CONSTRAINT "fk_lecture_groupe_compte_id" FOREIGN KEY ("compte_id") REFERENCES "compte" ("compte_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "lecture_groupe" ADD CONSTRAINT "fk_lecture_groupe_boite_id" FOREIGN KEY ("boite_id") REFERENCES "boite" ("boite_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "lecture_groupe" ADD CONSTRAINT "fk_lecture_groupe_dernier_message_lu" FOREIGN KEY ("dernier_message_lu") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
@@ -622,6 +698,7 @@ ALTER TABLE "reinitialisation" ADD CONSTRAINT "uq_reinitialisation_jeton_emprein
 ALTER TABLE "adresse" ADD CONSTRAINT "uq_adresse_adresse_complete" UNIQUE ("adresse_complete");
 ALTER TABLE "domaine" ADD CONSTRAINT "uq_domaine_nom_ascii" UNIQUE ("nom_ascii");
 ALTER TABLE "compte" ADD CONSTRAINT "uq_compte_login" UNIQUE ("login");
+ALTER TABLE "marker" ADD CONSTRAINT "uq_marker_code" UNIQUE ("code");
 ALTER TABLE "tag" ADD CONSTRAINT "uq_tag_axe_id_valeur" UNIQUE ("axe_id", "valeur");
 ALTER TABLE "dossier" ADD CONSTRAINT "uq_dossier_boite_id_alias_imap" UNIQUE ("boite_id", "alias_imap");
 ALTER TABLE "dmarc_rapport" ADD CONSTRAINT "uq_dmarc_rapport_emetteur_report_id" UNIQUE ("emetteur", "report_id");
@@ -655,11 +732,25 @@ CREATE INDEX "ix_boite_domaine_id" ON "boite" ("domaine_id");
 CREATE INDEX "ix_rattachement_boite_id" ON "rattachement" ("boite_id");
 CREATE INDEX "ix_rattachement_compte_id" ON "rattachement" ("compte_id");
 CREATE INDEX "ix_rattachement_correspondant_id" ON "rattachement" ("correspondant_id");
-CREATE INDEX "ix_rattachement_supprime_par" ON "rattachement" ("supprime_par");
+CREATE INDEX "ix_rattachement_status_by" ON "rattachement" ("status_by");
+CREATE INDEX "ix_rattachement_processed_by" ON "rattachement" ("processed_by");
+CREATE INDEX "ix_rattachement_archived_by" ON "rattachement" ("archived_by");
+CREATE INDEX "ix_rattachement_deleted_by" ON "rattachement" ("deleted_by");
+CREATE INDEX "ix_rattachement_junk_by" ON "rattachement" ("junk_by");
 CREATE INDEX "ix_rattachement_dossier_id" ON "rattachement" ("dossier_id");
 CREATE INDEX "ix_rattachement_dossier_origine_id" ON "rattachement" ("dossier_origine_id");
+CREATE INDEX "ix_read_state_comm_id" ON "read_state" ("comm_id");
+CREATE INDEX "ix_read_state_boite_id" ON "read_state" ("boite_id");
+CREATE INDEX "ix_marker_domaine_id" ON "marker" ("domaine_id");
+CREATE INDEX "ix_marker_collective_boite_id" ON "marker_collective" ("boite_id");
+CREATE INDEX "ix_marker_collective_marker_id" ON "marker_collective" ("marker_id");
+CREATE INDEX "ix_marker_collective_set_by" ON "marker_collective" ("set_by");
+CREATE INDEX "ix_marker_personal_comm_id" ON "marker_personal" ("comm_id");
+CREATE INDEX "ix_marker_personal_boite_id" ON "marker_personal" ("boite_id");
+CREATE INDEX "ix_marker_personal_marker_id" ON "marker_personal" ("marker_id");
 CREATE INDEX "ix_acces_boite_id" ON "acces" ("boite_id");
 CREATE INDEX "ix_acces_accorde_par" ON "acces" ("accorde_par");
+CREATE INDEX "ix_acces_stands_in_for" ON "acces" ("stands_in_for");
 CREATE INDEX "ix_lecture_groupe_boite_id" ON "lecture_groupe" ("boite_id");
 CREATE INDEX "ix_lecture_groupe_dernier_message_lu" ON "lecture_groupe" ("dernier_message_lu");
 CREATE INDEX "ix_axe_application_id" ON "axe" ("application_id");

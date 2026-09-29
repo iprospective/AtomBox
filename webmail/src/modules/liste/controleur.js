@@ -34,8 +34,8 @@
     logOuverture(folder) {
       const vue = C.VUES[folder.id];
       const where = folder.kind === "special"
-          ? (vue ? `r.sorti_le IS NOT NULL AND r.motif_sortie = '${
-                     folder.id === "archives" ? "archive" : "traite"}'`
+          ? (vue ? `r.exit_reason = '${
+                     { archives:"archived", traites:"processed", junk:"junk", trash:"deleted" }[folder.id]}'`
                  : `r.boite_id = :boite AND <vue ${folder.id}>`)
         : folder.kind === "user" ? `r.dossier_id = :dossier`
         : folder.kind === "axe"  ? `t.axe_id = :axe            -- récursif : l'axe sans la valeur`
@@ -45,14 +45,16 @@
         ? "\n  JOIN comm_tag mt USING (comm_id) JOIN tag t USING (tag_id)" : "";
       ABX.log("Ouvrir « " + folder.label + " »",
 `-- la liste ne touche QUE le tronc : aucune jointure vers comm_email (D138)
-SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
+-- l'état de LECTURE est personnel (D175) : une jointure externe, creuse par nature
+SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, s.opened_at, s.flagged
   FROM rattachement r JOIN comm m USING (comm_id)${jointure}
- WHERE r.compte_id = :moi AND ${where}
+  LEFT JOIN read_state s ON s.comm_id = r.comm_id AND s.boite_id = r.boite_id AND s.compte_id = :moi
+ WHERE r.boite_id = ANY (:mes_boites) AND ${where}
  ORDER BY m.date_reception DESC
  LIMIT 50;`,
         folder.kind === "axe" || folder.kind === "virtuel" || folder.kind === "perso"
           ? "index (tag_id, sorti_le DESC, comm_id) — D016, date dénormalisée dans la liaison"
-          : "index (compte_id, sorti_le DESC) — D036 : la portée EST le chemin d'accès" +
+          : "index (boite_id, exit_reason, date_reception DESC) — D036 : la portée EST le chemin d'accès" +
             " · partition (type='email', période) : ni le chat ni les canaux à venir ne sont balayés (D138/D013)");
     },
 
@@ -145,11 +147,19 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
     },
 
     logFiltre(f) {
-      if (f === "non_lus") ABX.log("Filtre « non lus »",
-`SELECT … FROM rattachement r WHERE r.compte_id = :moi
-   AND r.lu_le IS NULL AND <portée du dossier> ORDER BY m.date_reception DESC LIMIT 50;`,
-        "index PARTIEL (compte_id, sorti_le DESC) WHERE lu_le IS NULL — sa taille est celle du " +
-        "non-lu, pas celle du corpus");
+      if (f === "non_lus") ABX.log("Filtre « à voir »",
+`SELECT … FROM rattachement r
+ WHERE <portée du dossier>
+   AND (NOT EXISTS (SELECT 1 FROM read_state s
+                     WHERE s.comm_id = r.comm_id AND s.boite_id = r.boite_id
+                       AND s.compte_id = :moi AND s.opened_at IS NOT NULL)
+        OR EXISTS (SELECT 1 FROM marker_personal p JOIN marker k USING (marker_id)
+                    WHERE p.comm_id = r.comm_id AND p.boite_id = r.boite_id
+                      AND p.compte_id = :moi AND k.code = 'to_review'))
+ ORDER BY m.date_reception DESC LIMIT 50;`,
+        "DEUX termes, et c'est D175 § 2 : jamais ouvert PAR MOI, ou remis de côté. Les deux tables " +
+        "sont creuses, donc leur taille est celle du non-lu, pas celle du corpus. Et le compteur " +
+        "évalue la MÊME expression que la liste — D166 interdit qu'ils disent deux choses");
       else if (f === "pj") ABX.log("Filtre « avec pièce jointe »",
         `SELECT … WHERE m.nb_pieces_jointes > 0 …;`,
         "nb_pieces_jointes dénormalisé (D029) — sinon un COUNT par ligne de liste");
@@ -161,12 +171,14 @@ SELECT m.comm_id, m.from_nom, m.sujet, m.snippet, m.nb_pieces_jointes, r.lu_le
  ORDER BY m.taille_octets DESC LIMIT 50;`,
         "⚠ aucun index sur taille_octets : acceptable au clic, PAS pour balayer le corpus. " +
         "L'écran de recompression devra partir de piece_jointe (octets DESC), pas de message", true);
-      else if (f === "sortis") ABX.log("Filtre « traités / archivés »",
-`SELECT … FROM rattachement r WHERE r.compte_id = :moi
-   AND r.sorti_le IS NOT NULL AND <portée du dossier>
- ORDER BY r.sorti_le DESC LIMIT 50;`,
+      else if (f === "sortis") ABX.log("Filtre « sortis de la file »",
+`SELECT … FROM rattachement r
+ WHERE r.exit_reason IS NOT NULL AND <portée du dossier>
+ ORDER BY coalesce(r.processed_at, r.archived_at, r.deleted_at, r.junk_at) DESC LIMIT 50;`,
         "⚠ ces lignes sont dans une AUTRE partition que la file (D014/D030) : deux plans, deux " +
-        "index. C'est voulu — mais un écran qui mélange les deux paie les deux", true);
+        "index. C'est voulu — mais un écran qui mélange les deux paie les deux. Le `coalesce` dit " +
+        "quelque chose de plus : il n'y a plus UNE date de sortie, mais une par transition — un " +
+        "message est généralement traité puis archivé des années après (D175 § 4 bis)", true);
     },
   };
 

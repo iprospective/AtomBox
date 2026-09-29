@@ -88,14 +88,18 @@
      se retrouver avec « à faire » dans le même espace de noms que « Belair SAS »,
      et une application connectée capable de vider votre file de travail.
 
-     `lu_le` reste à part : c'est un FAIT daté (D041), pas un état — un message peut
-     être lu et à faire, non lu et déjà pris en charge par un collègue. */
+     La LECTURE reste à part : c'est un FAIT daté, et il est PERSONNEL (D175) — un message peut
+     être lu et à faire, non lu et déjà pris en charge par un collègue. Le statut, lui, est
+     collectif : un par message et par boîte.
+
+     Les identifiants sont en anglais (D181), les libellés en français : c'est le code qui voyage
+     entre le serveur, la base et ici, pas le mot affiché. */
   const STATUTS = [
-    { id:"nouveau",  label:"Nouveau",    ic:"○", ordre:0 },
-    { id:"a_faire",  label:"À faire",    ic:"◔", ordre:1 },
-    { id:"en_cours", label:"En cours",   ic:"◑", ordre:2 },
-    { id:"attente",  label:"En attente", ic:"◕", ordre:3, note:"relance attendue" },
-    { id:"traite",   label:"Traité",     ic:"●", ordre:4, sortie:"traite" },
+    { id:"new",       label:"Nouveau",    ic:"○", ordre:0 },
+    { id:"todo",      label:"À faire",    ic:"◔", ordre:1 },
+    { id:"doing",     label:"En cours",   ic:"◑", ordre:2 },
+    { id:"waiting",   label:"En attente", ic:"◕", ordre:3, note:"relance attendue" },
+    { id:"processed", label:"Traité",     ic:"●", ordre:4, sortie:"processed" },
   ];
   const statut = id => STATUTS.find(s => s.id === id) || STATUTS[0];
 

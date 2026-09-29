@@ -41,7 +41,7 @@ if [ -f "$ENV_FICHIER" ]; then
   [ -n "$avant_listen" ] && ATOMBOX_IMAPD_LISTEN="$avant_listen"
   [ -n "$avant_port" ] && ATOMBOX_IMAPD_PORT="$avant_port"
 fi
-HOTE="${ATOMBOX_IMAPD_LISTEN:-${ATOMBOX_IMAPD_ECOUTE:-127.0.0.1}}"   # ECOUTE : nom d'hier (D181)
+HOTE="${ATOMBOX_IMAPD_LISTEN:-127.0.0.1}"
 PORT="${ATOMBOX_IMAPD_PORT:-1143}"
 PYTHON="$SERVEUR/.venv/bin/python"
 
