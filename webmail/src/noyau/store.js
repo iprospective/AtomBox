@@ -15,7 +15,7 @@
   const CLE = "abx.db.v3", VERSION = 3, ANCIENNES = ["abx.db.v2"];
 
   const Store = {
-    /* delta d'état : id -> { lu, sorti_le, motif_sortie, dossier, suppr } */
+    /* delta d'état : id -> { lu, a_revoir, drapeau, motif_sortie, dossier, suppr } */
     ratt: {},
     /* messages écrits ici : envoyés et brouillons — eux n'ont pas de fixture */
     crees: [],

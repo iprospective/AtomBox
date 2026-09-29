@@ -12,8 +12,21 @@
      de suite (l'interface répond) ; la promesse confirme, et les compteurs se
      rechargent. En prod c'est la latence réseau ; en POC c'est immédiat — mais
      l'interface est déjà écrite pour l'attente. */
+  /* LES DATES SUIVENT LA TRANSITION (D175) : c'est le serveur qui les pose, dans la case de l'état
+     où elle a eu lieu. On les REFLÈTE ici pour que l'écran réponde tout de suite, sans les
+     ENVOYER — envoyer un `sorti_le` nu, c'était pouvoir dater un traitement sans dire qu'il avait
+     eu lieu. Et l'on ne touche PAS les dates au retour dans la file : elles sont des faits. */
+  const DATE_DE = { processed:"traite_le", archived:"archive_le", deleted:"supprime_le", junk:"junk_le" };
+  function refleterSortie(m, valeur) {
+    const champ = DATE_DE[valeur];
+    if (!champ) { m.sorti_le = null; return; }
+    m[champ] = m[champ] || Date.now();
+    m.sorti_le = m[champ];
+  }
+
   function appliquer(m, patch, log) {
     Object.assign(m, patch);                       // optimiste : l'écran répond
+    if ("motif_sortie" in patch) refleterSortie(m, patch.motif_sortie);
     const p = patch.suppr ? ABX.Api.detacher(m.id) : ABX.Api.patcher(m.id, patch);
     if (typeof log === "function") log(m);
     else if (log) ABX.log(...(Array.isArray(log) ? log : [log]));
@@ -36,46 +49,62 @@
     /* `muet` : l'ouverture d'un message décrit déjà cette écriture dans sa
        cascade — inutile de la journaliser deux fois. */
     lire: (m, muet) => appliquer(m, { lu: true }, muet ? null : ["Marquer lu",
-`UPDATE rattachement SET lu_le = now()
- WHERE comm_id = :id AND compte_id = :moi AND lu_le IS NULL;`,
-      "une ÉCRITURE à chaque ouverture — le prix d'un compteur de non-lus juste, et d'un début " +
-      "de workflow de traitement (D041). Le IS NULL évite de réécrire une ligne déjà lue"]),
+`INSERT INTO read_state (compte_id, comm_id, boite_id, opened_at, last_seen_at, open_count, flagged)
+VALUES (:moi, :id, :boite, now(), now(), 1, false)
+ON CONFLICT ON CONSTRAINT pk_read_state DO UPDATE
+   SET opened_at = COALESCE(read_state.opened_at, excluded.opened_at),
+       last_seen_at = now(), open_count = read_state.open_count + 1;`,
+      "une ÉCRITURE à chaque ouverture — le prix d'un compteur de non-lus juste. Elle va sur la " +
+      "PERSONNE, pas sur le rattachement (D175) : sur une boîte partagée, « lu » sans dire par qui " +
+      "ne veut rien dire. Le COALESCE garde la PREMIÈRE ouverture : un fait, qui ne se réécrit pas"]),
 
     /* LE DRAPEAU (RM3244, D140c) — un concept IMAP (\\Flagged), que la transition oblige à montrer :
        posé sur le téléphone, il doit se voir ici ; posé ici, il doit se voir sur le téléphone. Le
        suivi propre à AtomBox reste le STATUT et la file de travail (D093, D013). */
     drapeau: m => appliquer(m, { drapeau: !m.drapeau }, [m.drapeau ? "Retirer le drapeau" : "Poser un drapeau",
-`UPDATE rattachement SET drapeau = NOT drapeau WHERE comm_id = :id AND boite_id = :boite;
+`INSERT INTO read_state (compte_id, comm_id, boite_id, open_count, flagged)
+VALUES (:moi, :id, :boite, 0, :valeur)
+ON CONFLICT ON CONSTRAINT pk_read_state DO UPDATE SET flagged = :valeur;
 -- puis l'ordre montant : rattachement.change → STORE ±FLAGS (\\Flagged) sur l'UID source (F113)`,
-      "le drapeau vit sur le RATTACHEMENT, pas sur le message : deux boîtes, deux drapeaux"]),
+      "le drapeau est PERSONNEL (D175) : chacun s'authentifie en IMAP avec son compte, donc \\Flagged " +
+      "ne peut dire que « MOI je l'ai marqué ». open_count reste à 0 : poser un drapeau n'est pas lire"]),
 
-    nonLu: m => appliquer(m, { lu: false }, ["Marquer non lu",
-`UPDATE rattachement SET lu_le = NULL WHERE comm_id = :id AND compte_id = :moi;`,
-      "le compteur redevient juste sans toucher au journal : la lecture reste tracée dans " +
-      "activite, on n'efface pas un fait (D054/D059)"]),
+    /* « À REVOIR » A REMPLACÉ « MARQUER NON LU » (D175 § 2). Le geste ne change pas — même bouton,
+       même raccourci, même gras dans la liste. Le mot change, et il devient vrai : *j'y suis passé,
+       il faut que j'y retourne*. « Non lu » ne voulait plus rien dire une fois qu'on garde la date
+       d'ouverture — et l'ancien geste EFFAÇAIT cette date, c'est-à-dire la seule trace que
+       quelqu'un avait regardé le message. */
+    nonLu: m => appliquer(m, { a_revoir: !m.a_revoir }, [m.a_revoir ? "Ne plus revoir" : "À revoir",
+`INSERT INTO marker_personal (compte_id, comm_id, boite_id, marker_id, set_at)
+SELECT :moi, :id, :boite, marker_id, now() FROM marker WHERE code = 'to_review'
+ON CONFLICT ON CONSTRAINT pk_marker_personal DO NOTHING;`,
+      "une table CREUSE : une ligne seulement quand le marqueur est posé, un message sur cent. Et " +
+      "opened_at n'est pas touché — on n'efface pas un FAIT pour exprimer une INTENTION (D175)"]),
 
-    traiter: m => appliquer(m, { motif_sortie:"traite", sorti_le: Date.now() },
+    traiter: m => appliquer(m, { motif_sortie:"processed" },
       x => ABX.Traces.muter(x, {
         label:"Marquer traité", nom:"traiter",
-        corps:{ sorti_le: true, motif_sortie: "traite" },
-        retour:{ comm_id: x.id, sorti_le: "2026-09-01T14:02:11+02:00",
-                 motif_sortie: "traite", lu_le: "2026-09-01T14:01:58+02:00" },
+        corps:{ motif_sortie: "processed" },
+        retour:{ comm_id: x.id, motif_sortie: "processed",
+                 traite_le: "2026-09-01T14:02:11+02:00", sorti_le: "2026-09-01T14:02:11+02:00" },
       }, [
-        { t:"sql", label:"l'état : le message quitte la file",
+        { t:"sql", label:"l'état courant, et la date de CETTE transition",
           detail:
-`UPDATE rattachement SET sorti_le = now(), motif_sortie = 'traite'
- WHERE comm_id = :id AND compte_id = :moi;`,
-          index:"⚠ si sorti_le est la clé de partition (D014/D030), cet UPDATE n'écrit pas une " +
-                "ligne : il la DÉPLACE — suppression dans une partition, insertion dans une " +
-                "autre. Le pari « un seul déplacement par email » tient tant que Q009 reste rare",
-          warn:true },
-        { t:"sql", label:"le fait : « a traité », daté, non modifiable",
+`UPDATE rattachement SET exit_reason = 'processed',
+       processed_at = COALESCE(processed_at, now()), processed_by = :moi
+ WHERE comm_id = :id AND boite_id = :boite;`,
+          index:"UN état courant (exclusif : un message est dans une seule boîte aux lettres) mais " +
+                "QUATRE couples de dates. Un message est généralement traité PUIS archivé des " +
+                "années après : si l'archivage écrasait processed_at, on perdrait la clé " +
+                "d'archivage (D014) — la donnée qui commande la transition suivante. Le COALESCE " +
+                "dit la même chose : une date posée est un fait, elle ne se repose pas" },
+        { t:"sql", label:"le chemin parcouru : « traité », daté, signé",
           detail:
-`INSERT INTO activite (compte_id, comm_id, type, at)
-VALUES (:moi, :id, 'traite', now());`,
-          index:"deux écritures pour un clic, et c'est voulu : l'état courant d'un côté, le fait " +
-                "daté de l'autre. Les confondre, c'est perdre l'historique au premier changement " +
-                "d'avis (D054). Journal partitionné par année (D056)" },
+`INSERT INTO journal (journal_id, quand, qui, action, cible_type, cible_id, details)
+VALUES (:uuid, now(), :moi, 'processed', 'rattachement', :id, :details);`,
+          index:"deux écritures pour un clic, et c'est voulu : l'état COURANT d'un côté, le CHEMIN " +
+                "de l'autre. « Traité le 3, puis archivé le 10 » ne se lit plus sur la ligne — " +
+                "seul le journal le raconte, et il n'est jamais purgé (D054)" },
         { t:"event", label:"les applications connectées sont prévenues",
           detail:
 `INSERT INTO evenement_sortant (application_id, type, charge, etat, prochaine_tentative)
@@ -85,21 +114,24 @@ SELECT application_id, 'message.traite', :json, 'a_emettre', now()
                 "l'apprendre ne doit pas retarder le clic (D086)" },
       ])),
 
-    archiver: m => appliquer(m, { motif_sortie:"archive", sorti_le: Date.now() }, ["Archiver (sortir sans traiter)",
-`UPDATE rattachement SET sorti_le = now(), motif_sortie = 'archive'
- WHERE comm_id = :id AND compte_id = :moi;`,
-      "motif_sortie distingue traité / archivé (D030) ; les vues « Traités » et « Archives » " +
-      "n'en sont que la lecture (D051)"]),
+    archiver: m => appliquer(m, { motif_sortie:"archived" }, ["Archiver",
+`UPDATE rattachement SET exit_reason = 'archived',
+       archived_at = COALESCE(archived_at, now()), archived_by = :moi
+ WHERE comm_id = :id AND boite_id = :boite;`,
+      "processed_at SURVIT : un message est généralement traité puis archivé des années après " +
+      "(D175 § 4 bis), et y arriver sans traitement reste possible (D030). Les cinq boîtes aux " +
+      "lettres — INBOX, Traités, Archivés, Corbeille, Indésirables — sont les valeurs de cette " +
+      "seule colonne, lues : c'est D051 réalisée"]),
 
-    /* Remettre dans la file : la sortie s'efface, ET le statut cesse d'être « traité » — un message
-       qui revient dans la file en portant « traité » est un message qu'on ne retraitera jamais. */
+    /* Remettre dans la file : l'ÉTAT s'efface, ET le statut cesse d'être « traité » — un message
+       qui revient dans la file en portant « traité » est un message qu'on ne retraitera jamais.
+       Les DATES, elles, restent : « il a été traité le 3 » est vrai même s'il est revenu. */
     refile: m => appliquer(m, { motif_sortie:null, sorti_le:null,
-                                ...(m.statut === "traite" ? { statut: "a_faire" } : {}) }, ["Remettre dans la file",
-`UPDATE rattachement SET sorti_le = NULL, motif_sortie = NULL
- WHERE comm_id = :id AND compte_id = :moi;`,
+                                ...(m.statut === "processed" ? { statut: "todo" } : {}) }, ["Remettre dans la file",
+`UPDATE rattachement SET exit_reason = NULL WHERE comm_id = :id AND boite_id = :boite;`,
       "⚠ retour de partition : c'est exactement Q009 (« un email sorti peut-il revenir ? »). " +
       "Autorisé ici — reste à décider si le cas est courant ou exceptionnel, la réponse " +
-      "change le partitionnement", true]),
+      "change le partitionnement. Noter ce qu'on n'efface PAS : processed_at reste, c'est un fait", true]),
 
     corbeille: m => appliquer(m, { dossier:"trash" },
       x => ABX.Traces.muter(x, {
@@ -186,34 +218,38 @@ VALUES (:id, 'ham', :moi, now());` },
        sont des positions DANS la file, pas des sorties. */
     statuer(m, id) {
       const st = (ABX.Ref.statuts || []).find(s => s.id === id) || { id, label: id };
-      st.sortie = st.sortie || (id === "traite" ? "traite" : null);   // « traité » sort de la file (D093, D014)
+      st.sortie = st.sortie || (id === "processed" ? "processed" : null);   // « traité » sort de la file (D093, D014)
       const patch = { statut: id };
-      if (st.sortie) { patch.motif_sortie = st.sortie; patch.sorti_le = Date.now(); }
-      else if (m.motif_sortie === "traite") { patch.motif_sortie = null; patch.sorti_le = null; }
+      if (st.sortie) patch.motif_sortie = st.sortie;
+      else if (m.motif_sortie === "processed") patch.motif_sortie = null;
       appliquer(m, patch, x => ABX.Traces.muter(x, {
         label:"Statut : " + st.label, nom:"statuer",
         corps:{ statut: id },
         retour:{ comm_id: x.id, statut: id,
-                 sorti_le: st.sortie ? "2026-09-01T14:02:11+02:00" : null,
+                 statut_le: "2026-09-01T14:02:11+02:00",
                  motif_sortie: st.sortie || null },
       }, [
-        { t:"sql", label:"une colonne, pas une ligne de plus",
+        { t:"sql", label:"une colonne, pas une ligne de plus — et la transition est SIGNÉE",
           detail:
-`UPDATE rattachement SET statut = :statut` + (st.sortie
-  ? `, sorti_le = now(), motif_sortie = '` + st.sortie + `'` : `, sorti_le = NULL, motif_sortie = NULL`) + `
- WHERE comm_id = :id AND compte_id = :moi;`,
+`UPDATE rattachement SET status = :statut, status_at = now(), status_by = :moi` + (st.sortie
+  ? `,\n       exit_reason = 'processed', processed_at = COALESCE(processed_at, now()), processed_by = :moi`
+  : `,\n       exit_reason = NULL`) + `
+ WHERE comm_id = :id AND boite_id = :boite;`,
           index: st.sortie
-            ? "⚠ « traité » est le seul statut qui SORT de la file : il pose sorti_le, donc " +
+            ? "⚠ « traité » est le seul statut qui SORT de la file : il écrit exit_reason, donc " +
               "déplace la partition (D014/D030). Les autres se contentent de bouger dans la file"
-            : "statut est un ENUM ordonné sur le rattachement : fermé, donc indexable, et propre " +
-              "au compte, donc deux personnes d'une boîte commune ont deux files (Q035)",
+            : "status est un ENUM ordonné sur le rattachement : fermé, donc indexable, et " +
+              "COLLECTIF — un par boîte, pas par personne (D175 § 5 tranche Q035). Ce qui est " +
+              "personnel, c'est la lecture et les marqueurs, pas le workflow",
           warn: !!st.sortie },
-        { t:"sql", label:"le changement d'état est un fait, comme la lecture",
+        { t:"sql", label:"le changement d'état s'écrit au journal, avec l'avant et l'après",
           detail:
-`INSERT INTO activite (compte_id, comm_id, type, detail, at)
-VALUES (:moi, :id, 'statut', :statut, now());`,
+`INSERT INTO journal (journal_id, quand, qui, action, cible_type, cible_id, details)
+VALUES (:uuid, now(), :moi, 'status_changed', 'rattachement', :id,
+        jsonb_build_object('avant', :avant, 'apres', :statut));`,
           index:"c'est ce qui permettra de mesurer un délai de traitement — la seule métrique " +
-                "que personne ne pense à stocker avant d'en avoir besoin" },
+                "que personne ne pense à stocker avant d'en avoir besoin. Et l'avant/après en fait " +
+                "un CHEMIN plutôt qu'une liste d'événements" },
         { t:"note", label:"pourquoi pas un tag « à faire » ?",
           detail:"parce qu'un tag classe et qu'un statut pilote",
           index:"un tag est ouvert, interopérable et soumis à l'ACL d'un axe (D017/D018) : une " +

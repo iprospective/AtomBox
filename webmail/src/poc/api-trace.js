@@ -72,12 +72,15 @@
           detail:
 `SELECT m.comm_id, m.sujet, m.from_nom, m.from_adresse, m.date_reception,
        m.taille_octets, m.nb_pieces_jointes, m.thread_id, m.blob_ref,
-       r.lu_le, r.sorti_le, r.motif_sortie, r.dossier_id, r.sens
+       r.status, r.exit_reason, r.processed_at, r.archived_at, r.dossier_id, r.sens,
+       s.opened_at, s.last_seen_at, s.flagged
   FROM rattachement r
   JOIN comm m USING (comm_id)
- WHERE m.comm_id = :id AND r.compte_id = :moi;`,
-          index:"index (comm_id, compte_id) sur rattachement — jamais SELECT * : les headers " +
-                "sont TOASTés (D027) et ne servent pas à l'affichage" },
+  LEFT JOIN read_state s ON s.comm_id = r.comm_id AND s.boite_id = r.boite_id AND s.compte_id = :moi
+ WHERE m.comm_id = :id AND r.boite_id = ANY (:mes_boites);`,
+          index:"index (comm_id, boite_id) sur rattachement — jamais SELECT * : les headers sont " +
+                "TOASTés (D027) et ne servent pas à l'affichage. La jointure sur read_state est " +
+                "EXTERNE : l'état personnel est creux, l'absence de ligne veut dire « jamais touché »" },
         { t:"sql", label:"les pièces jointes — liaison et blob",
           detail:
 `SELECT l.ordre, l.nom_fichier, l.mime_declare, l.transfer_encoding,
@@ -140,12 +143,16 @@
           detail:"PATCH /api/v1/messages/" + m.id + "/rattachement\n{ \"lu\": true }",
           index:"un PATCH séparé, et non un effet caché du GET : une lecture ne doit pas écrire, " +
                 "sinon un préchargement marque tout comme lu" },
-        { t:"sql", label:"une écriture par ouverture",
+        { t:"sql", label:"une écriture par ouverture, sur MOI",
           detail:
-`UPDATE rattachement SET lu_le = now()
- WHERE comm_id = :id AND compte_id = :moi AND lu_le IS NULL;`,
-          index:"le IS NULL évite de réécrire une ligne déjà lue — sans lui, chaque relecture " +
-                "salit une page (D041)" },
+`INSERT INTO read_state (compte_id, comm_id, boite_id, opened_at, last_seen_at, open_count, flagged)
+VALUES (:moi, :id, :boite, now(), now(), 1, false)
+ON CONFLICT ON CONSTRAINT pk_read_state DO UPDATE
+   SET opened_at = COALESCE(read_state.opened_at, excluded.opened_at),
+       last_seen_at = now(), open_count = read_state.open_count + 1;`,
+          index:"le COALESCE garde la PREMIÈRE ouverture : c'est un fait, il ne se réécrit pas " +
+                "(D175 § 1). `last_seen_at` dit la dernière, `open_count` combien de fois — trois " +
+                "informations qu'une colonne `lu_le` unique ne pouvait pas porter" },
         { t:"render", label:"compteurs de l'arborescence rafraîchis",
           detail:"Corpus.recompte() → Views.Nav",
           index:"côté serveur, ce serait un recalcul incrémental et non une nouvelle requête " +
@@ -173,27 +180,30 @@
         { t:"sql", label: virtuel ? "dossier virtuel : le prédicat est un tag" : "dossier réel",
           detail: virtuel
             ? `SELECT m.comm_id, m.sujet, m.from_nom, m.snippet, m.date_reception,
-       m.nb_pieces_jointes, r.lu_le, r.sens
+       m.nb_pieces_jointes, s.opened_at, r.sens
   FROM comm_tag mt
   JOIN tag t ON t.tag_id = mt.tag_id
-  JOIN rattachement r ON r.comm_id = mt.comm_id AND r.compte_id = :moi
+  JOIN rattachement r ON r.comm_id = mt.comm_id AND r.boite_id = ANY (:mes_boites)
   JOIN comm m ON m.comm_id = mt.comm_id
- WHERE t.axe_id = :axe AND t.valeur = :valeur AND r.sorti_le IS NULL
+  LEFT JOIN read_state s ON s.comm_id = r.comm_id AND s.boite_id = r.boite_id AND s.compte_id = :moi
+ WHERE t.axe_id = :axe AND t.valeur = :valeur AND r.exit_reason IS NULL
  ORDER BY m.date_reception DESC LIMIT 50;`
             : `SELECT m.comm_id, m.sujet, m.from_nom, m.snippet, m.date_reception,
-       m.nb_pieces_jointes, r.lu_le, r.sens
+       m.nb_pieces_jointes, s.opened_at, r.sens
   FROM rattachement r JOIN comm m USING (comm_id)
- WHERE r.compte_id = :moi AND r.dossier_id = :dossier AND r.sorti_le IS NULL
+  LEFT JOIN read_state s ON s.comm_id = r.comm_id AND s.boite_id = r.boite_id AND s.compte_id = :moi
+ WHERE r.boite_id = ANY (:mes_boites) AND r.dossier_id = :dossier AND r.exit_reason IS NULL
  ORDER BY m.date_reception DESC LIMIT 50;`,
           index: virtuel
             ? "index (tag_id, date_reception DESC) avec la date DÉNORMALISÉE dans la liaison — " +
               "sinon PostgreSQL trie après avoir tout lu (D016)"
-            : "index partiel (compte_id, dossier_id, date_reception DESC) WHERE sorti_le IS NULL — " +
-              "sa taille est celle de la file, pas celle du corpus" },
+            : "index partiel (boite_id, dossier_id, date_reception DESC) WHERE exit_reason IS NULL — " +
+              "sa taille est celle de la FILE, pas celle du corpus : les quatre autres boîtes aux " +
+              "lettres (traités, archivés, corbeille, indésirables) n'y sont pas" },
         { t:"json", label:"200 OK — " + n + " message(s), forme abrégée",
           detail: j({ curseur_suivant: "eyJkIjoiMjAyNi0wNy0yOSIsImkiOjkxfQ",
                       total_estime: n,
-                      messages: ["… " + n + " objets abrégés : id, sujet, de, date_recue, lu_le, sens, " +
+                      messages: ["… " + n + " objets abrégés : id, sujet, de, date_recue, lu, a_revoir, sens, " +
                                  "nb_pieces_jointes, snippet …"] }),
           index:"« total_estime » et non « total » : compter exactement les messages d'un dossier " +
                 "de 200 000 lignes coûte plus cher que d'en afficher 50" },

@@ -51,11 +51,19 @@
         date_recue: Date.now() - P.int(0, 300) * 864e5 - P.int(0, 86399) * 1000,
         lu: sortant ? true : !luTirage,
         thread_id: P.int(1, 4), tags: [],
-        statut: "nouveau",
+        statut: "new", a_revoir: false, drapeau: false,
         sorti_le: null, motif_sortie: null, dossier: null, reference: null, composition: null,
       };
       /* Un corpus où tout serait « nouveau » ne montrerait pas la file de travail. */
-      if (!sortant && P.next() < .28) m.statut = P.pick(["a_faire","a_faire","en_cours","attente"]);
+      if (!sortant && P.next() < .28) m.statut = P.pick(["todo","todo","doing","waiting"]);
+      /* Et un corpus sans « à revoir » ne montrerait pas ce que D175 § 2 a remplacé : un message
+         DÉJÀ OUVERT qui repasse en gras parce qu'il faut y retourner.
+
+         SUR L'INDEX, PAS SUR LE TIRAGE. Un `P.next()` de plus décale toute la suite du générateur :
+         le corpus entier change, et des assertions sans rapport tombent (c'est arrivé — la carte
+         « Développement » désignait un autre message). Le corpus est déterministe par contrat, et
+         ajouter une caractéristique ne doit pas rebattre les cartes. */
+      if (!sortant && m.lu && i % 17 === 3) m.a_revoir = true;
       m.snippet = m.corps.split("\n")[2] || "…";
       /* D126 — un correspondant est « connu » quand il est enregistré : ceux qui
          portent un axe métier le sont, une notification ou un réseau social non.
@@ -110,7 +118,7 @@
         /* Le point de D130 : une diffusion n'entre pas dans la file des non
            traités — une notification, si. Une facture est une machine qui
            attend un paiement ; un booléen « automatique » les confondait. */
-        if (m.nature === "liste") m.statut = "nouveau";
+        if (m.nature === "liste") m.statut = "new";
       }
       /* D131 — trois niveaux. « avertir » se DÉDUIT de la nature ; « non » ne se
          déduit de rien : il s'APPREND d'un retour de non-remise (D119). C'est la
@@ -192,11 +200,14 @@
     Fx.valeurs.abonnement = Object.values(par).sort((x, y) => y.last - x.last);
   }
 
-  /* Les vues qui ne sont pas des dossiers : elles lisent motif_sortie (D030/D051). */
+  /* LES CINQ BOÎTES AUX LETTRES SONT LES VALEURS D'UNE COLONNE (D051 réalisée par D175 § 4) :
+     `motif_sortie` dit dans laquelle un message reçu se trouve, et il est dans une SEULE. Le
+     dossier reste le contenant que sert l'IMAP, d'où le « ou » sur la corbeille. */
   const VUES = {
-    trash:    m => m.dossier === "trash",
-    archives: m => m.motif_sortie === "archive" && m.dossier !== "trash",
-    traites:  m => m.motif_sortie === "traite"  && m.dossier !== "trash",
+    trash:    m => m.motif_sortie === "deleted" || m.dossier === "trash",
+    junk:     m => m.motif_sortie === "junk" || (m.dossier || m.dossier_origine) === "junk",
+    archives: m => m.motif_sortie === "archived",
+    traites:  m => m.motif_sortie === "processed",
   };
 
   const Corpus = {
@@ -240,12 +251,16 @@
     /* UNE passe sur le corpus pour les ~300 branches de l'arborescence (D078). */
     recompte() {
       compte = {};
+      /* « u » compte CE QUE LA LISTE MET EN GRAS : jamais ouvert, ou remis de côté. Le serveur
+         évalue la même expression (a_voir_par) — D166 interdit qu'ils divergent. */
       const bump = (k, m) => { const c = compte[k] = compte[k] || { t:0, u:0, f:0 };
-        c.t++; if (!m.lu) c.u++;
-        if (m.statut === "a_faire" || m.statut === "en_cours") c.f++; };
+        c.t++; if (!m.lu || m.a_revoir) c.u++;
+        if (m.statut === "todo" || m.statut === "doing") c.f++; };
       for (const m of tous) {
-        if (m.dossier === "trash") { bump("trash", m); continue; }
-        if (m.motif_sortie) { bump(m.motif_sortie === "archive" ? "archives" : "traites", m); continue; }
+        if (m.motif_sortie === "archived") { bump("archives", m); continue; }
+        if (m.motif_sortie === "processed") { bump("traites", m); continue; }
+        if (m.motif_sortie === "junk") { bump("junk", m); continue; }
+        if (m.motif_sortie === "deleted" || m.dossier === "trash") { bump("trash", m); continue; }
         const k = m.dossier || m.dossier_origine;
         bump(k, m);
         const ax = k.split(":")[0];
@@ -274,7 +289,7 @@
 
     /* La file de travail, tous dossiers confondus : « ce qu'il me reste à faire ». */
     aFaire: () => tous.filter(m => !m.motif_sortie && m.dossier !== "trash" &&
-      (m.statut === "a_faire" || m.statut === "en_cours" || m.statut === "attente")),
+      (m.statut === "todo" || m.statut === "doing" || m.statut === "waiting")),
 
     /* Le contenu d'un dossier, avant filtre de liste. */
     vue(folder) {
@@ -306,9 +321,9 @@
     filtrer(folder, filtre, tri, sens, statut) {
       let a = Corpus.vue(folder);
       if (sens === "in" || sens === "out") a = a.filter(m => (m.sens || "in") === sens);
-      if (statut && statut !== "tous") a = a.filter(m => (m.statut || "nouveau") === statut);
+      if (statut && statut !== "tous") a = a.filter(m => (m.statut || "new") === statut);
       if (!VUES[folder.id]) a = filtre === "sortis" ? a.filter(m => m.motif_sortie) : a.filter(m => !m.motif_sortie);
-      if (filtre === "non_lus") a = a.filter(m => !m.lu);
+      if (filtre === "non_lus") a = a.filter(m => !m.lu || m.a_revoir);   // « à voir » (D175 § 2)
       if (filtre === "recents") a = a.filter(m => Date.now() - m.date_recue < 30 * 864e5);
       if (filtre === "pj")      a = a.filter(m => m.nb_pieces_jointes);
       if (filtre === "lourds")  a = a.filter(m => m.taille > 2048);
