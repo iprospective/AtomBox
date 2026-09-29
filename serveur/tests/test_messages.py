@@ -141,9 +141,9 @@ def monde(tmp_path_factory):
     u = re.sub(r"/[^/?]*(\?|$)", "/" + nom + r"\1", url, count=1)
     ici = os.path.dirname(os.path.abspath(__file__))
     with psycopg.connect(u) as c: c.execute(open(os.path.join(ici, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read()); c.commit()
-    avant = {k: os.environ.get(k) for k in ("DATABASE_URL", "ATOMBOX_MAGASIN")}
-    os.environ["DATABASE_URL"] = u; os.environ["ATOMBOX_MAGASIN"] = str(tmp_path_factory.mktemp("magasin"))
-    s = ouvrir(u); m = Magasin(os.environ["ATOMBOX_MAGASIN"])
+    avant = {k: os.environ.get(k) for k in ("DATABASE_URL", "ATOMBOX_STORE")}
+    os.environ["DATABASE_URL"] = u; os.environ["ATOMBOX_STORE"] = str(tmp_path_factory.mktemp("magasin"))
+    s = ouvrir(u); m = Magasin(os.environ["ATOMBOX_STORE"])
     a = adresse(s, "contact@exemple.fr")
     boite = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(boite)
     compte = Compte(compte_id=uuid7(), login="mathieu", nom="Mathieu", actif=True, cree_le=datetime.now(timezone.utc), mot_de_passe_empreinte=hacher_mot_de_passe("secret")); s.add(compte)

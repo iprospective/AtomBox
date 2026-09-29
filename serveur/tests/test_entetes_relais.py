@@ -11,9 +11,9 @@ QUAND = datetime(2026, 9, 7, 12, 30, tzinfo=timezone.utc)
 
 def fabriquer(ip=None, tracer=None, monkeypatch=None):
     if monkeypatch is not None:
-        monkeypatch.delenv("ATOMBOX_TRACER_IP_CLIENT", raising=False)
-        if tracer is not None: monkeypatch.setenv("ATOMBOX_TRACER_IP_CLIENT", tracer)
-        monkeypatch.setenv("ATOMBOX_HOTE", "atombox.exemple.fr")
+        monkeypatch.delenv("ATOMBOX_TRACE_CLIENT_IP", raising=False)
+        if tracer is not None: monkeypatch.setenv("ATOMBOX_TRACE_CLIENT_IP", tracer)
+        monkeypatch.setenv("ATOMBOX_HOST", "atombox.exemple.fr")
     m = email.message.EmailMessage(policy=email.policy.SMTP)
     m["From"] = "contact@exemple.fr"; m["To"] = "jean@x.fr"; m["Subject"] = "Test"
     cid = uuid.UUID("01a07b48-c8ed-72fe-8235-f35f1511b9fe")
@@ -54,7 +54,7 @@ def test_le_message_reste_analysable(monkeypatch):
         "le Received est du transport : il ne change pas l'identité du message (D064)"
 
 def test_l_hote_est_configurable(monkeypatch):
-    monkeypatch.setenv("ATOMBOX_HOTE", "mx1.client.fr")
+    monkeypatch.setenv("ATOMBOX_HOST", "mx1.client.fr")
     assert hote_atombox() == "mx1.client.fr"
-    monkeypatch.delenv("ATOMBOX_HOTE")
+    monkeypatch.delenv("ATOMBOX_HOST")
     assert hote_atombox(), "à défaut, le nom de la machine — jamais vide"

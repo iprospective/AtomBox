@@ -11,10 +11,11 @@ from ..magasin import Magasin
 from ..schema.modeles import Compte
 from ..services import messages as svc
 from ..journal import journal
+from .. import settings
 
 log = journal("api")
 
-def magasin() -> Magasin: return Magasin(os.environ.get("ATOMBOX_MAGASIN", "./magasin"))
+def magasin() -> Magasin: return Magasin(settings.read("ATOMBOX_STORE", "./magasin"))
 
 def _uuid(id_: str):
     try: return uuid.UUID(id_)

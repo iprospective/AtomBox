@@ -11,6 +11,7 @@ from .journal import journal
 from .modules import chargement
 from .modules.evenements import CANAL, a_traiter, traiter
 from .modules.taches import taches
+from . import settings
 
 log = journal("apps")
 
@@ -28,7 +29,7 @@ async def principal():
     log.info("processus des tâches : %d module(s), %d tâche(s) cadencée(s)", len(charges), len(taches.liste()))
     # l'écoute NOTIFY : une connexion psycopg 3 à part, en autocommit (D161) — pas de SQL ici, un canal
     cnx = psycopg.connect(os.environ["DATABASE_URL"], autocommit=True); cnx.execute("LISTEN %s" % CANAL)
-    pas = float(os.environ.get("ATOMBOX_TACHES_PAS", "15"))
+    pas = float(settings.read("ATOMBOX_TASKS_INTERVAL", "15"))
     def attendre():
         for _ in cnx.notifies(timeout=pas): break      # réveillé par un NOTIFY, ou délai écoulé
     while True:

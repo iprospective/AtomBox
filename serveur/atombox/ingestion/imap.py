@@ -6,6 +6,7 @@ from __future__ import annotations
 import email.utils, imaplib, re, socket, ssl
 from datetime import datetime
 from ..journal import journal
+from .. import settings
 
 log = journal("imap")
 
@@ -14,7 +15,7 @@ def tls_imap() -> bool:
     143, boucle locale) ou le serveur simulé des tests de bout en bout. Le défaut reste TLS : ne
     rien dire ne doit jamais faire partir un mot de passe en clair."""
     import os
-    return (os.environ.get("ATOMBOX_IMAP_TLS") or "ssl").strip().lower() != "aucun"
+    return (settings.read("ATOMBOX_IMAP_TLS") or "ssl").strip().lower() != "aucun"
 
 
 class Releve:

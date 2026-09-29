@@ -4,7 +4,7 @@
 D145 a tranché `ab/cd/<id>`, UUID v7 pour les messages, empreinte pour les blobs — et a
 demandé un test de charge avant de s'y tenir. Le voici : il MESURE, il ne suppose pas.
 
-    python3 outils/charge-magasin.py [--messages 20000] [--racine /chemin] [--json]
+    python3 outils/charge-magasin.py [--messages 20000] [--root /chemin] [--json]
 
 Quatre choses mesurées, dans cet ordre d'importance :
   1. la RÉPARTITION réelle des identifiants sur `ab/cd` — combien de répertoires, et le pire ;
@@ -198,18 +198,18 @@ def rendre(r: dict) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--messages", type=int, default=20000)
-    ap.add_argument("--racine", help="défaut : un répertoire temporaire, effacé à la fin")
-    ap.add_argument("--garder", action="store_true", help="ne pas effacer la racine temporaire")
+    ap.add_argument("--root", help="défaut : un répertoire temporaire, effacé à la fin")
+    ap.add_argument("--keep", action="store_true", help="ne pas effacer la racine temporaire")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
-    racine = a.racine or tempfile.mkdtemp(prefix="atombox-charge-")
+    racine = a.root or tempfile.mkdtemp(prefix="atombox-charge-")
     try:
         r = mesurer(a.messages, racine)
         print(_json.dumps(r, ensure_ascii=False, indent=1) if a.json else "", end="")
         if not a.json:
             rendre(r)
     finally:
-        if not a.racine and not a.garder:
+        if not a.root and not a.keep:
             shutil.rmtree(racine, ignore_errors=True)
     return 0
 

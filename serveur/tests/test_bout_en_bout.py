@@ -13,7 +13,7 @@ Ce qui tourne ici, pour de vrai :
   - l'API, dans le processus du test (TestClient) : c'est elle qu'on pilote comme le webmail.
 
 LES DÉLAIS SONT DES ASSERTIONS. Le processus des tâches ne se réveille seul que toutes les 30 s
-(`ATOMBOX_TACHES_PAS`), le démon ne sort d'IDLE seul que toutes les 30 s (`ATOMBOX_IDLE_SECONDES`).
+(`ATOMBOX_TASKS_INTERVAL`), le démon ne sort d'IDLE seul que toutes les 30 s (`ATOMBOX_IDLE_SECONDS`).
 Chaque attente ci-dessous est bien plus courte : si elle aboutit, c'est qu'un NOTIFY ou un IDLE a
 réellement réveillé le bon processus. Un NOTIFY muet fait échouer le test au lieu de le ralentir.
 
@@ -114,12 +114,12 @@ def chaine(tmp_path_factory):
 
     imap, relais = FauxImap(), FauxRelais(); imap.start(); relais.start()
     # JAMAIS le vrai relais ni le vrai IMAP : tout est forcé sur les doublures, quoi que dise l'environnement
-    env = dict(os.environ, DATABASE_URL=u, ATOMBOX_MAGASIN=str(magasin), ATOMBOX_LOGS=str(logs),
-               ATOMBOX_IMAP_HOTE="127.0.0.1", ATOMBOX_IMAP_PORT=str(imap.port), ATOMBOX_IMAP_TLS="aucun",
-               ATOMBOX_IMAP_MASTER="", ATOMBOX_IMAP_MOT_DE_PASSE="x",
-               ATOMBOX_SMTP_HOTE="127.0.0.1", ATOMBOX_SMTP_PORT=str(relais.port), ATOMBOX_SMTP_TLS="aucun",
-               ATOMBOX_SMTP_UTILISATEUR="", ATOMBOX_SMTP_MOT_DE_PASSE="",
-               ATOMBOX_TACHES_PAS="30", ATOMBOX_IDLE_SECONDES="30",
+    env = dict(os.environ, DATABASE_URL=u, ATOMBOX_STORE=str(magasin), ATOMBOX_LOGS=str(logs),
+               ATOMBOX_IMAP_HOST="127.0.0.1", ATOMBOX_IMAP_PORT=str(imap.port), ATOMBOX_IMAP_TLS="aucun",
+               ATOMBOX_IMAP_MASTER="", ATOMBOX_IMAP_PASSWORD="x",
+               ATOMBOX_SMTP_HOST="127.0.0.1", ATOMBOX_SMTP_PORT=str(relais.port), ATOMBOX_SMTP_TLS="aucun",
+               ATOMBOX_SMTP_USER="", ATOMBOX_SMTP_PASSWORD="",
+               ATOMBOX_TASKS_INTERVAL="30", ATOMBOX_IDLE_SECONDS="30",
                PYTHONPATH=str(RACINE))
     # le piège de RM3189 : un venv installé en `pip install -e` importe le code du worktree d'à côté
     vu = subprocess.run([sys.executable, "-c", "import atombox; print(atombox.__file__)"], cwd=RACINE, env=env,
@@ -130,8 +130,8 @@ def chaine(tmp_path_factory):
                                  stdout=open(logs / (n + ".out"), "wb"), stderr=subprocess.STDOUT)
              for n, mod in (("ingestion", "atombox.ingestion.demon"), ("taches", "atombox.taches"))}
 
-    avant = {k: os.environ.get(k) for k in ("DATABASE_URL", "ATOMBOX_MAGASIN", "ATOMBOX_LOGS")}
-    os.environ.update(DATABASE_URL=u, ATOMBOX_MAGASIN=str(magasin), ATOMBOX_LOGS=str(logs))
+    avant = {k: os.environ.get(k) for k in ("DATABASE_URL", "ATOMBOX_STORE", "ATOMBOX_LOGS")}
+    os.environ.update(DATABASE_URL=u, ATOMBOX_STORE=str(magasin), ATOMBOX_LOGS=str(logs))
     import atombox.db as db
     db._async.clear(); db._sync.clear()
     from fastapi.testclient import TestClient

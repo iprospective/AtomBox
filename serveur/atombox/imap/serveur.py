@@ -8,7 +8,7 @@ sur les UID ; on ne la refait pas :
 
 | Réglage | Défaut | Rôle |
 |---|---|---|
-| `ATOMBOX_IMAPD_ECOUTE` | `127.0.0.1` | l'interface. Locale par défaut : sans TLS, ce service n'a rien à faire sur un réseau. **En conteneur, cette boucle locale est celle DU CONTENEUR** — un client sur la machine hôte ne voit rien ; il faut alors écouter sur l'adresse du conteneur, et tout passe en clair |
+| `ATOMBOX_IMAPD_LISTEN` | `127.0.0.1` | l'interface. Locale par défaut : sans TLS, ce service n'a rien à faire sur un réseau. **En conteneur, cette boucle locale est celle DU CONTENEUR** — un client sur la machine hôte ne voit rien ; il faut alors écouter sur l'adresse du conteneur, et tout passe en clair |
 | `ATOMBOX_IMAPD_PORT` | `1143` | **pas 143** : un Dovecot tourne déjà sur cette machine, et deux serveurs sur le même port, c'est le second qui ne démarre pas |
 | `ATOMBOX_IMAPD_CERT` / `_CLE` | — | si les deux sont donnés, le port sert du TLS implicite (à mettre alors sur 1993) |
 | `ATOMBOX_IMAPD_MAX` | `20` | connexions simultanées ; au-delà, on refuse proprement au lieu de s'effondrer |
@@ -23,6 +23,7 @@ import ssl
 from ..journal import journal
 from .session import Session
 from .vue import Vue
+from .. import settings
 
 log = journal("imap")
 
@@ -32,7 +33,7 @@ LIMITE_LIGNE = 64 * 1024        # une commande IMAP raisonnable ; au-delà, on c
 class Ecouteur:
     def __init__(self, fabrique_session_bd, magasin, maximum: int | None = None):
         self.fabrique, self.magasin = fabrique_session_bd, magasin
-        self.places = asyncio.Semaphore(maximum or int(os.environ.get("ATOMBOX_IMAPD_MAX", "20")))
+        self.places = asyncio.Semaphore(maximum or int(settings.read("ATOMBOX_IMAPD_MAX", "20")))
         self.vivantes = 0
 
     async def client(self, lecteur: asyncio.StreamReader, ecrivain: asyncio.StreamWriter):
@@ -87,7 +88,7 @@ class Ecouteur:
 
 
 def contexte_tls():
-    cert, cle = os.environ.get("ATOMBOX_IMAPD_CERT"), os.environ.get("ATOMBOX_IMAPD_CLE")
+    cert, cle = settings.read("ATOMBOX_IMAPD_CERT"), settings.read("ATOMBOX_IMAPD_KEY")
     if not (cert and cle): return None
     ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     ctx.load_cert_chain(cert, cle)
@@ -98,10 +99,10 @@ async def principal():
     from ..db import session as ouvrir
     from ..magasin import Magasin
     url = os.environ["DATABASE_URL"]
-    magasin = Magasin(os.environ.get("ATOMBOX_MAGASIN", "./magasin"))
+    magasin = Magasin(settings.read("ATOMBOX_STORE", "./magasin"))
     ecouteur = Ecouteur(lambda: ouvrir(url), magasin)
-    hote = os.environ.get("ATOMBOX_IMAPD_ECOUTE", "127.0.0.1")
-    port = int(os.environ.get("ATOMBOX_IMAPD_PORT", "1143"))
+    hote = settings.read("ATOMBOX_IMAPD_LISTEN", "127.0.0.1")
+    port = int(settings.read("ATOMBOX_IMAPD_PORT", "1143"))
     tls = contexte_tls()
     serveur = await asyncio.start_server(ecouteur.client, hote, port, ssl=tls)
     log.info("IMAP en LECTURE SEULE sur %s:%d%s", hote, port, " (TLS)" if tls else " (clair)")

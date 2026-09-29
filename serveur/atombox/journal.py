@@ -9,8 +9,8 @@ tenu mais ne devrait pas), ERROR (ce qui a échoué — bruyamment, D152). Rotat
 14 jours gardés. Réglages :
 
     ATOMBOX_LOGS=/var/log/atombox            le dossier (défaut : <dépôt>/logs)
-    ATOMBOX_LOG_NIVEAU=info                   le niveau par défaut
-    ATOMBOX_LOG_NIVEAUX="imap=debug,auth=info" par domaine
+    ATOMBOX_LOG_LEVEL=info                   le niveau par défaut
+    ATOMBOX_LOG_LEVELS="imap=debug,auth=info" par domaine
     ATOMBOX_LOG_CONSOLE=1                     aussi sur la sortie d'erreur (développement)
 
 Le journal des ACTIONS métier (qui a lu, traité, partagé — D054) est autre chose : une table.
@@ -57,14 +57,14 @@ def configurer(dossier_logs: str | None = None, niveau: str | None = None, nivea
         d = dossier()
         base = logging.getLogger("atombox")
         for h in list(base.handlers): base.removeHandler(h); h.close()
-        defaut = _niveau(niveau or os.environ.get("ATOMBOX_LOG_NIVEAU", "info"), logging.INFO)
+        defaut = _niveau(niveau or os.environ.get("ATOMBOX_LOG_LEVEL", "info"), logging.INFO)
         base.setLevel(logging.DEBUG); base.propagate = False
         base.addHandler(_fichier(os.path.join(d, "atombox.log"), defaut))
         base.addHandler(_fichier(os.path.join(d, "erreurs.log"), logging.WARNING))
         if console if console is not None else os.environ.get("ATOMBOX_LOG_CONSOLE") == "1":
             c = logging.StreamHandler(sys.stderr); c.setLevel(defaut); c.setFormatter(logging.Formatter(FORMAT)); c.addFilter(_Domaine()); base.addHandler(c)
         par_domaine = {}
-        for morceau in (niveaux or os.environ.get("ATOMBOX_LOG_NIVEAUX", "")).split(","):
+        for morceau in (niveaux or os.environ.get("ATOMBOX_LOG_LEVELS", "")).split(","):
             if "=" in morceau: k, v = morceau.split("=", 1); par_domaine[k.strip()] = _niveau(v.strip(), defaut)
         for dom in DOMAINES:
             lg = logging.getLogger("atombox." + dom)

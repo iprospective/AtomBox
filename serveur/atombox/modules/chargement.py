@@ -6,6 +6,7 @@ from importlib.metadata import entry_points
 from ..journal import journal
 from . import Module
 from .accroches import accroches
+from .. import settings
 
 log = journal("apps")
 _charges: list[Module] = []
@@ -26,7 +27,7 @@ def charger(supplementaires: list[Module] | None = None, tiers: bool = True) -> 
         for ep in entry_points(group="atombox.modules"):
             try: liste.append(ep.load()())
             except Exception: log.exception("module tiers %s : chargement en échec — ignoré", ep.name)
-        for spec in filter(None, os.environ.get("ATOMBOX_MODULES", "").split(",")):
+        for spec in filter(None, settings.read("ATOMBOX_MODULES", "").split(",")):
             try:
                 mod, cls = spec.strip().split(":"); liste.append(getattr(importlib.import_module(mod), cls)())
             except Exception: log.exception("module %s : chargement en échec — ignoré", spec)

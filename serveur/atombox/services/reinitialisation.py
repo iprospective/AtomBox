@@ -27,6 +27,7 @@ from ..api.securite import empreinte_jeton, hacher_mot_de_passe, nouveau_jeton
 from ..journal import journal
 from ..schema.modeles import Adresse, Boite, Compte, Domaine, Reinitialisation, Session as SessionModele
 from ..uuid7 import uuid7
+from .. import settings
 
 log = journal("api")
 DUREE = timedelta(minutes=30)          # D164
@@ -115,13 +116,13 @@ async def demander(s: AsyncSession, qui: str, base_lien: str, ip: str | None = N
 
 
 async def _expediteur(s: AsyncSession, compte: Compte) -> str:
-    """L'adresse d'envoi du service (D165). Configurée par `ATOMBOX_EXPEDITEUR_SERVICE`, sinon
+    """L'adresse d'envoi du service (D165). Configurée par `ATOMBOX_SERVICE_SENDER`, sinon
     dérivée du domaine de la boîte — ce qui n'est juste QUE si ce domaine est authentifié.
 
     Incident fondateur : sans SPF ni DMARC sur le domaine émetteur, le relais accepte (250 Ok),
     le journal écrit « envoyé », et Gmail refuse — en IPv6 surtout. Un domaine sans SPF n'est pas
     moins bien classé : ses messages n'arrivent pas."""
-    configure = os.environ.get("ATOMBOX_EXPEDITEUR_SERVICE")
+    configure = settings.read("ATOMBOX_SERVICE_SENDER")
     if configure:
         return configure
     from ..schema.modeles import Acces
