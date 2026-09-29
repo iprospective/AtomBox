@@ -98,7 +98,7 @@ def appliquer(session, filtres: list, analyse, ctx: dict | None = None) -> dict:
         if nom == "classer":      resultat["dossier"] = action.get("dossier")
         elif nom == "marquer_lu": resultat["patch"]["lu"] = True
         elif nom == "drapeau":    resultat["patch"]["drapeau"] = True
-        elif nom == "statut":     resultat["patch"]["statut"] = action.get("statut", "a_faire")
+        elif nom == "statut":     resultat["patch"]["statut"] = action.get("statut", "todo")
         elif nom == "corbeille":  resultat["dossier"] = "Trash"
         elif nom == "indesirable": resultat["dossier"] = "Junk"
         elif nom == "ignorer":    resultat["ignorer"] = True

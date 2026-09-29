@@ -37,8 +37,13 @@ def amorcer(login: str, nom: str, mot_de_passe: str | None, boite_adresse: str, 
             s.add(Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom=nom_d, alias_imap=alias, protege=True))
     if not s.scalar(select(Identite).where(Identite.boite_id == boite.boite_id)):
         s.add(Identite(identite_id=uuid7(), boite_id=boite.boite_id, nom_affiche=nom, adresse_id=a.adresse_id, au_nom_de=False, par_defaut=True))
+    # LE VOCABULAIRE DU PRODUIT, pas de la configuration : sans les marqueurs intégrés, « à revoir »
+    # et « me le rappeler le… » existent dans l'interface et ne font rien (D178).
+    from .schema.semences import semer
+    n = semer(s)
     s.commit()
-    log.info("amorçage : compte %s, boîte %s", compte.login, boite_adresse)
+    log.info("amorçage : compte %s, boîte %s%s", compte.login, boite_adresse,
+             (", %d marqueur(s) intégré(s) posé(s)" % n) if n else "")
     return {"compte_id": compte.compte_id, "boite_id": boite.boite_id}
 
 def principal(argv=None):

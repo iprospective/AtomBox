@@ -1003,11 +1003,6 @@
      "obligatoire": false
     },
     {
-     "nom": "lu_le",
-     "type": "timestamptz",
-     "obligatoire": false
-    },
-    {
      "nom": "repondu_le",
      "type": "timestamptz",
      "obligatoire": false
@@ -1018,27 +1013,62 @@
      "obligatoire": false
     },
     {
-     "nom": "drapeau",
-     "type": "boolean",
-     "obligatoire": true
-    },
-    {
-     "nom": "statut",
+     "nom": "status",
      "type": "text",
      "obligatoire": true
     },
     {
-     "nom": "sorti_le",
+     "nom": "status_at",
      "type": "timestamptz",
      "obligatoire": false
     },
     {
-     "nom": "motif_sortie",
+     "nom": "status_by",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "exit_reason",
      "type": "text",
      "obligatoire": false
     },
     {
-     "nom": "supprime_par",
+     "nom": "processed_at",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "processed_by",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "archived_at",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "archived_by",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "deleted_at",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "deleted_by",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "junk_at",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "junk_by",
      "type": "uuid",
      "obligatoire": false
     },
@@ -1073,11 +1103,6 @@
      "obligatoire": true
     },
     {
-     "nom": "reveil_le",
-     "type": "timestamptz",
-     "obligatoire": false
-    },
-    {
      "nom": "echeance_le",
      "type": "timestamptz",
      "obligatoire": false
@@ -1096,7 +1121,208 @@
     "D030",
     "D093",
     "D118",
-    "D134"
+    "D134",
+    "D175"
+   ]
+  },
+  "read_state": {
+   "cle": [
+    "compte_id",
+    "comm_id",
+    "boite_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "compte_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "opened_at",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "last_seen_at",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "open_count",
+     "type": "bigint",
+     "obligatoire": true
+    },
+    {
+     "nom": "flagged",
+     "type": "boolean",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D175",
+    "D041",
+    "D174"
+   ]
+  },
+  "marker": {
+   "cle": [
+    "marker_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "marker_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "code",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "libelle",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "scope",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "value_type",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "domaine_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "options",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
+     "nom": "actif",
+     "type": "boolean",
+     "obligatoire": true
+    },
+    {
+     "nom": "integre",
+     "type": "boolean",
+     "obligatoire": true
+    }
+   ],
+   "decisions": [
+    "D178"
+   ]
+  },
+  "marker_collective": {
+   "cle": [
+    "comm_id",
+    "boite_id",
+    "marker_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "marker_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "set_at",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "set_by",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "due_at",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "value",
+     "type": "text",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D178"
+   ]
+  },
+  "marker_personal": {
+   "cle": [
+    "compte_id",
+    "comm_id",
+    "boite_id",
+    "marker_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "compte_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "comm_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "boite_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "marker_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "set_at",
+     "type": "timestamptz",
+     "obligatoire": true
+    },
+    {
+     "nom": "due_at",
+     "type": "timestamptz",
+     "obligatoire": false
+    },
+    {
+     "nom": "value",
+     "type": "text",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D178",
+    "D103"
    ]
   },
   "acces": {
@@ -1134,6 +1360,16 @@
      "nom": "accorde_par",
      "type": "uuid",
      "obligatoire": true
+    },
+    {
+     "nom": "stands_in_for",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
+     "nom": "options",
+     "type": "jsonb",
+     "obligatoire": false
     }
    ],
    "decisions": [
@@ -1141,7 +1377,8 @@
     "D057",
     "D060",
     "D072",
-    "D124"
+    "D124",
+    "D177"
    ]
   },
   "lecture_groupe": {
@@ -2134,8 +2371,8 @@
    ]
   }
  },
- "fks": 71,
- "index": 60,
- "contraintes": 8,
+ "fks": 88,
+ "index": 74,
+ "contraintes": 9,
  "rapport": []
 }

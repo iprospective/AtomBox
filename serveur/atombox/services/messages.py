@@ -13,6 +13,8 @@ from ..schema.modeles import Acces, Adresse, Blob, Boite, Comm, CommCitation, Co
 from ..uuid7 import uuid7
 from ..journal import journal
 from ..sync import sync
+from . import personal_state as perso
+from . import trace
 from .. import settings
 
 log = journal("api")
@@ -24,9 +26,12 @@ SPECIAUX = [ {"id": "inbox", "label": "Boîte de réception", "icon": "📥", "a
              {"id": "trash", "label": "Corbeille", "icon": "🗑", "alias": ("TRASH", "DELETED ITEMS", "CORBEILLE")},
              {"id": "traites", "label": "Traités", "icon": "✓", "vue": True, "alias": ()},
              {"id": "archives", "label": "Archives", "icon": "🗄", "vue": True, "alias": ()} ]
-STATUTS = [ {"id": "nouveau", "label": "Nouveau"}, {"id": "a_faire", "label": "À faire"}, {"id": "en_cours", "label": "En cours"},
-            {"id": "attente", "label": "En attente"}, {"id": "traite", "label": "Traité"} ]
-VUES = ["trash", "archives", "traites"]
+# Les identifiants sont en anglais (D181), les libellés en français : c'est le code qui voyage
+# entre le serveur, le webmail et la base, pas le mot affiché.
+STATUTS = [ {"id": "new", "label": "Nouveau"}, {"id": "todo", "label": "À faire"}, {"id": "doing", "label": "En cours"},
+            {"id": "waiting", "label": "En attente"}, {"id": "processed", "label": "Traité"} ]
+EN_TRAVAIL = ("todo", "doing")           # ce que le compteur « à faire » compte (D176 § 4)
+VUES = ["trash", "junk", "archives", "traites"]
 
 def special_de(alias: str | None) -> str | None:
     a = (alias or "").upper().split("/")[-1]
@@ -39,6 +44,18 @@ def dossier_id_court(d: Dossier | None) -> str | None:
     return special_de(d.alias_imap) or str(d.dossier_id)
 
 def iso(t: datetime | None) -> str | None: return t.astimezone(timezone.utc).isoformat() if t else None
+
+# Les quatre transitions, et la date/l'auteur que chacune pose. UNE seule colonne d'état courant
+# (`exit_reason`), mais quatre couples de dates : un message est généralement traité PUIS archivé
+# des années après, et si l'archivage écrasait la date de traitement on perdrait la clé d'archivage
+# (D014) — la donnée qui commande la transition suivante (D175 § 4 bis).
+SORTIES = { "processed": ("processed_at", "processed_by"), "archived": ("archived_at", "archived_by"),
+            "deleted": ("deleted_at", "deleted_by"), "junk": ("junk_at", "junk_by") }
+
+def sorti_le(r: Rattachement) -> datetime | None:
+    """la date de l'état COURANT — ce que l'ancien `sorti_le` disait, sans l'écraser au passage"""
+    champ = SORTIES.get(r.exit_reason or "")
+    return getattr(r, champ[0]) if champ else None
 
 def quand(v) -> datetime | None:
     """ce que le webmail envoie : un nombre de millisecondes, ou une ISO 8601, ou null"""
@@ -129,29 +146,36 @@ async def compteurs(s: AsyncSession, compte: Compte) -> dict:
     boites = [b.boite_id for b in await boites_du_compte(s, compte)]
     if not boites: return {"compteurs": {}, "virtuels": [], "epingles": []}
     ds = await _dossiers_par_id(s, boites)
-    rows = (await s.execute(select(Rattachement.dossier_id, Rattachement.motif_sortie, Rattachement.lu_le.is_(None).label("non_lu"),
-                                   Rattachement.statut, func.count().label("n"))
-                            .where(_portee(boites)).group_by(Rattachement.dossier_id, Rattachement.motif_sortie, Rattachement.lu_le.is_(None), Rattachement.statut))).all()
+    # LE « NON LU » N'EST PLUS UNE COLONNE (D175) : c'est « moi, je ne l'ai pas ouvert », donc un
+    # EXISTS sur read_state. Il entre dans le GROUP BY comme le faisait `lu_le IS NULL` — même forme,
+    # même nombre de requêtes ; ce qui change, c'est que deux personnes ne lisent plus le même chiffre.
+    non_lu = perso.a_voir_par(compte.compte_id).label("non_lu")
+    rows = (await s.execute(select(Rattachement.dossier_id, Rattachement.exit_reason, non_lu,
+                                   Rattachement.status, func.count().label("n"))
+                            .where(_portee(boites)).group_by(Rattachement.dossier_id, Rattachement.exit_reason, non_lu, Rattachement.status))).all()
     c: dict = {}
     def bump(k, n, non_lu, statut):
         x = c.setdefault(k, {"t": 0, "u": 0, "f": 0}); x["t"] += n
         if non_lu: x["u"] += n
-        if statut in ("a_faire", "en_cours"): x["f"] += n
-    for dossier_id, motif, non_lu, statut, n in rows:
+        if statut in EN_TRAVAIL: x["f"] += n
+    # L'ORDRE COMPTE : l'état de sortie prime sur le dossier, parce qu'il EST la boîte aux lettres
+    # (D175 § 4). Un message archivé rangé dans un dossier utilisateur se compte dans Archives, pas
+    # dans son dossier — sinon le compteur annonce ce que la liste ne montre pas (D166).
+    for dossier_id, sortie, non_lu, statut, n in rows:
         d = ds.get(dossier_id); k = dossier_id_court(d) or "inbox"
-        if k == "trash": bump("trash", n, non_lu, statut); continue
-        if motif == "archive": bump("archives", n, non_lu, statut); continue
-        if motif == "traite": bump("traites", n, non_lu, statut); continue
-        if motif == "supprime": continue
+        if sortie == "archived": bump("archives", n, non_lu, statut); continue
+        if sortie == "processed": bump("traites", n, non_lu, statut); continue
+        if sortie == "junk": bump("junk", n, non_lu, statut); continue
+        if sortie == "deleted" or k == "trash": bump("trash", n, non_lu, statut); continue
         bump(k, n, non_lu, statut)
     prefs = compte.preferences or {}
     ref = await referentiels(s, compte)
-    c.update(await _compteurs_axes(s, boites, ds))
+    c.update(await _compteurs_axes(s, boites, ds, compte))
     c.update(await _compteurs_virtuels(s, boites, ds, compte, ref["virtuels"]))
     return {"compteurs": c, "virtuels": ref["virtuels"], "epingles": prefs.get("epingles", [])}
 
 
-async def _compteurs_axes(s: AsyncSession, boites, ds: dict) -> dict:
+async def _compteurs_axes(s: AsyncSession, boites, ds: dict, compte) -> dict:
     """Les compteurs de TOUTES les branches d'axes, en une requête (D078).
 
     Ils comptent TOUT, traités et archivés compris (D166) : une branche de classement s'ouvre sur
@@ -167,10 +191,11 @@ async def _compteurs_axes(s: AsyncSession, boites, ds: dict) -> dict:
     Sans lui, « Projet » afficherait plus de messages que la somme de ce qu'il contient."""
     from ..schema.modeles import Axe, CommTag, Tag
     corbeilles = [d.dossier_id for d in ds.values() if dossier_id_court(d) == "trash"]
+    non_lu = perso.a_voir_par(compte.compte_id)
     q = (select(Axe.nom, Tag.valeur,
                 func.count(func.distinct(Rattachement.comm_id)).label("t"),
-                func.count(func.distinct(case((Rattachement.lu_le.is_(None), Rattachement.comm_id)))).label("u"),
-                func.count(func.distinct(case((Rattachement.statut.in_(("a_faire", "en_cours")), Rattachement.comm_id)))).label("f"))
+                func.count(func.distinct(case((non_lu, Rattachement.comm_id)))).label("u"),
+                func.count(func.distinct(case((Rattachement.status.in_(EN_TRAVAIL), Rattachement.comm_id)))).label("f"))
          .select_from(CommTag)
          .join(Tag, Tag.tag_id == CommTag.tag_id).join(Axe, Axe.axe_id == Tag.axe_id)
          .join(Rattachement, Rattachement.comm_id == CommTag.comm_id)
@@ -187,8 +212,8 @@ async def _compteurs_axes(s: AsyncSession, boites, ds: dict) -> dict:
     # schema/ (D154). Deux requêtes constantes valent mieux qu'une exception à la règle.
     qa = (select(Axe.nom,
                  func.count(func.distinct(Rattachement.comm_id)).label("t"),
-                 func.count(func.distinct(case((Rattachement.lu_le.is_(None), Rattachement.comm_id)))).label("u"),
-                 func.count(func.distinct(case((Rattachement.statut.in_(("a_faire", "en_cours")), Rattachement.comm_id)))).label("f"))
+                 func.count(func.distinct(case((non_lu, Rattachement.comm_id)))).label("u"),
+                 func.count(func.distinct(case((Rattachement.status.in_(EN_TRAVAIL), Rattachement.comm_id)))).label("f"))
           .select_from(CommTag)
           .join(Tag, Tag.tag_id == CommTag.tag_id).join(Axe, Axe.axe_id == Tag.axe_id)
           .join(Rattachement, Rattachement.comm_id == CommTag.comm_id)
@@ -225,8 +250,8 @@ async def _compteurs_virtuels(s: AsyncSession, boites, ds: dict, compte, virtuel
         ou = and_(*conds)
         cles.append(v["id"])
         colonnes.append(func.count().filter(ou).label("t%d" % len(cles)))
-        colonnes.append(func.count().filter(and_(ou, Rattachement.lu_le.is_(None))).label("u%d" % len(cles)))
-        colonnes.append(func.count().filter(and_(ou, Rattachement.statut.in_(("a_faire", "en_cours")))).label("f%d" % len(cles)))
+        colonnes.append(func.count().filter(and_(ou, perso.a_voir_par(compte.compte_id))).label("u%d" % len(cles)))
+        colonnes.append(func.count().filter(and_(ou, Rattachement.status.in_(EN_TRAVAIL))).label("f%d" % len(cles)))
     if not cles:
         return {}
     corbeilles = [d.dossier_id for d in ds.values() if dossier_id_court(d) == "trash"]
@@ -241,9 +266,16 @@ def _condition_dossier(dossier: str, kind: str | None, ds: dict, compte):
     """la condition SQL d'un dossier du webmail"""
     par_court = {}
     for d in ds.values(): par_court.setdefault(dossier_id_court(d), []).append(d.dossier_id)
-    if dossier == "trash": return Rattachement.dossier_id.in_(par_court.get("trash", [uuid7()]))
-    if dossier == "archives": return and_(Rattachement.motif_sortie == "archive", Rattachement.dossier_id.notin_(par_court.get("trash", [])))
-    if dossier == "traites": return and_(Rattachement.motif_sortie == "traite", Rattachement.dossier_id.notin_(par_court.get("trash", [])))
+    # LES CINQ BOÎTES AUX LETTRES SONT DES VALEURS D'UNE COLONNE (D051 réalisée par D175 § 4) :
+    # `exit_reason` dit dans laquelle un message reçu se trouve, et il est dans une SEULE. Le
+    # dossier reste le contenant que sert l'IMAP — d'où le `or_` sur la corbeille, le temps que le
+    # ticket des cinq boîtes tranche à qui appartient l'UID (Q024).
+    if dossier == "trash": return or_(Rattachement.exit_reason == "deleted",
+                                      Rattachement.dossier_id.in_(par_court.get("trash", [uuid7()])))
+    if dossier == "archives": return Rattachement.exit_reason == "archived"
+    if dossier == "traites": return Rattachement.exit_reason == "processed"
+    if dossier == "junk": return or_(Rattachement.exit_reason == "junk",
+                                     Rattachement.dossier_id.in_(par_court.get("junk", [uuid7()])))
     if dossier in par_court: return Rattachement.dossier_id.in_(par_court[dossier])
     # une branche d'axe (D016/D077) : elle n'est pas un dossier, c'est un prédicat sur les tags —
     # elle tombait dans le `try UUID` ci-dessous, échouait, et la liste rendait « rien ».
@@ -274,7 +306,7 @@ async def liste(s: AsyncSession, compte: Compte, dossier: str, kind: str | None,
     est_vue = dossier in VUES
     if not tout:
         if sens in ("in", "out"): q = q.where(Comm.sens == sens)
-        if statut and statut != "tous": q = q.where(Rattachement.statut == statut)
+        if statut and statut != "tous": q = q.where(Rattachement.status == statut)
         # « tous » : en file, traités et archivés — c'est le défaut d'une branche de CLASSEMENT (D166).
         # La règle « traité sort de la file » (D014/D030) vaut pour une file de travail ; appliquée
         # à un tag, elle fait disparaître un projet entier dès qu'il est terminé.
@@ -284,10 +316,13 @@ async def liste(s: AsyncSession, compte: Compte, dossier: str, kind: str | None,
         # alors que les compteurs l'excluaient — compteur ≠ liste, ce que D166 interdit. Trouvé par
         # le test de bout en bout : un brouillon envoyé restait dans « Brouillons » (RM3188).
         if not est_vue:
-            q = q.where(or_(Rattachement.motif_sortie.is_(None), Rattachement.motif_sortie != "supprime"))
-            if filtre == "sortis": q = q.where(Rattachement.motif_sortie.isnot(None))
-            elif filtre != "tous": q = q.where(Rattachement.motif_sortie.is_(None))
-        if filtre == "non_lus": q = q.where(Rattachement.lu_le.is_(None))
+            q = q.where(or_(Rattachement.exit_reason.is_(None),
+                            Rattachement.exit_reason.notin_(("deleted", "junk"))))
+            if filtre == "sortis": q = q.where(Rattachement.exit_reason.isnot(None))
+            elif filtre != "tous": q = q.where(Rattachement.exit_reason.is_(None))
+        # « non lus » veut dire « que MOI je n'ai pas ouverts », et « à revoir » y entre : c'est le
+        # même geste qu'avant (D175 § 2), il ne détruit plus la trace de l'ouverture.
+        if filtre == "non_lus": q = q.where(perso.a_voir_par(compte.compte_id))
         if filtre == "recents": q = q.where(Comm.date_recue >= datetime.now(timezone.utc) - timedelta(days=30))
         if filtre == "pj": q = q.where(Comm.nb_pieces_jointes > 0)
         if filtre == "lourds": q = q.where(Comm.taille > 2048 * 1024)
@@ -298,18 +333,25 @@ async def liste(s: AsyncSession, compte: Compte, dossier: str, kind: str | None,
     # deuxième page inutilisable, et c'est le tag qui porte le classement (D002)
     from .tags import tags_de
     tags = await tags_de(s, [c.comm_id for _, c in lignes])
-    return [serialiser(r, c, ds, adresses.get(r.boite_id), extra={"tags": tags.get(c.comm_id, [])})
+    etats = await perso.etats_de(s, compte.compte_id, [c.comm_id for _, c in lignes])
+    return [serialiser(r, c, ds, adresses.get(r.boite_id), extra={"tags": tags.get(c.comm_id, [])},
+                       etat=etats.get((r.comm_id, r.boite_id)))
             for r, c in lignes]
 
-def serialiser(r: Rattachement, c: Comm, ds: dict, boite_adresse: str | None, complet: bool = False, extra: dict | None = None) -> dict:
+def serialiser(r: Rattachement, c: Comm, ds: dict, boite_adresse: str | None, complet: bool = False, extra: dict | None = None, etat: dict | None = None) -> dict:
+    """`etat` est l'état PERSONNEL du compte qui regarde (D175) : il ne se lit plus sur le
+    rattachement, donc il ne peut plus être deviné ici — il se passe. Absent = personne n'y a
+    touché, ce qui est le cas de la grande majorité des lignes."""
     origine = dossier_id_court(ds.get(r.dossier_origine_id)) if r.dossier_origine_id else dossier_id_court(ds.get(r.dossier_id))
     courant = dossier_id_court(ds.get(r.dossier_id))
     o = { "id": str(c.comm_id), "sujet": c.sujet, "from_nom": c.from_nom, "from_adresse": c.from_adresse,
           "date_recue": iso(c.date_recue), "thread_id": str(c.thread_id) if c.thread_id else None,
           "nb_pieces_jointes": c.nb_pieces_jointes, "taille": c.taille, "sens": c.sens, "nature": c.nature, "snippet": c.snippet,
-          "boite": boite_adresse, "lu": r.lu_le is not None, "drapeau": bool(r.drapeau), "statut": r.statut, "sorti_le": iso(r.sorti_le), "motif_sortie": r.motif_sortie,
+          "boite": boite_adresse, "statut": r.status, "sorti_le": iso(sorti_le(r)), "motif_sortie": r.exit_reason,
+          "statut_le": iso(r.status_at), "traite_le": iso(r.processed_at), "archive_le": iso(r.archived_at),
+          **perso.serialiser_etat(etat),
           "dossier_origine": origine or "inbox", "dossier": courant if courant != origine else None,
-          "tags": [], "connu": False, "usurpation": False, "valide": False, "suppr": r.motif_sortie == "supprime",
+          "tags": [], "connu": False, "usurpation": False, "valide": False, "suppr": r.exit_reason == "deleted",
           "reponse_possible": None, "list_id": None, "destinataires": [], "reference": None, "composition": None, "fiabilite": None, "contact_alternatif": None, "dsn": None, "dom": None }
     if extra: o.update(extra)
     return o
@@ -349,7 +391,8 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, magasin=None) -> dict
     provenance = await _provenance_de(s, comm_id)
     ref = str(provenance) if provenance else None
     vers = await _messages_des_encapsules(s, comm_id, boites, pjs)      # D168
-    return serialiser(r, c, ds, adresse, True, {
+    etats = await perso.etats_de(s, compte.compte_id, [comm_id])
+    return serialiser(r, c, ds, adresse, True, etat=etats.get((r.comm_id, r.boite_id)), extra={
         "tags": (await tags_de(s, [comm_id])).get(comm_id, []), "reference": ref,
         "destinataires": list(dest) + list(copies), "composition": _composition(r, c, ds, adresse, dest, copies, corps, ref),
         "corps": corps, "reponse_possible": e.reponse_possible if e else None, "list_id": e.list_id if e else None,
@@ -423,25 +466,87 @@ async def fil(s: AsyncSession, compte: Compte, comm_id) -> list[dict]:
     ds = await _dossiers_par_id(s, boites)
     q = select(Rattachement, Comm).join(Comm, Comm.comm_id == Rattachement.comm_id).where(_portee(boites), Comm.thread_id == (c.thread_id or c.comm_id)).order_by(Comm.date_recue.asc())
     adresses = {b: (await s.get(Adresse, (await s.get(Boite, b)).adresse_id)).adresse_complete for b in boites}
+    lignes = (await s.execute(q)).all()
+    etats = await perso.etats_de(s, compte.compte_id, [cc.comm_id for _, cc in lignes])
     vus, out = set(), []
-    for r, cc in (await s.execute(q)).all():
+    for r, cc in lignes:
         if cc.comm_id in vus: continue
-        vus.add(cc.comm_id); out.append(serialiser(r, cc, ds, adresses.get(r.boite_id)))
+        vus.add(cc.comm_id)
+        out.append(serialiser(r, cc, ds, adresses.get(r.boite_id), etat=etats.get((r.comm_id, r.boite_id))))
     return out
 
 async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict | None:
-    """le rattachement du compte (D036) : lu, statut, sortie, dossier, drapeau — jamais le message"""
+    """Le rattachement ET l'état personnel du compte — jamais le message.
+
+    TROIS PLANS, TROIS ENDROITS (D175), et ce point de passage unique est le seul qui les connaisse
+    tous les trois. Ce qui a changé de nature ici :
+
+      * `lu: true` pose un FAIT dans read_state, et ne l'efface plus jamais ;
+      * `lu: false` — l'ancien « marquer comme non lu » — pose le marqueur « à revoir ». Le geste
+        est le même pour l'utilisateur ; ce qu'il détruisait ne se détruit plus ;
+      * `drapeau` est personnel : l'IMAP sortant est par compte, donc chacun a le sien ;
+      * chaque transition de sortie pose SA date et SON auteur, et s'écrit au journal — sans quoi
+        « traité le 3, puis archivé le 10 » ne serait lisible nulle part.
+    """
     boites = [b.boite_id for b in await boites_du_compte(s, compte)]
     r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, _portee(boites)).limit(1))
     if not r: return None
     ds = await _dossiers_par_id(s, boites)
     n = 0; dossier_avant = r.dossier_id
+    maintenant = datetime.now(timezone.utc)
+
+    async def sortir(valeur: str | None):
+        """pose l'état courant, la date et l'auteur de CETTE transition, et la trace"""
+        nonlocal n
+        avant = r.exit_reason
+        r.exit_reason = valeur
+        if valeur in SORTIES:
+            champ_date, champ_qui = SORTIES[valeur]
+            # `processed_at` ne se réécrit pas : il commande l'archivage (D014). Les autres non plus,
+            # par symétrie — une date posée est un fait, et un fait ne se repose pas.
+            if getattr(r, champ_date) is None:
+                setattr(r, champ_date, maintenant); setattr(r, champ_qui, compte.compte_id)
+        trace.tracer(s, compte.compte_id, {"processed": "processed", "archived": "archived",
+                                           "deleted": "deleted", "junk": "junked"}.get(valeur, "refiled"),
+                     "rattachement", comm_id, {"boite_id": str(r.boite_id), "avant": avant, "apres": valeur})
+        n += 1
+
     for k, v in (patch or {}).items():
-        if k == "lu": r.lu_le = datetime.now(timezone.utc) if v else None; n += 1
-        elif k == "statut" and v in [x["id"] for x in STATUTS]: r.statut = v; n += 1
-        elif k == "motif_sortie": r.motif_sortie = v; n += 1
-        elif k == "sorti_le": r.sorti_le = quand(v); n += 1
-        elif k == "drapeau": r.drapeau = bool(v); n += 1
+        if k == "lu":
+            if v:
+                await perso.ouvrir(s, compte.compte_id, comm_id, r.boite_id)
+                await perso.retirer(s, compte.compte_id, comm_id, r.boite_id, perso.A_REVOIR)
+                trace.tracer(s, compte.compte_id, "opened", "rattachement", comm_id, {"boite_id": str(r.boite_id)})
+            else:
+                # « NON LU » N'EXISTE PLUS (D175 § 2) : le geste veut dire « j'y suis passé, il faut
+                # que j'y retourne ». On le dit, au lieu d'effacer la preuve du passage.
+                await perso.poser(s, compte.compte_id, comm_id, r.boite_id, perso.A_REVOIR)
+                trace.tracer(s, compte.compte_id, "marked", "rattachement", comm_id,
+                             {"boite_id": str(r.boite_id), "marqueur": perso.A_REVOIR, "pose": True})
+            n += 1
+        elif k == "a_revoir":
+            if v: await perso.poser(s, compte.compte_id, comm_id, r.boite_id, perso.A_REVOIR)
+            else: await perso.retirer(s, compte.compte_id, comm_id, r.boite_id, perso.A_REVOIR)
+            trace.tracer(s, compte.compte_id, "marked", "rattachement", comm_id,
+                         {"boite_id": str(r.boite_id), "marqueur": perso.A_REVOIR, "pose": bool(v)})
+            n += 1
+        elif k == "sommeil":
+            await perso.poser(s, compte.compte_id, comm_id, r.boite_id, perso.SOMMEIL, due_at=quand(v)) if v \
+                else await perso.retirer(s, compte.compte_id, comm_id, r.boite_id, perso.SOMMEIL)
+            n += 1
+        elif k == "statut" and v in [x["id"] for x in STATUTS]:
+            if v != r.status:
+                trace.tracer(s, compte.compte_id, "status_changed", "rattachement", comm_id,
+                             {"boite_id": str(r.boite_id), "avant": r.status, "apres": v})
+            r.status, r.status_at, r.status_by = v, maintenant, compte.compte_id; n += 1
+        elif k == "motif_sortie": await sortir(v or None)
+        elif k == "sorti_le":
+            # La date ne se pose plus de l'extérieur : c'est la TRANSITION qui la pose, dans la case
+            # de l'état où elle a eu lieu. Accepter un `sorti_le` nu, c'était pouvoir dater un
+            # traitement sans dire qu'il avait eu lieu.
+            log.debug("PATCH %s : sorti_le ignoré — la date suit la transition (D175)", comm_id)
+        elif k == "drapeau":
+            await perso.toucher(s, compte.compte_id, comm_id, r.boite_id, flagged=bool(v)); n += 1
         elif k == "personnel": r.personnel = bool(v); n += 1
         elif k == "dossier":
             if r.dossier_origine_id is None: r.dossier_origine_id = r.dossier_id
@@ -456,8 +561,8 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
             r.uid_servi = await attribuer_uid(s, r.dossier_id)
             n += 1
         elif k == "suppr" and v:
-            r.motif_sortie = "supprime"; r.sorti_le = datetime.now(timezone.utc); r.supprime_par = compte.compte_id
-            r.restaurable_jusqu_au = datetime.now(timezone.utc) + timedelta(days=30); n += 1
+            await sortir("deleted")
+            r.restaurable_jusqu_au = maintenant + timedelta(days=30)
         elif k == "tags": log.info("PATCH %s : tags ignorés en V0 (pas d'axe métier, D140b)", comm_id)
         else: log.debug("PATCH %s : champ ignoré %s", comm_id, k)
     # SYNCHRONISATION MONTANTE (F113) : l'état part vers IMAP hors processus, jamais dans la
@@ -471,7 +576,8 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
                                         "dossier_avant": str(dossier_avant) if dossier_avant else None})
     await s.commit()
     c = await s.get(Comm, comm_id); boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
-    return {"modifies": n, "message": serialiser(r, c, ds, adresse)}
+    etats = await perso.etats_de(s, compte.compte_id, [comm_id])
+    return {"modifies": n, "message": serialiser(r, c, ds, adresse, etat=etats.get((r.comm_id, r.boite_id)))}
 
 async def detacher(s: AsyncSession, compte: Compte, comm_id) -> bool:
     r = await patcher(s, compte, comm_id, {"suppr": True})
@@ -700,7 +806,9 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
         r.dossier_id = cible.dossier_id if cible else None
         r.uid_servi = await attribuer_uid(s, r.dossier_id)
         r.dossier_origine_id = None
-        r.motif_sortie, r.sorti_le = None, None
+        # On remet dans la file en effaçant l'ÉTAT, jamais les dates : « il a été traité le 3 »
+        # reste vrai même s'il est revenu. C'est toute la différence entre un état et un fait.
+        r.exit_reason = None
         from ..modules import evenements
         # L'enveloppe vient des participants ANALYSÉS, comme à la création (RM3214) : le `cc` du
         # client n'est pas dans le corps de la requête, il est dans les en-têtes qu'on vient d'écrire.
@@ -763,10 +871,14 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_c
     s.add(c)
     s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, headers=a.headers, blob_ref=brut, empreinte=empreinte_identite(a), structure_mime=a.structure_mime, reponse_possible="oui"))
     from ..uid_servi import attribuer_async as attribuer_uid
-    s.add(Rattachement(comm_id=comm_id, boite_id=boite.boite_id, compte_id=compte.compte_id, lu_le=maintenant, drapeau=False, statut="nouveau", personnel=False, gele=False,
+    s.add(Rattachement(comm_id=comm_id, boite_id=boite.boite_id, compte_id=compte.compte_id,
+                       status="new", personnel=False, gele=False,
                        dossier_id=cible.dossier_id if cible else None,
                        uid_servi=await attribuer_uid(s, cible.dossier_id if cible else None)))
     await s.flush()
+    # CE QUE J'ÉCRIS, JE L'AI LU : la ligne de lecture se pose sur MOI (D175), et non plus sur le
+    # rattachement. Sans elle, mon propre envoi me reviendrait en gras dans « Envoyés ».
+    await s.execute(perso.ordre_ouvrir(compte.compte_id, comm_id, boite.boite_id, maintenant))
     await _poser_participants(s, comm_id, a.participants)
     await _poser_pieces(s, comm_id, a.pieces, magasin, maintenant)
     await _poser_provenance(s, comm_id, src_id, maintenant)

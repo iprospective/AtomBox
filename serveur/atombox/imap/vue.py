@@ -12,10 +12,11 @@ Trois d'entre eux méritent d'être dits :
    « INBOX » se marchent dessus et le client n'a aucun moyen de les distinguer. La boîte principale
    garde le nom nu `INBOX`, qu'IMAP traite à part (RFC 3501 § 5.1).
 
-2. **Les drapeaux sont ceux du rattachement, donc COLLECTIFS** tant que l'état personnel n'existe
-   pas (D175, RM3320). Sur une boîte à un membre, c'est exact ; sur une boîte partagée, `\\Seen` dit
-   « quelqu'un l'a ouvert ». On le sert quand même : c'est ce que le webmail montre aujourd'hui, et
-   servir autre chose ferait diverger les deux affichages.
+2. **Les drapeaux sont PERSONNELS** (D175 § 3, RM3320). Ils ont été collectifs le temps que l'état
+   personnel n'existe pas ; il existe. Et c'est ici que ça se justifie le mieux : une session IMAP
+   est authentifiée par UN compte, donc `\\Seen` et `\\Flagged` ne peuvent dire que « MOI je l'ai
+   ouvert », « MOI je l'ai marqué ». Sur une boîte partagée, deux clients voient deux états — ce qui
+   est la vérité, et ce que l'ancien modèle ne savait pas exprimer.
 
 3. **Le corps servi est l'octet du magasin**, jamais une reconstruction. C'est l'exigence de D025 et
    de RM3213 : un client qui télécharge un message doit obtenir le fichier d'origine, pas notre
@@ -42,17 +43,21 @@ class BoiteAuxLettres:
 class MessageServi:
     """un message, vu d'un client : ses drapeaux, sa taille, et ses octets à la demande"""
 
-    def __init__(self, uid, comm, rattachement, magasin, blob_ref, message_id=None):
+    def __init__(self, uid, comm, rattachement, magasin, blob_ref, message_id=None, etat=None):
         self.uid, self._c, self._r = uid, comm, rattachement
         self._magasin, self._blob, self._message_id = magasin, blob_ref, message_id
         self.taille = comm.taille or 0
         self.date_interne = email.utils.format_datetime(comm.date_recue).replace(",", "")[:26] \
             if comm.date_recue else "01-Jan-1970 00:00:00 +0000"
+        # DEUX ORIGINES, ET C'EST LE FOND DE D175 : `\\Seen` et `\\Flagged` viennent de l'état
+        # PERSONNEL du compte connecté (`etat` absent = il n'y a jamais touché) ; `\\Answered` et
+        # `\\Deleted` viennent du rattachement, parce que répondre et supprimer sont des actes
+        # COLLECTIFS — tout le monde voit qu'il y a été répondu.
         self.drapeaux = []
-        if rattachement.lu_le is not None: self.drapeaux.append("\\Seen")
-        if rattachement.drapeau: self.drapeaux.append("\\Flagged")
+        if etat is not None and etat.vu: self.drapeaux.append("\\Seen")
+        if etat is not None and etat.flagged: self.drapeaux.append("\\Flagged")
         if rattachement.repondu_le is not None: self.drapeaux.append("\\Answered")
-        if rattachement.motif_sortie == "supprime": self.drapeaux.append("\\Deleted")
+        if rattachement.exit_reason == "deleted": self.drapeaux.append("\\Deleted")
 
     def enveloppe(self):
         """ENVELOPPE au sens RFC 3501 § 7.4.2 — l'ordre des dix champs est imposé et ne se devine pas"""
@@ -103,6 +108,7 @@ class Vue:
 
     def __init__(self, session, magasin):
         self.s, self.magasin = session, magasin
+        self.compte = None     # posé à l'authentification : les drapeaux servis sont les SIENS
 
     # ── qui es-tu ───────────────────────────────────────────────────────────────────────────────
     def authentifier(self, identifiant: str, mot_de_passe: str):
@@ -110,6 +116,7 @@ class Vue:
         c = self.s.scalar(select(Compte).where(Compte.login == (identifiant or "").strip().lower()))
         if c is None or not c.actif: return None
         if not verifier_mot_de_passe(mot_de_passe or "", c.mot_de_passe_empreinte): return None
+        self.compte = c
         return c
 
     # ── que vois-tu ─────────────────────────────────────────────────────────────────────────────
@@ -146,8 +153,13 @@ class Vue:
     def etat(self, compte, nom):
         b = self.ouvrir(compte, nom)
         if b is None: return None
+        # UNSEEN est le compte de CE client, pas celui de la boîte (D175) : deux personnes sur une
+        # boîte partagée n'ont pas le même nombre de non-lus, et annoncer un chiffre commun ferait
+        # clignoter l'une pour ce que l'autre a déjà lu.
+        from ..services.personal_state import a_voir_par
         non_lus = self.s.scalar(select(__import__("sqlalchemy").func.count()).select_from(Rattachement)
-                                .where(Rattachement.dossier_id == b.dossier_id, Rattachement.lu_le.is_(None))) or 0
+                                .where(Rattachement.dossier_id == b.dossier_id,
+                                       a_voir_par(compte.compte_id))) or 0
         return {"MESSAGES": len(b.uids), "RECENT": 0, "UIDNEXT": b.uid_next,
                 "UIDVALIDITY": b.uid_validity, "UNSEEN": non_lus}
 
@@ -159,8 +171,10 @@ class Vue:
         c = self.s.get(Comm, r.comm_id)
         e = self.s.get(CommEmail, r.comm_id)
         if c is None: return None
+        from ..services.personal_state import etat_sync
+        etat = etat_sync(self.s, self.compte.compte_id if self.compte else None, r.comm_id, r.boite_id)
         return MessageServi(uid, c, r, self.magasin, e.blob_ref if e else None,
-                            message_id=e.message_id if e else None)
+                            message_id=e.message_id if e else None, etat=etat)
 
     def contient(self, boite, uid: int, champ: str, aiguille: str) -> bool:
         m = self.message(boite, uid)

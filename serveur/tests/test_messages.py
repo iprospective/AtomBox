@@ -15,11 +15,15 @@ def test_serialisation_porte_le_contrat():
     did = uuid.uuid4(); inbox = Dossier(dossier_id=did, nom="INBOX", alias_imap="INBOX"); trash = Dossier(dossier_id=uuid.uuid4(), nom="Trash", alias_imap="Trash")
     ds = {did: inbox, trash.dossier_id: trash}
     c = Comm(comm_id=uuid.uuid4(), sujet="Devis 12", from_nom="Jean", from_adresse="jean@x.fr", date_recue=datetime(2026, 9, 4, 9, 12, tzinfo=timezone.utc), thread_id=None, nb_pieces_jointes=1, taille=2048, sens="in", nature="humain", snippet="Bonjour")
-    r = Rattachement(comm_id=c.comm_id, boite_id=uuid.uuid4(), lu_le=None, statut="nouveau", dossier_id=trash.dossier_id, dossier_origine_id=did, motif_sortie=None)
+    r = Rattachement(comm_id=c.comm_id, boite_id=uuid.uuid4(), status="new", dossier_id=trash.dossier_id, dossier_origine_id=did, exit_reason=None)
+    # `etat` non passé = personne n'y a touché : c'est le cas de la très grande majorité des lignes,
+    # et c'est ce qui rend la table des faits de lecture CREUSE (D175 § 5).
     o = svc.serialiser(r, c, ds, "contact@exemple.fr")
     assert o["id"] == str(c.comm_id) and o["date_recue"] == "2026-09-04T09:12:00+00:00" and o["lu"] is False
+    assert o["a_revoir"] is False and o["drapeau"] is False
     assert o["dossier_origine"] == "inbox" and o["dossier"] == "trash", "déplacé en corbeille : origine gardée (D088)"
-    for k in ("sujet", "from_nom", "from_adresse", "date_recue", "thread_id", "nb_pieces_jointes", "taille", "sorti_le", "motif_sortie", "dossier_origine", "destinataires", "reponse_possible", "list_id", "lu", "sens", "nature", "snippet", "boite", "dossier", "statut", "tags"):
+    for k in ("sujet", "from_nom", "from_adresse", "date_recue", "thread_id", "nb_pieces_jointes", "taille", "sorti_le", "motif_sortie", "dossier_origine", "destinataires", "reponse_possible", "list_id", "lu", "sens", "nature", "snippet", "boite", "dossier", "statut", "tags",
+              "a_revoir", "drapeau", "sommeil", "marqueurs", "traite_le", "archive_le", "statut_le"):
         assert k in o, k
 
 def _transfert_de(brut: bytes):
@@ -150,6 +154,8 @@ def monde(tmp_path_factory):
     s.add(Acces(compte_id=compte.compte_id, boite_id=boite.boite_id, role="lecteur", debut=datetime.now(timezone.utc), accorde_par=compte.compte_id))
     inbox = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom="INBOX", alias_imap="INBOX", protege=True); s.add(inbox)
     for alias in ("Sent", "Drafts", "Trash", "Junk"): s.add(Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom=alias, alias_imap=alias, protege=True))
+    from atombox.schema.semences import semer
+    semer(s)                      # schema.sql est un DDL : il n'apporte aucune donnée
     s.commit()
     ids = [ingerer(s, m, boite.boite_id, lire(f), dossier_id=inbox.dossier_id)["comm_id"] for f in ("simple.eml", "reponse.eml", "pieces.eml", "liste.eml")]
     yield {"session": s, "ids": ids, "url": u}
@@ -192,8 +198,11 @@ def test_parcours_du_webmail(monde):
     assert p["message"]["dossier"] == "trash" and p["message"]["dossier_origine"] == "inbox"
     assert c.get("/api/v1/messages", params={"dossier": "trash"}, headers=h).json()["total"] == 1
     p = c.patch("/api/v1/messages/" + mid + "/rattachement", json={"dossier": None}, headers=h).json(); assert p["message"]["dossier"] is None
-    p = c.patch("/api/v1/messages/" + str(monde["ids"][3]) + "/rattachement", json={"motif_sortie": "archive", "sorti_le": 1757000000000}, headers=h).json()
-    assert p["message"]["motif_sortie"] == "archive" and c.get("/api/v1/messages", params={"dossier": "archives"}, headers=h).json()["total"] == 1
+    p = c.patch("/api/v1/messages/" + str(monde["ids"][3]) + "/rattachement", json={"motif_sortie": "archived"}, headers=h).json()
+    assert p["message"]["motif_sortie"] == "archived" and c.get("/api/v1/messages", params={"dossier": "archives"}, headers=h).json()["total"] == 1
+    # LA DATE SUIT LA TRANSITION : on ne la passe plus, et pourtant elle est là. Sans elle,
+    # l'archivage automatique (D014) n'aurait aucune clé.
+    assert p["message"]["archive_le"] and p["message"]["sorti_le"] == p["message"]["archive_le"]
     n = c.post("/api/v1/messages", json={"boite": "contact@exemple.fr", "destinataires": ["jean@x.fr"], "sujet": "Test", "corps": "Bonjour", "composition": None}, headers=h).json()
     assert n["ok"] and n["crees"] == 1 and n["message"]["sens"] == "out" and n["message"]["dossier_origine"] == "sent"
     assert c.get("/api/v1/messages", params={"dossier": "sent"}, headers=h).json()["total"] == 1

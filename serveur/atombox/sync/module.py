@@ -48,7 +48,11 @@ class ModuleSync(Module):
         releve = Releve(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_de(adresse, cfg["master"]), cfg["mot_de_passe"])
         try:
             releve.selectionner(source.alias_imap or source.nom, ecriture=True)
-            poser, retirer = drapeaux_voulus(r)
+            # Les drapeaux qu'on POUSSE sont ceux du membre qui relève (D175 § 3) : le
+            # fournisseur n'a qu'un jeu de drapeaux, et c'est le sien qui le représente.
+            from ..services import personal_state as perso
+            releveur = perso.compte_releveur(s, boite_id)
+            poser, retirer = drapeaux_voulus(r, perso.etat_sync(s, releveur, r.comm_id, r.boite_id))
             releve.poser_drapeaux(r.uid_imap, poser, retirer)
             if cible.dossier_id != source.dossier_id:
                 neuf = releve.deplacer(r.uid_imap, cible.alias_imap or cible.nom)

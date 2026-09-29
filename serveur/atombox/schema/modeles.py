@@ -268,27 +268,32 @@ class Boite(Base):
     __table_args__ = (PrimaryKeyConstraint("boite_id", name="pk_boite"), CheckConstraint("\"type\" IN ('personnelle', 'partagee', 'alias', 'collecte', 'groupe')", name="ck_boite_type"),)
 
 class Rattachement(Base):
-    """LE lien entre une communication et une boîte/un compte : c'est ici que vivent les flags de lecture, le statut de traitem"""
+    """LE lien entre une communication et une boîte : c'est ici que vit l'ACTE COLLECTIF — le statut de traitement, l'état cour"""
     __tablename__ = "rattachement"
     comm_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("comm.comm_id", name="fk_rattachement_comm_id"), nullable=False)
     boite_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("boite.boite_id", name="fk_rattachement_boite_id"), nullable=False)
     compte_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_rattachement_compte_id"), nullable=True)
     correspondant_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("correspondant.correspondant_id", name="fk_rattachement_correspondant_id"), nullable=True)
-    lu_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     repondu_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     transfere_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    drapeau: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    statut: Mapped[str] = mapped_column(Text, nullable=False)
-    sorti_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    motif_sortie: Mapped[str | None] = mapped_column(Text, nullable=True)
-    supprime_par: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_rattachement_supprime_par"), nullable=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    status_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_rattachement_status_by"), nullable=True)
+    exit_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    processed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processed_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_rattachement_processed_by"), nullable=True)
+    archived_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_rattachement_archived_by"), nullable=True)
+    deleted_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_rattachement_deleted_by"), nullable=True)
+    junk_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    junk_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_rattachement_junk_by"), nullable=True)
     restaurable_jusqu_au: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dossier_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("dossier.dossier_id", name="fk_rattachement_dossier_id"), nullable=True)
     dossier_origine_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("dossier.dossier_id", name="fk_rattachement_dossier_origine_id"), nullable=True)
     uid_imap: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     uid_servi: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     personnel: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    reveil_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     echeance_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     gele: Mapped[bool] = mapped_column(Boolean, nullable=False)
     comm: Mapped[Comm | None] = relationship("Comm", foreign_keys=[comm_id])
@@ -297,7 +302,68 @@ class Rattachement(Base):
     correspondant: Mapped[Correspondant | None] = relationship("Correspondant", foreign_keys=[correspondant_id])
     dossier: Mapped[Dossier | None] = relationship("Dossier", foreign_keys=[dossier_id])
     dossier_origine: Mapped[Dossier | None] = relationship("Dossier", foreign_keys=[dossier_origine_id])
-    __table_args__ = (PrimaryKeyConstraint("comm_id", "boite_id", name="pk_rattachement"), CheckConstraint("\"statut\" IN ('nouveau', 'a_faire', 'en_cours', 'attente', 'traite')", name="ck_rattachement_statut"), CheckConstraint("\"motif_sortie\" IN ('traite', 'archive', 'supprime')", name="ck_rattachement_motif_sortie"),)
+    __table_args__ = (PrimaryKeyConstraint("comm_id", "boite_id", name="pk_rattachement"), CheckConstraint("\"status\" IN ('new', 'todo', 'doing', 'waiting', 'processed')", name="ck_rattachement_status"), CheckConstraint("\"exit_reason\" IN ('processed', 'archived', 'deleted', 'junk')", name="ck_rattachement_exit_reason"),)
+
+class ReadState(Base):
+    """LES FAITS DE LECTURE, par personne (D175 § 1) : ouvert quand, revu quand, combien de fois, et le drapeau — personnel par"""
+    __tablename__ = "read_state"
+    compte_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_read_state_compte_id"), nullable=False)
+    comm_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("comm.comm_id", name="fk_read_state_comm_id"), nullable=False)
+    boite_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("boite.boite_id", name="fk_read_state_boite_id"), nullable=False)
+    opened_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_seen_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    open_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    flagged: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    compte: Mapped[Compte | None] = relationship("Compte", foreign_keys=[compte_id])
+    comm: Mapped[Comm | None] = relationship("Comm", foreign_keys=[comm_id])
+    boite: Mapped[Boite | None] = relationship("Boite", foreign_keys=[boite_id])
+    __table_args__ = (PrimaryKeyConstraint("compte_id", "comm_id", "boite_id", name="pk_read_state"),)
+
+class Marker(Base):
+    """LA DÉCLARATION d'un marqueur (D178) : son code, ce qu'il porte, sa portée, qui peut le poser. Le workflow est fermé — il"""
+    __tablename__ = "marker"
+    marker_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    libelle: Mapped[str] = mapped_column(Text, nullable=False)
+    scope: Mapped[str] = mapped_column(Text, nullable=False)
+    value_type: Mapped[str] = mapped_column(Text, nullable=False)
+    domaine_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("domaine.domaine_id", name="fk_marker_domaine_id"), nullable=True)
+    options: Mapped[dict | list | None] = mapped_column(JSONB, nullable=True)
+    actif: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    integre: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    domaine: Mapped[Domaine | None] = relationship("Domaine", foreign_keys=[domaine_id])
+    __table_args__ = (PrimaryKeyConstraint("marker_id", name="pk_marker"), UniqueConstraint("code", name="uq_marker_code"), CheckConstraint("\"scope\" IN ('collective', 'personal')", name="ck_marker_scope"), CheckConstraint("\"value_type\" IN ('presence', 'moment', 'choix')", name="ck_marker_value_type"),)
+
+class MarkerCollective(Base):
+    """Un marqueur de portée COLLECTIVE posé sur un message dans une boîte : signé, daté (D178)."""
+    __tablename__ = "marker_collective"
+    comm_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("comm.comm_id", name="fk_marker_collective_comm_id"), nullable=False)
+    boite_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("boite.boite_id", name="fk_marker_collective_boite_id"), nullable=False)
+    marker_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("marker.marker_id", name="fk_marker_collective_marker_id"), nullable=False)
+    set_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    set_by: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_marker_collective_set_by"), nullable=True)
+    due_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    comm: Mapped[Comm | None] = relationship("Comm", foreign_keys=[comm_id])
+    boite: Mapped[Boite | None] = relationship("Boite", foreign_keys=[boite_id])
+    marker: Mapped[Marker | None] = relationship("Marker", foreign_keys=[marker_id])
+    __table_args__ = (PrimaryKeyConstraint("comm_id", "boite_id", "marker_id", name="pk_marker_collective"),)
+
+class MarkerPersonal(Base):
+    """Un marqueur de portée PERSONNELLE posé par un compte sur un message dans une boîte (D178) : « à revoir », mise en sommei"""
+    __tablename__ = "marker_personal"
+    compte_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_marker_personal_compte_id"), nullable=False)
+    comm_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("comm.comm_id", name="fk_marker_personal_comm_id"), nullable=False)
+    boite_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("boite.boite_id", name="fk_marker_personal_boite_id"), nullable=False)
+    marker_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("marker.marker_id", name="fk_marker_personal_marker_id"), nullable=False)
+    set_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    due_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    compte: Mapped[Compte | None] = relationship("Compte", foreign_keys=[compte_id])
+    comm: Mapped[Comm | None] = relationship("Comm", foreign_keys=[comm_id])
+    boite: Mapped[Boite | None] = relationship("Boite", foreign_keys=[boite_id])
+    marker: Mapped[Marker | None] = relationship("Marker", foreign_keys=[marker_id])
+    __table_args__ = (PrimaryKeyConstraint("compte_id", "comm_id", "boite_id", "marker_id", name="pk_marker_personal"),)
 
 class Acces(Base):
     """Un droit d'un compte sur une boîte (ou une identité), DATÉ : début, fin, rôle, révocation tracée. La trace ne donne pas """
@@ -308,6 +374,8 @@ class Acces(Base):
     debut: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     fin: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     accorde_par: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_acces_accorde_par"), nullable=False)
+    stands_in_for: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_acces_stands_in_for"), nullable=True)
+    options: Mapped[dict | list | None] = mapped_column(JSONB, nullable=True)
     compte: Mapped[Compte | None] = relationship("Compte", foreign_keys=[compte_id])
     boite: Mapped[Boite | None] = relationship("Boite", foreign_keys=[boite_id])
     __table_args__ = (PrimaryKeyConstraint("compte_id", "boite_id", name="pk_acces"), CheckConstraint("\"role\" IN ('lecteur', 'membre', 'gestionnaire', 'admin_domaine', 'admin_instance')", name="ck_acces_role"),)
@@ -525,7 +593,7 @@ class Journal(Base):
     cible_type: Mapped[str] = mapped_column(Text, nullable=False)
     cible_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     details: Mapped[dict | list | None] = mapped_column(JSONB, nullable=True)
-    __table_args__ = (PrimaryKeyConstraint("journal_id", name="pk_journal"), CheckConstraint("\"action\" IN ('lu', 'traite', 'partage', 'revoque', 'supprime', 'restaure', 'valide_expediteur', 'desabonne', 'vers_personnel', 'libere_quarantaine', 'admin_lecture')", name="ck_journal_action"),)
+    __table_args__ = (PrimaryKeyConstraint("journal_id", name="pk_journal"), CheckConstraint("\"action\" IN ('opened', 'processed', 'archived', 'deleted', 'junked', 'refiled', 'status_changed', 'marked', 'shared', 'revoked', 'restored', 'sender_trusted', 'unsubscribed', 'to_personal', 'quarantine_released', 'admin_read')", name="ck_journal_action"),)
 
 class Modele(Base):
     """Un MODÈLE de message : gabarit de sujet et de corps avec variables, une catégorie (commande fournisseur, courrier RH…), """
@@ -582,4 +650,4 @@ class Evenement(Base):
     erreur: Mapped[str | None] = mapped_column(Text, nullable=True)
     __table_args__ = (PrimaryKeyConstraint("evenement_id", name="pk_evenement"),)
 
-MODELES = {"comm": Comm, "reinitialisation": Reinitialisation, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}
+MODELES = {"comm": Comm, "reinitialisation": Reinitialisation, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "read_state": ReadState, "marker": Marker, "marker_collective": MarkerCollective, "marker_personal": MarkerPersonal, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}

@@ -168,7 +168,7 @@ def test_une_branche_de_classement_montre_aussi_les_traites(monde):  # noqa: F81
 
     # on en traite un : il sort de la FILE, pas du classement
     c.patch("/api/v1/messages/%s/rattachement" % b,
-            json={"statut": "traite", "motif_sortie": "traite"}, headers=h)
+            json={"statut": "processed", "motif_sortie": "processed"}, headers=h)
 
     tous = c.get("/api/v1/messages", params={"dossier": "file:x", "kind": "virtuel", "filtre": "tous"},
                  headers=h).json()

@@ -342,7 +342,7 @@ def test_4_les_regles_tiennent_sur_le_flux(chaine):
         return next(f["nb_declenchements"] for f in ch.get("/filtres").json()["filtres"] if f["nom"] == nom)
 
     # ── trois règles, comme un utilisateur les écrit : un expéditeur, un sujet, une liste ───────
-    compta = regle("Compta : à traiter", "from", "compta.example", {"type": "statut", "statut": "a_faire"})
+    compta = regle("Compta : à traiter", "from", "compta.example", {"type": "statut", "statut": "todo"})
     regle("Factures : corbeille", "sujet", "Facture n°", {"type": "corbeille"})
     regle("Lettres d'information", "liste", None, {"type": "classer", "dossier": "Junk"}, operateur="existe")
     muette = regle("Jamais vue", "from", "personne-de-ce-nom.invalid", {"type": "drapeau"})
@@ -356,7 +356,7 @@ def test_4_les_regles_tiennent_sur_le_flux(chaine):
 
     compte = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Situation de compte"), None),
                          "le courrier de la compta arrive")
-    assert compte["statut"] == "a_faire", "la règle d'EXPÉDITEUR a posé le statut à l'ingestion"
+    assert compte["statut"] == "todo", "la règle d'EXPÉDITEUR a posé le statut à l'ingestion"
 
     facture = ch.attendre(lambda: next((x for x in ch.liste("trash", filtre="tous") if x["sujet"] == "Facture n°2026-118"), None),
                           "la règle de SUJET a mis la facture à la corbeille")
@@ -434,7 +434,7 @@ def test_4_les_regles_tiennent_sur_le_flux(chaine):
     ch.imap.deposer(message("Second relevé", de="Compta <compta@compta.example>"))
     apres = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Second relevé"), None),
                         "un second courrier de la compta arrive")
-    assert apres["statut"] == "nouveau", "la règle désactivée n'a pas posé son statut"
+    assert apres["statut"] == "new", "la règle désactivée n'a pas posé son statut"
     assert compteur_regle("Compta : à traiter") == avant_compta, "et elle n'a rien compté"
 
     assert ch.delete("/filtres/" + muette).json()["ok"], "une règle se supprime"

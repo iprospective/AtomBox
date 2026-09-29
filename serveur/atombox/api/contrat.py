@@ -213,23 +213,70 @@ class Rattachement(BaseModel):
     boite_id: uuid.UUID
     compte_id: uuid.UUID | None = None
     correspondant_id: uuid.UUID | None = None
-    lu_le: datetime.datetime | None = None
     repondu_le: datetime.datetime | None = None
     transfere_le: datetime.datetime | None = None
-    drapeau: bool
-    statut: str
-    sorti_le: datetime.datetime | None = None
-    motif_sortie: str | None = None
-    supprime_par: uuid.UUID | None = None
+    status: str
+    status_at: datetime.datetime | None = None
+    status_by: uuid.UUID | None = None
+    exit_reason: str | None = None
+    processed_at: datetime.datetime | None = None
+    processed_by: uuid.UUID | None = None
+    archived_at: datetime.datetime | None = None
+    archived_by: uuid.UUID | None = None
+    deleted_at: datetime.datetime | None = None
+    deleted_by: uuid.UUID | None = None
+    junk_at: datetime.datetime | None = None
+    junk_by: uuid.UUID | None = None
     restaurable_jusqu_au: datetime.datetime | None = None
     dossier_id: uuid.UUID | None = None
     dossier_origine_id: uuid.UUID | None = None
     uid_imap: int | None = None
     uid_servi: int | None = None
     personnel: bool
-    reveil_le: datetime.datetime | None = None
     echeance_le: datetime.datetime | None = None
     gele: bool
+
+class ReadState(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    compte_id: uuid.UUID
+    comm_id: uuid.UUID
+    boite_id: uuid.UUID
+    opened_at: datetime.datetime | None = None
+    last_seen_at: datetime.datetime | None = None
+    open_count: int
+    flagged: bool
+
+class Marker(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    marker_id: uuid.UUID
+    code: str
+    libelle: str
+    scope: str
+    value_type: str
+    domaine_id: uuid.UUID | None = None
+    options: dict | list | None = None
+    actif: bool
+    integre: bool
+
+class MarkerCollective(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    comm_id: uuid.UUID
+    boite_id: uuid.UUID
+    marker_id: uuid.UUID
+    set_at: datetime.datetime
+    set_by: uuid.UUID | None = None
+    due_at: datetime.datetime | None = None
+    value: str | None = None
+
+class MarkerPersonal(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    compte_id: uuid.UUID
+    comm_id: uuid.UUID
+    boite_id: uuid.UUID
+    marker_id: uuid.UUID
+    set_at: datetime.datetime
+    due_at: datetime.datetime | None = None
+    value: str | None = None
 
 class Acces(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -239,6 +286,8 @@ class Acces(BaseModel):
     debut: datetime.datetime
     fin: datetime.datetime | None = None
     accorde_par: uuid.UUID
+    stands_in_for: uuid.UUID | None = None
+    options: dict | list | None = None
 
 class LectureGroupe(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -447,4 +496,4 @@ class Evenement(BaseModel):
     abandonne: bool | None = None
     erreur: str | None = None
 
-CONTRAT = {"comm": Comm, "reinitialisation": Reinitialisation, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}
+CONTRAT = {"comm": Comm, "reinitialisation": Reinitialisation, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "read_state": ReadState, "marker": Marker, "marker_collective": MarkerCollective, "marker_personal": MarkerPersonal, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}
