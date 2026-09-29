@@ -1,8 +1,8 @@
 """LE DÉMON D'INGESTION (F001) — une tâche par boîte administrée, tous les dossiers, reprise par
 UID, IDLE sur la boîte de réception ; les dossiers IMAP deviennent des `dossier` (F102).
 
-    DATABASE_URL=postgresql:///atombox ATOMBOX_MAGASIN=/var/lib/atombox/magasin \\
-    ATOMBOX_IMAP_HOTE=imap.exemple.fr ATOMBOX_IMAP_MASTER=masteruser ATOMBOX_IMAP_MOT_DE_PASSE=… \\
+    DATABASE_URL=postgresql:///atombox ATOMBOX_STORE=/var/lib/atombox/magasin \\
+    ATOMBOX_IMAP_HOST=imap.exemple.fr ATOMBOX_IMAP_MASTER=masteruser ATOMBOX_IMAP_PASSWORD=… \\
     python3 -m atombox.ingestion.demon
 
 Échouer bruyamment plutôt que deux fois (D152) : un message qui ne s'ingère pas est journalisé
@@ -21,6 +21,7 @@ from .imap import Releve, tls_imap
 from .ingestion import ingerer
 from ..modules import chargement
 from ..modules.accroches import accroches
+from .. import settings
 
 log = journal("demon")
 
@@ -132,7 +133,7 @@ async def surveiller_boite(boite_id, adresse: str, config: dict):
                     # signalera pas. On relit les drapeaux d'INBOX juste avant de s'endormir. Le remède
                     # industriel est CONDSTORE/QRESYNC (RFC 7162) : ne relire que ce qui a changé.
                     await asyncio.to_thread(_resynchroniser, s, releve, boite_id, adresse, "INBOX")
-                    await asyncio.to_thread(releve.idle, int(os.environ.get("ATOMBOX_IDLE_SECONDES", str(25 * 60))))
+                    await asyncio.to_thread(releve.idle, int(os.environ.get("ATOMBOX_IDLE_SECONDS", str(25 * 60))))
             finally:
                 releve.fermer(); s.close()
         except Exception as e:
@@ -140,13 +141,13 @@ async def surveiller_boite(boite_id, adresse: str, config: dict):
             await asyncio.sleep(60)
 
 async def principal():
-    config = { "hote": os.environ["ATOMBOX_IMAP_HOTE"], "port": int(os.environ.get("ATOMBOX_IMAP_PORT", "993")),
-               "master": os.environ.get("ATOMBOX_IMAP_MASTER", "masteruser"), "mot_de_passe": os.environ["ATOMBOX_IMAP_MOT_DE_PASSE"],
-               "magasin": os.environ.get("ATOMBOX_MAGASIN", "./magasin") }
+    config = { "hote": settings.read("ATOMBOX_IMAP_HOST"), "port": int(settings.read("ATOMBOX_IMAP_PORT", "993")),
+               "master": settings.read("ATOMBOX_IMAP_MASTER", "masteruser"), "mot_de_passe": settings.read("ATOMBOX_IMAP_PASSWORD"),
+               "magasin": settings.read("ATOMBOX_STORE", "./magasin") }
     with ouvrir_session() as s:
         boites = s.execute(select(Boite.boite_id, Adresse.adresse_complete).join(Adresse, Adresse.adresse_id == Boite.adresse_id)).all()
     # grosses infrastructures (D161) : N démons se partagent les boîtes — ATOMBOX_PART="2/4" prend la 2e part sur 4
-    part = os.environ.get("ATOMBOX_PART")
+    part = settings.read("ATOMBOX_PART")
     if part:
         i, n = (int(x) for x in part.split("/")); boites = [b for b in boites if int(b.boite_id.hex, 16) % n == i - 1]
         log.info("part %s : %d boîte(s)", part, len(boites))

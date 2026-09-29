@@ -9,8 +9,8 @@
 set -euo pipefail
 
 RACINE="$(cd "$(dirname "$0")/.." && pwd)"
-HOTE="${ATOMBOX_HOTE:-root@dev.iprospective.net}"   # nom déjà dans known_hosts
-CIBLE="${ATOMBOX_CIBLE:-/home/siteadm/atombox/public/dev}"
+HOTE="${ATOMBOX_HOST:-root@dev.iprospective.net}"   # nom déjà dans known_hosts
+CIBLE="${ATOMBOX_TARGET:-/home/siteadm/atombox/public/dev}"
 URL="https://atombox.dev.iprospective.fr/"
 
 cd "$RACINE"
@@ -19,12 +19,12 @@ cd "$RACINE"
 # Le 15/09, le webmail est parti avec les routes de tags, l'API tournait encore
 # sur le code d'avant : l'interface proposait le geste, le serveur répondait 405.
 # On compare la date du code serveur au démarrage du service ; si le code est
-# plus récent, on le dit — et on s'arrête, sauf --quand-meme.
+# plus récent, on le dit — et on s'arrête, sauf --force.
 # Le service tourne sur CE worktree : s'il est en retard sur `dev`, on déploie une interface
 # qui parle à un serveur d'avant-hier. Arrivé le 15/09 : RM3197 mergé côté forge, worktree local
 # jamais mis à jour, et les branches d'axes restaient vides malgré « c'est corrigé ».
 #
-# CES DEUX GARDES-LÀ NE SE LÈVENT JAMAIS (RM3253). `--quand-meme` levait aussi celle du retard : le
+# CES DEUX GARDES-LÀ NE SE LÈVENT JAMAIS (RM3253). `--force` levait aussi celle du retard : le
 # 19/09, le site est parti avec le code de trois livraisons plus tôt, sans que rien ne le dise.
 # Déployer un worktree en retard, ou un fichier modifié à la main, ce n'est pas « forcer » : c'est
 # ne pas savoir ce qu'on met en ligne.
@@ -56,7 +56,7 @@ nettoyer() {
 trap nettoyer EXIT
 
 SERVEUR_DIR="$(cd "$RACINE/../serveur" 2>/dev/null && pwd || true)"
-if [ -n "$SERVEUR_DIR" ] && [ -d "$SERVEUR_DIR/atombox" ] && [ "${1:-}" != "--quand-meme" ]; then
+if [ -n "$SERVEUR_DIR" ] && [ -d "$SERVEUR_DIR/atombox" ] && [ "${1:-}" != "--force" ]; then
   CODE=$(find "$SERVEUR_DIR/atombox" -name '*.py' -printf '%T@\n' 2>/dev/null | sort -rn | head -1 || true)
   DEMARRE=$(date -d "$(systemctl show atombox-api -p ActiveEnterTimestamp --value 2>/dev/null)" +%s 2>/dev/null || echo 0)
   if [ -n "$CODE" ] && [ "$DEMARRE" != 0 ] && [ "${CODE%.*}" -gt "$DEMARRE" ]; then
@@ -65,7 +65,7 @@ if [ -n "$SERVEUR_DIR" ] && [ -d "$SERVEUR_DIR/atombox" ] && [ "${1:-}" != "--qu
     echo "    service: $(date -d @$DEMARRE '+%F %H:%M')"
     echo "  Déployer l'interface maintenant, c'est proposer des gestes que le serveur refusera."
     echo "  → sudo systemctl restart atombox-api atombox-taches atombox-ingestion"
-    echo "  (ou $0 --quand-meme, si l'écart est voulu)"
+    echo "  (ou $0 --force, si l'écart est voulu)"
     exit 3
   fi
 fi

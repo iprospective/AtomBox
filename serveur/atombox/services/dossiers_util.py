@@ -11,10 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..journal import journal
 from ..schema.modeles import Adresse, Boite, Dossier, Identite, Rattachement
 from ..uuid7 import uuid7
+from .. import settings
 
 log = journal("api")
 
-def _imap_dispo() -> bool: return bool(os.environ.get("ATOMBOX_IMAP_HOTE"))
+def _imap_dispo() -> bool: return bool(settings.read("ATOMBOX_IMAP_HOST"))
 
 async def _imap(s: AsyncSession, boite: Boite):
     """une relève ouverte sur la boîte, ou None si l'IMAP n'est pas configuré"""

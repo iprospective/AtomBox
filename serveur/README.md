@@ -46,11 +46,11 @@ ainsi. Un module tiers s'installe par `pip` (point d'entrée `atombox.modules`) 
 ## Lancer une instance (V0)
 
 ```
-export DATABASE_URL=postgresql:///atombox ATOMBOX_MAGASIN=/var/lib/atombox/magasin
+export DATABASE_URL=postgresql:///atombox ATOMBOX_STORE=/var/lib/atombox/magasin
 .venv/bin/alembic upgrade head                                          # le schéma, par la file des migrations
 .venv/bin/python -m atombox.amorcer --login mathieu --nom "Mathieu" --mot-de-passe … --boite contact@exemple.fr
-ATOMBOX_IMAP_HOTE=imap.exemple.fr ATOMBOX_IMAP_MOT_DE_PASSE=… .venv/bin/python -m atombox.ingestion.demon   # la relève
-ATOMBOX_SMTP_HOTE=smtp.exemple.fr .venv/bin/python -m atombox.taches                                        # événements, envois, tâches
+ATOMBOX_IMAP_HOST=imap.exemple.fr ATOMBOX_IMAP_PASSWORD=… .venv/bin/python -m atombox.ingestion.demon   # la relève
+ATOMBOX_SMTP_HOST=smtp.exemple.fr .venv/bin/python -m atombox.taches                                        # événements, envois, tâches
 .venv/bin/uvicorn atombox.api.app:app --host 0.0.0.0 --port 8010        # l'API sous /api/v1, le webmail sur /
 ```
 

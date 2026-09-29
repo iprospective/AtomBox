@@ -14,6 +14,7 @@ from ..api import limitation
 from ..schema.modeles import Compte
 from ..journal import journal
 from ..modules.accroches import accroches
+from .. import settings
 
 log = journal("auth")
 
@@ -67,10 +68,10 @@ class SessionControleur(Controleur):
                                 headers={"Retry-After": str(attente)})
         limitation.compter("reinitialisation", corps.utilisateur, ip_dem)
         # Derrière un proxy, `request.base_url` dit 127.0.0.1:8010 : le lien serait inutilisable.
-        # On reconstruit depuis ce qu'Apache transmet, et ATOMBOX_URL_PUBLIQUE tranche s'il existe.
+        # On reconstruit depuis ce qu'Apache transmet, et ATOMBOX_PUBLIC_URL tranche s'il existe.
         hote = request.headers.get("x-forwarded-host") or request.headers.get("host")
         schema = request.headers.get("x-forwarded-proto") or request.url.scheme
-        base = os.environ.get("ATOMBOX_URL_PUBLIQUE") or (
+        base = settings.read("ATOMBOX_PUBLIC_URL") or (
             "%s://%s" % (schema, hote) if hote else str(request.base_url).rstrip("/"))
         await reinit.demander(s, corps.utilisateur, base, ip=ip_dem)
         return Constante(ok=True, message="Si un compte correspond et qu'une adresse de secours y est "

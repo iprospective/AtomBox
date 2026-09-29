@@ -12,13 +12,14 @@ from ..journal import journal
 from ..modules import Module, evenement
 from ..schema.modeles import Adresse, Boite, CommEmail, Dossier, Rattachement
 from .sync import drapeaux_voulus
+from .. import settings
 
 log = journal("imap")
 
 def config_imap() -> dict:
-    return {"hote": os.environ.get("ATOMBOX_IMAP_HOTE"), "port": int(os.environ.get("ATOMBOX_IMAP_PORT", "993")),
-            "master": (os.environ.get("ATOMBOX_IMAP_MASTER") or "").strip(),
-            "mot_de_passe": os.environ.get("ATOMBOX_IMAP_MOT_DE_PASSE")}
+    return {"hote": settings.read("ATOMBOX_IMAP_HOST"), "port": int(settings.read("ATOMBOX_IMAP_PORT", "993")),
+            "master": (settings.read("ATOMBOX_IMAP_MASTER") or "").strip(),
+            "mot_de_passe": settings.read("ATOMBOX_IMAP_PASSWORD")}
 
 def login_de(adresse: str, master: str) -> str:
     """« boîte*master » avec un compte master (chapitre 06) ; l'adresse seule sinon"""
@@ -38,7 +39,7 @@ class ModuleSync(Module):
             log.debug("%s : pas d'UID IMAP (message écrit ici, pas encore relevé) — rien à pousser", comm_id); return
         cfg = config_imap()
         if not cfg["hote"]:
-            log.warning("ATOMBOX_IMAP_HOTE absent : synchronisation montante impossible"); return
+            log.warning("ATOMBOX_IMAP_HOST absent : synchronisation montante impossible"); return
         boite = s.get(Boite, boite_id); adresse = s.get(Adresse, boite.adresse_id).adresse_complete
         source = s.get(Dossier, charge.get("dossier_avant") and uuid.UUID(charge["dossier_avant"]) or r.dossier_id)
         cible = s.get(Dossier, r.dossier_id)
@@ -73,12 +74,12 @@ class ModuleSync(Module):
             log.debug("%s : rien à copier (%s)", comm_id, "déjà dans IMAP" if r is not None else "rattachement disparu"); return
         cfg = config_imap()
         if not cfg["hote"]:
-            log.warning("ATOMBOX_IMAP_HOTE absent : l'envoi %s n'est pas copié dans IMAP", comm_id); return
+            log.warning("ATOMBOX_IMAP_HOST absent : l'envoi %s n'est pas copié dans IMAP", comm_id); return
         dossier = s.get(Dossier, r.dossier_id)
         if dossier is None or not (dossier.alias_imap or dossier.nom):
             log.warning("%s : dossier des envoyés inconnu — rien à copier", comm_id); return
         from ..magasin import Magasin
-        octets = Magasin(os.environ.get("ATOMBOX_MAGASIN", "./magasin")).lire(str(comm_id))
+        octets = Magasin(settings.read("ATOMBOX_STORE", "./magasin")).lire(str(comm_id))
         e = s.get(CommEmail, comm_id)
         boite = s.get(Boite, boite_id); adresse = s.get(Adresse, boite.adresse_id).adresse_complete
         releve = Releve(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_de(adresse, cfg["master"]), cfg["mot_de_passe"])

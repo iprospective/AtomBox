@@ -1,7 +1,7 @@
 """L'AMORÇAGE d'une instance (V0) : un compte avec son mot de passe, sa boîte, son accès, ses dossiers
 spéciaux, son identité d'expédition — ce qu'il faut pour se connecter au webmail et voir l'ingestion.
 
-    DATABASE_URL=… python3 -m atombox.amorcer --login mathieu --nom "Mathieu" --mot-de-passe … --boite contact@exemple.fr [--partagee]
+    DATABASE_URL=… python3 -m atombox.amorcer --login mathieu --name "Mathieu" --password … --mailbox contact@exemple.fr [--shared]
 
 Idempotent : relancé, il ne crée pas de doublon, il rattache. Le mot de passe n'est jamais journalisé."""
 from __future__ import annotations
@@ -43,12 +43,19 @@ def amorcer(login: str, nom: str, mot_de_passe: str | None, boite_adresse: str, 
 
 def principal(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    p.add_argument("--login", required=True); p.add_argument("--nom", required=True); p.add_argument("--mot-de-passe", default=None)
-    p.add_argument("--boite", required=True, help="l'adresse de la boîte (aussi son login IMAP avec le compte master)")
-    p.add_argument("--partagee", action="store_true")
-    p.add_argument("--email-secours", default=None, help="l'adresse de RÉCUPÉRATION, hors d'AtomBox (D164)")
+    # Les options sont en anglais (D181), SANS alias vers les anciennes — contrairement aux
+    # variables d'environnement, qui gardent un repli. Les deux risques n'ont rien à voir : une
+    # option inconnue échoue TOUT DE SUITE, bruyamment, avec la liste des options valides ; une
+    # variable absente retombe en silence sur un défaut, et la panne se découvre trois jours plus
+    # tard. On ne met un filet que là où la chute est silencieuse.
+    p.add_argument("--login", required=True)
+    p.add_argument("--name", required=True)
+    p.add_argument("--password", default=None)
+    p.add_argument("--mailbox", required=True, help="l'adresse de la boîte (aussi son login IMAP avec le compte master)")
+    p.add_argument("--shared", action="store_true")
+    p.add_argument("--recovery-email", default=None, help="l'adresse de RÉCUPÉRATION, hors d'AtomBox (D164)")
     a = p.parse_args(argv)
-    r = amorcer(a.login, a.nom, a.mot_de_passe, a.boite, a.partagee, email_secours=a.email_secours)
+    r = amorcer(a.login, a.name, a.password, a.mailbox, a.shared, email_secours=a.recovery_email)
     print("compte %s, boîte %s" % (r["compte_id"], r["boite_id"]))
 
 if __name__ == "__main__":

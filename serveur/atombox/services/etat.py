@@ -14,6 +14,7 @@ from ..journal import dossier as dossier_journaux
 from ..schema.modeles import Adresse, Blob, Boite, Comm, Dossier, Evenement, Filtre, PieceJointe, Rattachement
 from ..journal import journal
 from .messages import boites_du_compte, iso
+from .. import settings
 
 log = journal("etat")
 
@@ -53,7 +54,7 @@ async def etat(s: AsyncSession, compte) -> dict:
                                          .order_by(Evenement.cree_le.desc()).limit(5))]
 
     # --- le magasin (D005, D087) : ce qu'il pèse, et ce que le ramasse-miettes doit reprendre
-    magasin_dir = os.environ.get("ATOMBOX_MAGASIN", "./magasin")
+    magasin_dir = settings.read("ATOMBOX_STORE", "./magasin")
     blobs = await s.scalar(select(func.count()).select_from(Blob)) or 0
     octets = await s.scalar(select(func.coalesce(func.sum(Blob.taille_stockee), 0)))
     bruts = await s.scalar(select(func.coalesce(func.sum(Blob.taille_octets), 0)))

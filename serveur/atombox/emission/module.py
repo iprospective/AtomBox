@@ -12,6 +12,7 @@ from ..schema.modeles import Adresse, Boite, Comm, Envoi, EnvoiDestinataire, Ide
 from ..uuid7 import uuid7
 from ..ingestion.ingestion import adresse as adresse_de, normaliser_adresse
 from .smtp import remettre
+from .. import settings
 
 log = journal("apps")
 
@@ -51,7 +52,7 @@ class ModuleEmission(Module):
         if identite is None:
             identite = Identite(identite_id=uuid7(), boite_id=boite_id, nom_affiche=comm.from_nom or expediteur, adresse_id=boite.adresse_id, au_nom_de=False, par_defaut=True)
             s.add(identite); s.flush()
-        magasin = Magasin(os.environ.get("ATOMBOX_MAGASIN", "./magasin"))
+        magasin = Magasin(settings.read("ATOMBOX_STORE", "./magasin"))
         octets = magasin.lire(str(comm_id))
         envoi = s.scalar(select(Envoi).where(Envoi.comm_id == comm_id))
         if envoi is None:

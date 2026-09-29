@@ -13,6 +13,7 @@ from ..schema.modeles import Acces, Adresse, Blob, Boite, Comm, CommCitation, Co
 from ..uuid7 import uuid7
 from ..journal import journal
 from ..sync import sync
+from .. import settings
 
 log = journal("api")
 
@@ -404,7 +405,7 @@ async def _resoudre_par_message_id(s: AsyncSession, p: PieceJointe, boites: list
     """Le `Message-ID` lu dans les octets de l'encapsulé, confronté à ce que le lecteur possède."""
     from ..magasin import Magasin
     try:
-        m = Magasin(os.environ.get("ATOMBOX_MAGASIN", "./magasin"))
+        m = Magasin(settings.read("ATOMBOX_STORE", "./magasin"))
         if not m.existe(p.blob_ref): return None
         interne = email.message_from_bytes(m.lire(p.blob_ref), policy=email.policy.SMTP)
         mid = (interne["Message-ID"] or "").strip()
@@ -478,7 +479,7 @@ async def detacher(s: AsyncSession, compte: Compte, comm_id) -> bool:
 
 def hote_atombox() -> str:
     """le nom de CETTE instance dans la chaîne de relais — jamais deviné à partir d'une requête"""
-    return os.environ.get("ATOMBOX_HOTE") or socket.getfqdn() or "atombox"
+    return settings.read("ATOMBOX_HOST") or socket.getfqdn() or "atombox"
 
 def entetes_de_relais(m: email.message.EmailMessage, comm_id, expediteur: str, quand: datetime, ip_client: str | None = None) -> None:
     """AtomBox n'est pas un client SMTP : il REÇOIT par son API et REMET au relais. Le Received le
@@ -488,7 +489,7 @@ def entetes_de_relais(m: email.message.EmailMessage, comm_id, expediteur: str, q
     destinataires et géolocalise l'expéditeur à chaque message ; l'IP vit au journal, chez nous.
     Le paramètre existe pour un client qui l'exigerait — verrouillable, désactivé par défaut."""
     trace = ""
-    if ip_client and os.environ.get("ATOMBOX_TRACER_IP_CLIENT") == "1":
+    if ip_client and settings.read("ATOMBOX_TRACE_CLIENT_IP") == "1":
         trace = " (client %s)" % ip_client                        # jamais par défaut — D162
     # une seule ligne LOGIQUE : c'est la politique qui replie (elle refuse un CRLF écrit à la main)
     recu = ("from webmail (atombox%s) by %s with HTTPS id %s (authenticated sender: %s); %s"

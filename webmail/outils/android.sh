@@ -36,7 +36,7 @@ BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
 echo "→ alignement et signature ($(basename "$BT"))"
 "$BT/zipalign" -p -f 4 app/build/outputs/apk/release/app-release-unsigned.apk aligne.apk
 "$BT/apksigner" sign --ks "$ATOMBOX_ANDROID_KEYSTORE" --ks-key-alias "${ATOMBOX_ANDROID_ALIAS:-atombox}" \
-  --ks-pass "pass:$ATOMBOX_ANDROID_MDP" --key-pass "pass:$ATOMBOX_ANDROID_MDP" --out atombox.apk aligne.apk
+  --ks-pass "pass:$ATOMBOX_ANDROID_PASSWORD" --key-pass "pass:$ATOMBOX_ANDROID_PASSWORD" --out atombox.apk aligne.apk
 rm -f aligne.apk
 
 # LA vérification qui compte : une application signée par une autre clé que celle déclarée par le

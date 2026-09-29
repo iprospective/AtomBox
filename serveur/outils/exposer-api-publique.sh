@@ -17,12 +17,12 @@
 #   bash exposer-api-publique.sh --verifier   # constater, sans rien changer
 #   bash exposer-api-publique.sh --proxy      # le ProxyPass côté serveur (ssh root, pas de sudo)
 #   bash exposer-api-publique.sh --tunnel     # le tunnel, tout de suite, en tâche de fond
-#   bash exposer-api-publique.sh --cle        # la clé DÉDIÉE du service, autorisée (restreinte) sur le serveur
+#   bash exposer-api-publique.sh --key        # la clé DÉDIÉE du service, autorisée (restreinte) sur le serveur
 #   bash exposer-api-publique.sh --permanent  # le tunnel en service systemd (demande sudo)
 #   bash exposer-api-publique.sh --retirer    # referme la porte des deux côtés
 set -uo pipefail
 
-HOTE="${ATOMBOX_HOTE:-root@dev.iprospective.net}"
+HOTE="${ATOMBOX_HOST:-root@dev.iprospective.net}"
 VHOST="${ATOMBOX_VHOST:-/etc/apache2/sites-enabled/atombox.conf}"
 URL="${ATOMBOX_URL:-https://atombox.dev.iprospective.fr}"
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -109,7 +109,7 @@ case "${1:---verifier}" in
   --verifier)  echo "== état =="; verifier ;;
   --proxy)     echo "-- proxy ($HOTE)"; proxy; verifier ;;
   --tunnel)    echo "-- tunnel"; tunnel; verifier ;;
-  --cle)       echo "-- la clé dédiée du service, autorisée sur $HOTE"
+  --key)       echo "-- la clé dédiée du service, autorisée sur $HOTE"
                cle ;;
   --permanent) echo "-- tunnel en service systemd (sudo)"
                sudo install -m 0644 "$ICI/atombox-tunnel.service" /etc/systemd/system/atombox-tunnel.service \
@@ -119,5 +119,5 @@ case "${1:---verifier}" in
                sudo systemctl disable --now atombox-tunnel 2>/dev/null || true
                ssh -o BatchMode=yes "$HOTE" "test -f '$VHOST.avant-api' && cp '$VHOST.avant-api' '$VHOST' && apache2ctl configtest && systemctl reload apache2 && echo '  vhost restauré'"
                verifier ;;
-  *) echo "usage : $0 [--verifier|--proxy|--tunnel|--cle|--permanent|--retirer]"; exit 2 ;;
+  *) echo "usage : $0 [--verifier|--proxy|--tunnel|--key|--permanent|--retirer]"; exit 2 ;;
 esac
