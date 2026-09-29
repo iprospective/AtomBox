@@ -132,6 +132,18 @@ def test_un_litteral_suspend_l_analyse():
     assert s.ligne("secret")[0].startswith("a3 OK"), "et la recolle à la commande"
 
 
+def test_on_ne_demande_pas_de_donnees_pour_une_commande_refusee():
+    """`APPEND INBOX {3}` obtenait un « + » : le client envoyait son message, le serveur le jetait,
+    et les deux se désynchronisaient — la commande suivante était lue comme le contenu du littéral.
+    Sur un serveur en lecture seule, c'est aussi accepter un téléversement de taille arbitraire."""
+    s = Session(FausseVue(), magasin=None)
+    s.ligne("a0 LOGIN mathieu secret")
+    r = s.ligne("a7 APPEND INBOX {3}")
+    assert r[0].startswith("a7 BAD"), r
+    assert s.attente_litteral is None, "le serveur n'attend RIEN : la commande est refusée séance tenante"
+    assert s.ligne("a8 NOOP")[0].startswith("a8 OK"), "et le dialogue continue, non désynchronisé"
+
+
 def test_citer_bascule_en_litteral_quand_il_le_faut():
     assert citer(None) == "NIL" and citer(12) == "12"
     assert citer('il a dit "non"') == '"il a dit \\"non\\""'

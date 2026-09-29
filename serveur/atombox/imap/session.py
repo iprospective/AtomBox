@@ -60,6 +60,13 @@ class Session:
         try:
             elements = decouper(texte)
         except BesoinDeLitteral as e:
+            # ON NE DEMANDE PAS DE DONNÉES POUR UNE COMMANDE QU'ON VA REFUSER. Sans ce contrôle,
+            # `APPEND INBOX {3}` obtenait un « + » : le client envoyait son message, le serveur le
+            # jetait, et les deux se désynchronisaient — la commande suivante était lue comme le
+            # contenu du littéral. Sur un serveur en LECTURE SEULE, c'est aussi accepter un
+            # téléversement de taille arbitraire pour rien.
+            if not self._servie(texte):
+                return ["%s BAD commande inconnue ou non servie" % (texte.split(" ", 1)[0] or "*")]
             self.attente_litteral = (texte[:texte.rindex("{")], e.n)
             return ["+ envoyez %d octets" % e.n]
         except ValueError as e:
@@ -153,6 +160,14 @@ class Session:
         if par_uid: rendus = trouves
         else: rendus = [self.uids.index(u) + 1 for u in trouves]
         return ["* SEARCH" + ("".join(" %d" % n for n in rendus)), "%s OK SEARCH" % tag]
+
+    def _servie(self, texte: str) -> bool:
+        """la commande est-elle connue ? — lu sur la ligne BRUTE, avant tout littéral"""
+        morceaux = texte.split(" ", 2)
+        if len(morceaux) < 2: return False
+        cmd = morceaux[1].upper()
+        if cmd == "UID" and len(morceaux) > 2: cmd = "UID"
+        return hasattr(self, "_c_" + cmd.lower().replace(".", "_"))
 
     # ── sans authentification ───────────────────────────────────────────────────────────────────
     def _c_capability(self, tag, args):

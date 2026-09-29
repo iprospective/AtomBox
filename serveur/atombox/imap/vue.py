@@ -1,0 +1,176 @@
+"""CE QU'ATOMBOX DONNE À VOIR EN IMAP (D180) — la traduction entre notre modèle et celui d'un client.
+
+La session ne connaît que cette interface ; c'est elle qui parle à la base et au magasin. Le
+découpage n'est pas décoratif : il permet d'éprouver tout le dialogue avec une vue doublée, et il
+isole en un seul endroit les choix de traduction — lesquels sont des choix de PRODUIT, pas de
+protocole.
+
+Trois d'entre eux méritent d'être dits :
+
+1. **Une boîte aux lettres IMAP est un dossier d'une boîte AtomBox.** Quand le compte en a
+   plusieurs, les noms se préfixent par l'adresse (`contact@exemple.fr/Archives`) : sans ça, deux
+   « INBOX » se marchent dessus et le client n'a aucun moyen de les distinguer. La boîte principale
+   garde le nom nu `INBOX`, qu'IMAP traite à part (RFC 3501 § 5.1).
+
+2. **Les drapeaux sont ceux du rattachement, donc COLLECTIFS** tant que l'état personnel n'existe
+   pas (D175, RM3320). Sur une boîte à un membre, c'est exact ; sur une boîte partagée, `\\Seen` dit
+   « quelqu'un l'a ouvert ». On le sert quand même : c'est ce que le webmail montre aujourd'hui, et
+   servir autre chose ferait diverger les deux affichages.
+
+3. **Le corps servi est l'octet du magasin**, jamais une reconstruction. C'est l'exigence de D025 et
+   de RM3213 : un client qui télécharge un message doit obtenir le fichier d'origine, pas notre
+   idée de ce qu'il contient.
+"""
+from __future__ import annotations
+import email.utils
+from sqlalchemy import select
+from ..journal import journal
+from ..schema.modeles import Acces, Adresse, Boite, Comm, CommEmail, Compte, Dossier, Rattachement
+
+log = journal("imap")
+
+
+class BoiteAuxLettres:
+    """une boîte aux lettres telle qu'un client la voit : un nom, des UID, une validité"""
+
+    def __init__(self, nom, dossier, uids, uid_validity, uid_next):
+        self.nom, self.dossier_id = nom, dossier
+        self.uids, self.uid_validity, self.uid_next = uids, uid_validity, uid_next
+        self.attributs = ["\\HasNoChildren"]
+
+
+class MessageServi:
+    """un message, vu d'un client : ses drapeaux, sa taille, et ses octets à la demande"""
+
+    def __init__(self, uid, comm, rattachement, magasin, blob_ref, message_id=None):
+        self.uid, self._c, self._r = uid, comm, rattachement
+        self._magasin, self._blob, self._message_id = magasin, blob_ref, message_id
+        self.taille = comm.taille or 0
+        self.date_interne = email.utils.format_datetime(comm.date_recue).replace(",", "")[:26] \
+            if comm.date_recue else "01-Jan-1970 00:00:00 +0000"
+        self.drapeaux = []
+        if rattachement.lu_le is not None: self.drapeaux.append("\\Seen")
+        if rattachement.drapeau: self.drapeaux.append("\\Flagged")
+        if rattachement.repondu_le is not None: self.drapeaux.append("\\Answered")
+        if rattachement.motif_sortie == "supprime": self.drapeaux.append("\\Deleted")
+
+    def enveloppe(self):
+        """ENVELOPPE au sens RFC 3501 § 7.4.2 — l'ordre des dix champs est imposé et ne se devine pas"""
+        c = self._c
+        une = lambda adr, nom: [[nom, None, adr.split("@")[0], adr.split("@")[-1]]] if adr else None
+        de = une(c.from_adresse, c.from_nom)
+        return [email.utils.format_datetime(c.date_recue) if c.date_recue else None,
+                c.sujet, de, de, de, None, None, None, None, self._message_id]
+
+    def structure(self):
+        """BODYSTRUCTURE minimal : on annonce UNE partie texte de la bonne taille.
+
+        Décrire faux la structure interne serait pire que de ne rien dire : le client s'en sert
+        pour décider quoi télécharger, et irait chercher des parties qui n'existent pas. Tant qu'on
+        ne sait pas la rendre exactement, on annonce le message comme un tout — et `BODY[]` le
+        rend à l'octet."""
+        return ["TEXT", "PLAIN", ["CHARSET", "UTF-8"], None, None, "8BIT", self.taille,
+                max(1, (self._c.corps_texte or "").count("\n") + 1)]
+
+    def octets(self, section: str):
+        brut = self._magasin.lire(self._blob) if self._blob else None
+        if brut is None: return None
+        s = (section or "").upper()
+        if s in ("", "TEXT") and s != "TEXT": return brut
+        tete, _, corps = brut.partition(b"\r\n\r\n")
+        if s == "HEADER": return tete + b"\r\n\r\n"
+        if s == "TEXT": return corps
+        if s.startswith("HEADER.FIELDS"):
+            champs = {c.strip().lower() for c in s[s.index("(") + 1:s.rindex(")")].split()} if "(" in s else set()
+            gardees, garde = [], False
+            for ligne in tete.split(b"\r\n"):
+                if ligne[:1] in (b" ", b"\t"):                    # une suite de l'en-tête précédent
+                    if garde: gardees.append(ligne)
+                    continue
+                garde = ligne.split(b":", 1)[0].decode("latin-1", "replace").strip().lower() in champs
+                if garde: gardees.append(ligne)
+            return b"\r\n".join(gardees) + b"\r\n\r\n"
+        log.info("section de corps non servie : %r", section)
+        return None
+
+
+class Vue:
+    """La vue servie à une session. Une session = un compte = une connexion à la base.
+
+    Elle garde sa propre session SQLAlchemy SYNCHRONE : le serveur IMAP tourne dans son processus,
+    et mélanger une session asynchrone partagée avec des connexions de longue durée est le meilleur
+    moyen de bloquer tout le monde derrière un client qui télécharge un gros message."""
+
+    def __init__(self, session, magasin):
+        self.s, self.magasin = session, magasin
+
+    # ── qui es-tu ───────────────────────────────────────────────────────────────────────────────
+    def authentifier(self, identifiant: str, mot_de_passe: str):
+        from ..api.securite import verifier_mot_de_passe
+        c = self.s.scalar(select(Compte).where(Compte.login == (identifiant or "").strip().lower()))
+        if c is None or not c.actif: return None
+        if not verifier_mot_de_passe(mot_de_passe or "", c.mot_de_passe_empreinte): return None
+        return c
+
+    # ── que vois-tu ─────────────────────────────────────────────────────────────────────────────
+    def _dossiers(self, compte):
+        """(nom IMAP, Dossier) pour tout ce que ce compte peut voir, la boîte principale en tête"""
+        boites = list(self.s.scalars(select(Boite).join(Acces, Acces.boite_id == Boite.boite_id)
+                                     .where(Acces.compte_id == compte.compte_id, Acces.fin.is_(None))))
+        sortie = []
+        for i, b in enumerate(boites):
+            adresse = self.s.get(Adresse, b.adresse_id).adresse_complete
+            for d in self.s.scalars(select(Dossier).where(Dossier.boite_id == b.boite_id).order_by(Dossier.nom)):
+                alias = d.alias_imap or d.nom
+                # La boîte PRINCIPALE garde le nom nu : IMAP traite « INBOX » à part (RFC 3501
+                # § 5.1), et un client qui ne trouve pas d'INBOX refuse souvent de continuer.
+                nom = alias if i == 0 else "%s/%s" % (adresse, alias)
+                sortie.append((nom, d))
+        return sortie
+
+    def boites(self, compte):
+        return [self._boite(nom, d) for nom, d in self._dossiers(compte)]
+
+    def _boite(self, nom, d):
+        uids = [u for (u,) in self.s.execute(
+            select(Rattachement.uid_servi).where(Rattachement.dossier_id == d.dossier_id,
+                                                 Rattachement.uid_servi.isnot(None))
+            .order_by(Rattachement.uid_servi))]
+        return BoiteAuxLettres(nom, d.dossier_id, uids, d.uid_validity_servie or 1, d.uid_servi_suivant or 1)
+
+    def ouvrir(self, compte, nom):
+        for n, d in self._dossiers(compte):
+            if n.lower() == (nom or "").lower(): return self._boite(n, d)
+        return None
+
+    def etat(self, compte, nom):
+        b = self.ouvrir(compte, nom)
+        if b is None: return None
+        non_lus = self.s.scalar(select(__import__("sqlalchemy").func.count()).select_from(Rattachement)
+                                .where(Rattachement.dossier_id == b.dossier_id, Rattachement.lu_le.is_(None))) or 0
+        return {"MESSAGES": len(b.uids), "RECENT": 0, "UIDNEXT": b.uid_next,
+                "UIDVALIDITY": b.uid_validity, "UNSEEN": non_lus}
+
+    # ── que contient-il ─────────────────────────────────────────────────────────────────────────
+    def message(self, boite, uid: int):
+        r = self.s.scalar(select(Rattachement).where(Rattachement.dossier_id == boite.dossier_id,
+                                                     Rattachement.uid_servi == uid))
+        if r is None: return None
+        c = self.s.get(Comm, r.comm_id)
+        e = self.s.get(CommEmail, r.comm_id)
+        if c is None: return None
+        return MessageServi(uid, c, r, self.magasin, e.blob_ref if e else None,
+                            message_id=e.message_id if e else None)
+
+    def contient(self, boite, uid: int, champ: str, aiguille: str) -> bool:
+        m = self.message(boite, uid)
+        if m is None: return False
+        c = m._c
+        ou = {"FROM": (c.from_adresse or "") + " " + (c.from_nom or ""), "SUBJECT": c.sujet or "",
+              "BODY": c.corps_texte or "", "TEXT": " ".join(filter(None, [c.sujet, c.corps_texte, c.from_adresse]))}
+        if champ in ("TO", "CC"):
+            from ..schema.modeles import Participant
+            roles = [p.adresse for p in self.s.scalars(
+                select(Participant).where(Participant.comm_id == c.comm_id, Participant.role == champ.lower()))]
+            return aiguille in " ".join(roles).lower()
+        return aiguille in (ou.get(champ, "")).lower()
