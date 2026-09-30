@@ -137,8 +137,9 @@ class Vue:
         sortie = []
         for i, b in enumerate(boites):
             adresse = self.s.get(Adresse, b.adresse_id).adresse_complete
+            from ..services.mailbox import nom_servi
             for d in self.s.scalars(select(Dossier).where(Dossier.boite_id == b.boite_id).order_by(Dossier.nom)):
-                alias = d.alias_imap or d.nom
+                alias = nom_servi(d)
                 # La boîte PRINCIPALE garde le nom nu : IMAP traite « INBOX » à part (RFC 3501
                 # § 5.1), et un client qui ne trouve pas d'INBOX refuse souvent de continuer.
                 nom = alias if i == 0 else "%s/%s" % (adresse, alias)
@@ -199,6 +200,13 @@ class Vue:
                 select(Participant).where(Participant.comm_id == c.comm_id, Participant.role == champ.lower()))]
             return aiguille in " ".join(roles).lower()
         return aiguille in (ou.get(champ, "")).lower()
+
+    def annuler(self):
+        """rend la session utilisable après une écriture refusée — appelée par la session IMAP.
+
+        C'est la vue qui tient la session SQLAlchemy, donc c'est elle qui sait l'annuler. Sans ça,
+        une seule erreur d'écriture rendait la connexion entière inutilisable jusqu'à reconnexion."""
+        self.s.rollback()
 
     # ── que peut-on écrire ──────────────────────────────────────────────────────────────────────
     def dossier_nomme(self, compte, nom):

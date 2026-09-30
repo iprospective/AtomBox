@@ -153,6 +153,23 @@ def etat_du_dossier(d: Dossier | None) -> str | None:
     return d.exit_reason if d is not None else None
 
 
+def nom_servi(d: Dossier) -> str:
+    """LE NOM QU'ON SERT EN IMAP — et il ne vient PAS de `alias_imap`.
+
+    `alias_imap` est le nom du dossier CHEZ LE FOURNISSEUR (D043, D140b) : c'est par lui que la
+    relève retrouve ses dossiers. Le réécrire a coûté un incident — la boîte avait un dossier
+    « Archives » chez son fournisseur, la migration l'a adopté comme boîte d'état ET renommé son
+    alias en « Archive », et le démon d'ingestion, ne retrouvant plus « Archives », en a recréé un
+    À CÔTÉ. Deux dossiers pour une idée, et l'utilisateur ne sait pas lequel regarder.
+
+    Le nom servi est donc CANONIQUE, déduit de l'état : il est le même d'une boîte à l'autre, il est
+    en ASCII (IMAP encode les noms en modified UTF-7, § 5.1.3, que nous ne produisons pas), et il ne
+    dépend d'aucun fournisseur. Les attributs SPECIAL-USE font que le client affiche SON libellé."""
+    if d.exit_reason in ETATS:
+        return ETATS[d.exit_reason][1]
+    return d.alias_imap or d.nom
+
+
 def assurer(s, boite_id) -> int:
     """crée les quatre boîtes d'état qui manquent à cette boîte — idempotent, en session SYNCHRONE.
 
@@ -171,8 +188,9 @@ def assurer(s, boite_id) -> int:
         existant = next((d for d in libres
                          if (d.alias_imap or d.nom or "").upper().split("/")[-1] in alias), None)
         if existant is not None:
+            # ON N'ÉCRIT PAS `alias_imap` : c'est le nom du dossier chez le fournisseur, et la
+            # relève s'en sert pour le retrouver. Le nom SERVI est déduit de l'état (`nom_servi`).
             existant.exit_reason, existant.special_use, existant.protege = etat, special, True
-            existant.alias_imap = servi
             libres.remove(existant)
         else:
             s.add(Dossier(dossier_id=uuid7(), boite_id=boite_id, nom=nom, alias_imap=servi,
