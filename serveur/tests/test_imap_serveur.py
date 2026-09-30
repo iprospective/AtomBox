@@ -249,3 +249,32 @@ def test_une_erreur_n_empoisonne_pas_la_connexion():
     assert r[-1].startswith("a2 NO"), r
     assert getattr(v, "annule", 0) == 1, "la transaction doit être annulée, sinon la suite est perdue"
     assert s.ligne("a3 NOOP")[-1].startswith("a3 OK"), "et la commande suivante doit passer"
+
+
+def test_un_message_de_la_corbeille_n_est_pas_masque():
+    """LE DÉFAUT QUE SEUL UN VRAI CLIENT RÉVÈLE — et il rendait la corbeille VIDE à l'écran.
+
+    `\\Deleted` veut dire en IMAP « marqué pour suppression, en attente d'EXPUNGE ». Thunderbird
+    masque par défaut les messages qui le portent. On le servait sur tout message dont
+    `exit_reason` valait `deleted` : le client recevait bien les trois messages de la corbeille, et
+    les cachait tous les trois. Côté serveur tout était juste — la base, l'API, le FETCH. Il a fallu
+    lire ce que le serveur met SUR LE FIL pour le voir.
+
+    Chez nous un message de la corbeille n'attend rien : il y est, et il n'en sortira pas seul
+    (D118). L'état est porté par la boîte aux lettres, pas par un drapeau (D183)."""
+    from atombox.imap.vue import MessageServi
+
+    class FauxComm:
+        taille, date_recue, sujet, from_adresse, from_nom, corps_texte = 10, None, "x", "a@b.c", None, ""
+
+    class FauxRatt:
+        repondu_le, exit_reason, comm_id, boite_id = None, "deleted", None, None
+
+    m = MessageServi(1, FauxComm(), FauxRatt(), magasin=None, blob_ref=None)
+    assert "\\Deleted" not in m.drapeaux, \
+        "un message de la corbeille porterait \\Deleted, donc Thunderbird le masquerait"
+
+    # …mais le client doit pouvoir le POSER : c'est sa façon de dire « supprime »
+    from atombox.imap.session import MODIFIABLES, DRAPEAUX
+    assert "\\Deleted" in MODIFIABLES and "\\Deleted" in DRAPEAUX, \
+        "le client doit pouvoir poser \\Deleted : c'est ce STORE qui déplace vers la corbeille"
