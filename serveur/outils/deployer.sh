@@ -99,15 +99,19 @@ fi
 # Un script qui modifie l'état doit donc s'assurer de pouvoir aller AU BOUT avant de faire le
 # premier pas.
 echo "-- 0. les moyens"
-if ! sudo -n true 2>/dev/null; then
-  rouge "sudo réclame un mot de passe, et il n'y a pas de terminal pour le taper."
+# ON TESTE LA COMMANDE QU'ON VA LANCER, pas un blanc-seing. `sudo -n true` exige NOPASSWD sur
+# TOUT : il répondait donc « mot de passe requis » alors qu'une règle autorisait précisément les
+# trois gestes dont on a besoin. Un contrôle plus large que le besoin refuse ce qui est permis.
+if ! sudo -n -l /usr/bin/systemctl stop $SERVICES >/dev/null 2>&1; then
+  rouge "sudo réclame un mot de passe pour « systemctl stop $SERVICES »."
   info "Rien n'a été touché. Deux façons d'avancer :"
   info ""
   info "  1. lancer ce script dans un VRAI terminal (le mot de passe une fois) :"
   info "       cd $CIBLE && bash serveur/outils/deployer.sh"
   info ""
   info "  2. ou autoriser ces trois gestes SANS mot de passe — trois commandes exactes, pas un"
-  info "     blanc-seing —, ce qui rend le déploiement jouable par l'outillage :"
+  info "     blanc-seing —, ce qui rend le déploiement jouable par l'outillage. La liste de"
+  info "     services doit correspondre EXACTEMENT, dans le même ordre, sinon sudo refuse :"
   info "       sudo tee /etc/sudoers.d/atombox <<'EOF'"
   info "       $USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop $SERVICES"
   info "       $USER ALL=(root) NOPASSWD: /usr/bin/systemctl start $SERVICES"
