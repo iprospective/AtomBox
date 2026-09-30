@@ -560,11 +560,15 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
             # donner sa place, pas le faire partir de quelque part. Écrire l'origine à ce moment
             # faisait que tout revenait à l'INBOX — et un message traité depuis « Devis » ne
             # retrouvait jamais son dossier.
-            r.dossier_id = cible.dossier_id
             # DÉPLACER, C'EST CHANGER DE BOÎTE AUX LETTRES : l'UID appartient au dossier, pas au
             # message (Q024). En garder l'ancien ferait lire au client un message pour un autre.
+            #
+            # L'UID S'OBTIENT AVANT DE BOUGER. `attribuer` exécute une requête, et SQLAlchemy vide
+            # alors les modifications en attente : écrire `dossier_id` d'abord ferait partir la
+            # nouvelle boîte avec l'ANCIEN uid, qui heurte l'unicité si elle l'utilise déjà.
             from ..uid_servi import attribuer_async as attribuer_uid
-            r.uid_servi = await attribuer_uid(s, r.dossier_id)
+            uid = await attribuer_uid(s, cible.dossier_id)
+            r.dossier_id, r.uid_servi = cible.dossier_id, uid
             n += 1
         elif k == "suppr" and v:
             await sortir("deleted")
@@ -806,10 +810,11 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
         # il s'enterre dans « Envoyés » sous des messages plus récents que lui.
         c.date_recue = c.date_declaree = maintenant
         cible = next((d for d in ds.values() if dossier_id_court(d) == "sent"), None)
-        # un déplacement donne un UID NEUF, pris au dossier d'arrivée (sémantique IMAP)
+        # un déplacement donne un UID NEUF, pris au dossier d'arrivée (sémantique IMAP) — et il
+        # s'obtient AVANT de bouger, sinon l'autoflush de la requête envoie l'ancien couple
         from ..uid_servi import attribuer_async as attribuer_uid
-        r.dossier_id = cible.dossier_id if cible else None
-        r.uid_servi = await attribuer_uid(s, r.dossier_id)
+        uid = await attribuer_uid(s, cible.dossier_id) if cible else None
+        r.dossier_id, r.uid_servi = (cible.dossier_id if cible else None), uid
         r.dossier_origine_id = None
         # On remet dans la file en effaçant l'ÉTAT, jamais les dates : « il a été traité le 3 »
         # reste vrai même s'il est revenu. C'est toute la différence entre un état et un fait.

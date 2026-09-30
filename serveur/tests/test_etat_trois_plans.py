@@ -255,3 +255,61 @@ def test_traiter_depuis_un_dossier_utilisateur_n_oublie_pas_d_ou_il_vient(monde)
     s.expire_all()
     r = s.scalar(select(Rattachement).where(Rattachement.comm_id == monde["comm_id"]))
     assert r.dossier_id == devis.dossier_id, "remis en file, il retourne là où l'utilisateur l'avait mis"
+
+
+def test_deplacer_vers_une_boite_qui_utilise_deja_cet_uid(monde):
+    """LA CONTRE-ÉPREUVE DU DÉFAUT VU EN PRODUIT — « erreur interne », rien de déplacé.
+
+    On écrivait `dossier_id` puis on appelait `attribuer()` pour l'UID. Or `attribuer()` exécute
+    une requête, et SQLAlchemy vide alors les modifications en attente : il envoyait
+    `dossier_id = Trash` avec l'ANCIEN `uid_servi`, qui heurtait `uq_rattachement_uid_servi` dès
+    que la Corbeille utilisait déjà ce numéro.
+
+    LE CHEMIN COMPTE, et mon premier essai de ce test l'a raté : il passait par l'API (session
+    ASYNCHRONE) et restait vert avec le défaut en place. Le défaut vit sur la voie SYNCHRONE —
+    celle du serveur IMAP et du démon —, parce que c'est là que `attribuer()` déclenche le vidage.
+    Un test qui n'emprunte pas le chemin du défaut ne garde rien, même s'il décrit bien le défaut.
+
+    On met donc l'usurpateur en place exprès — un message déjà dans la corbeille avec l'UID que
+    porte celui qu'on va y envoyer — et on appelle `deplacer_sync`, comme le fait un `UID MOVE`."""
+    from sqlalchemy import func, select
+    from atombox.db import session as ouvrir_sync
+    from atombox.schema.modeles import Comm, Dossier, Rattachement
+    from atombox.services import mailbox
+    from atombox.uuid7 import uuid7
+    s = monde["session"]
+    s.expire_all()
+    r = s.scalar(select(Rattachement).where(Rattachement.comm_id == monde["comm_id"]))
+    uid_occupe = r.uid_servi
+    corbeille = s.scalar(select(Dossier).where(Dossier.boite_id == monde["boite_id"],
+                                               Dossier.exit_reason == "deleted"))
+    # un squatteur dans la corbeille, portant EXACTEMENT l'UID du message qu'on va y déplacer
+    autre = uuid7()
+    s.add(Comm(comm_id=autre, type="email", date_recue=datetime.now(timezone.utc),
+               date_ingestion=datetime.now(timezone.utc), sens="in", nature="humain",
+               from_adresse="squat@x.fr", taille=1, nb_pieces_jointes=0,
+               est_chiffre=False, est_signe=False))
+    s.add(Rattachement(comm_id=autre, boite_id=monde["boite_id"], status="new", personnel=False,
+                       gele=False, dossier_id=corbeille.dossier_id, uid_servi=uid_occupe,
+                       exit_reason="deleted"))
+    corbeille.uid_servi_suivant = max(corbeille.uid_servi_suivant or 1, uid_occupe + 1)
+    s.commit()
+
+    # LA VOIE SYNCHRONE, dans sa propre session — comme le serveur IMAP
+    s2 = ouvrir_sync()
+    try:
+        cible = s2.scalar(select(Rattachement).where(Rattachement.comm_id == monde["comm_id"]))
+        mailbox.deplacer_sync(s2, cible, "deleted", monde["compte_id"])
+        s2.commit()
+        neuf = cible.uid_servi
+    finally:
+        s2.close()
+
+    s.expire_all()
+    r = s.scalar(select(Rattachement).where(Rattachement.comm_id == monde["comm_id"]))
+    assert r.exit_reason == "deleted" and r.dossier_id == corbeille.dossier_id
+    assert neuf != uid_occupe, "il prend un UID NEUF, pris au compteur de la corbeille"
+    assert s.scalar(select(func.count()).select_from(Rattachement)
+                    .where(Rattachement.dossier_id == corbeille.dossier_id,
+                           Rattachement.uid_servi == neuf)) == 1, \
+        "un UID ne se partage pas : le client lirait un message pour un autre"
