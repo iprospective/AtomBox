@@ -4,6 +4,7 @@
 #   bash outils/imapd.sh start     # en tâche de fond, journal dans un fichier
 #   bash outils/imapd.sh fg        # au premier plan, journal à l'écran (Ctrl-C pour sortir)
 #   bash outils/imapd.sh stop
+#   bash outils/imapd.sh stop-tous   # y compris ceux lancés à la main, sur une autre adresse
 #   bash outils/imapd.sh restart
 #   bash outils/imapd.sh status
 #   bash outils/imapd.sh logs      # suit le journal
@@ -65,6 +66,24 @@ pid_enregistre() {
 
 qui_ecoute() { ss -ltnp 2>/dev/null | awk -v a="$HOTE:$PORT" '$4 == a {print; exit}'; }
 
+# TOUS les serveurs AtomBox qui tournent, QUELLE QUE SOIT leur adresse d'écoute.
+#
+# LE DÉFAUT QUE ÇA CORRIGE, et il a coûté une mise en production pour rien : `qui_ecoute` ne
+# regardait que `$HOTE:$PORT`. Un serveur lancé à la main sur 10.0.3.11 était donc INVISIBLE quand
+# ce script écoute 127.0.0.1 : il en démarrait un second, disait « ✓ démarré », et le client
+# continuait de parler à l'ancien — qui portait le code d'avant. C'est exactement l'orphelin que
+# ce script existait pour empêcher, et il l'a laissé passer en annonçant un succès.
+autres_notres() {
+  local moi=""; [ -f "$PIDF" ] && moi="$(cat "$PIDF" 2>/dev/null)"
+  for pid in $(pgrep -f "[p]ython.* -m $MODULE" 2>/dev/null); do
+    [ "$pid" = "$moi" ] && continue
+    local ecoute; ecoute="$(ss -ltnp 2>/dev/null | grep -F "pid=$pid," | awk '{print $4}' | paste -sd, -)"
+    # `${x:-mot}` et rien d'autre : une apostrophe ou une parenthèse dans la valeur par défaut
+    # ouvre une citation que bash ne referme pas, et le script ne s'analyse plus.
+    echo "$pid ${ecoute:-sans-ecoute} $(ps -o lstart= -p "$pid" 2>/dev/null | sed 's/^ *//')"
+  done
+}
+
 # --- les actions ---------------------------------------------------------------------------------
 statut() {
   local pid; pid="$(pid_enregistre || true)"
@@ -92,6 +111,15 @@ statut() {
   else
     echo "  $HOTE:$PORT libre"
   fi
+  # ET CEUX QU'ON NE CHERCHAIT PAS. Un serveur sur une AUTRE adresse sert quand même des clients,
+  # et c'est peut-être celui que Thunderbird interroge.
+  local autres; autres="$(autres_notres)"
+  if [ -n "$autres" ]; then
+    echo "  ⚠ D'AUTRES serveurs AtomBox tournent, sur d'autres adresses — c'est peut-être l'un"
+    echo "    d'eux que votre client interroge, et il porte le code de SON démarrage :"
+    echo "$autres" | sed 's/^/      pid /'
+    echo "    → « stop-tous » les arrête (on ne tue que des processus qui portent notre module)"
+  fi
   echo "  journal : $LOGF"
 }
 
@@ -102,6 +130,16 @@ demarrer() {
     echo "✗ $HOTE:$PORT est déjà occupé, et ce n'est pas nous :"
     echo "  $(qui_ecoute)"
     echo "  → « stop » n'y touchera pas : on ne tue que ses propres processus."
+    return 1
+  fi
+  # UN SEUL SERVEUR À LA FOIS, VRAIMENT. Démarrer à côté d'un autre, c'est laisser le client parler
+  # à celui qu'on n'a pas relancé — et croire qu'on a déployé.
+  local autres; autres="$(autres_notres)"
+  if [ -n "$autres" ]; then
+    echo "✗ un serveur AtomBox tourne déjà, sur une AUTRE adresse :"
+    echo "$autres" | sed 's/^/    pid /'
+    echo "  En démarrer un second ne ferait rien pour les clients connectés au premier."
+    echo "  → bash $0 stop-tous   puis   bash $0 start"
     return 1
   fi
   [ -x "$PYTHON" ] || { echo "✗ pas d'environnement Python : $PYTHON"; return 1; }
@@ -147,15 +185,30 @@ arreter() {
   echo "✓ arrêté (pid $pid)"
 }
 
+arreter_tous() {
+  arreter
+  local n=0
+  for ligne in $(autres_notres | awk '{print $1}'); do
+    if est_le_notre "$ligne"; then
+      kill "$ligne" 2>/dev/null; n=$((n + 1))
+      for _ in $(seq 20); do est_le_notre "$ligne" || break; sleep 0.25; done
+      est_le_notre "$ligne" && kill -9 "$ligne" 2>/dev/null
+      echo "✓ arrêté (pid $ligne) — lancé hors de ce script"
+    fi
+  done
+  [ "$n" = 0 ] && echo "· aucun autre serveur AtomBox"
+}
+
 case "${1:-status}" in
   start)   demarrer ;;
   stop)    arreter ;;
-  restart) arreter; demarrer ;;
+  stop-tous|stop-all) arreter_tous ;;
+  restart) arreter_tous; demarrer ;;
   status)  statut ;;
   logs)    echo "— $LOGF (Ctrl-C pour sortir) —"; tail -n 40 -f "$LOGF" ;;
   fg)      # au premier plan : on ne pose PAS de fichier de pid, il meurt avec le terminal
            [ -n "$(qui_ecoute)" ] && { echo "✗ $HOTE:$PORT déjà occupé :"; echo "  $(qui_ecoute)"; exit 1; }
            echo "— IMAP sur $HOTE:$PORT, Ctrl-C pour sortir —"
            cd "$SERVEUR" && exec env ATOMBOX_IMAPD_LISTEN="$HOTE" ATOMBOX_IMAPD_PORT="$PORT" "$PYTHON" -m "$MODULE" ;;
-  *)       echo "usage : $0 [start|stop|restart|status|logs|fg]"; exit 2 ;;
+  *)       echo "usage : $0 [start|stop|stop-tous|restart|status|logs|fg]"; exit 2 ;;
 esac
