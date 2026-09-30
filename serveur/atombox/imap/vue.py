@@ -67,7 +67,21 @@ class MessageServi:
         if etat is not None and etat.vu: self.drapeaux.append("\\Seen")
         if etat is not None and etat.flagged: self.drapeaux.append("\\Flagged")
         if rattachement.repondu_le is not None: self.drapeaux.append("\\Answered")
-        if rattachement.exit_reason == "deleted": self.drapeaux.append("\\Deleted")
+        # ON NE SERT JAMAIS `\\Deleted`, ET C'EST UN CHOIX DE TRADUCTION, pas un oubli.
+        #
+        # En IMAP, `\\Deleted` veut dire « marqué pour suppression, en attente d'EXPUNGE » — pas
+        # « supprimé ». Les clients le traitent comme tel : Thunderbird MASQUE par défaut les
+        # messages qui le portent. Le servir sur les messages de la corbeille les rendait donc
+        # invisibles — reçus, et cachés. Constaté en produit, et introuvable autrement qu'en
+        # lisant ce que le serveur met sur le fil.
+        #
+        # Chez nous, un message de la corbeille n'attend rien : il EST dans la corbeille, et il
+        # n'en sortira pas tout seul (D118 : un rattachement supprimé n'est jamais effacé). L'état
+        # est porté par la BOÎTE AUX LETTRES où il se trouve, ce qui est exactement ce que D183
+        # voulait dire — les cinq états sont des boîtes, pas des drapeaux.
+        #
+        # Le client peut toujours POSER `\\Deleted` (c'est sa façon de dire « supprime »), et
+        # `PERMANENTFLAGS` l'annonce : c'est ce STORE qui déplace vers la corbeille.
 
     def enveloppe(self):
         """ENVELOPPE au sens RFC 3501 § 7.4.2 — l'ordre des dix champs est imposé et ne se devine pas"""
