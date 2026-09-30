@@ -82,11 +82,22 @@ def _requete_cible(boite_id, valeur: str | None, origine_id):
 
 
 def _preparer(r: Rattachement, valeur: str | None, cible: Dossier | None, compte_id, maintenant,
-              courant: Dossier | None):
-    """la mutation, sans base : ce qui change sur le rattachement. Rend l'état précédent.
+              courant: Dossier | None, uid: int | None):
+    """LA MUTATION, SANS AUCUNE REQUÊTE : c'est toute la raison d'être de cette fonction.
 
     `courant` est le dossier d'où l'on part — nécessaire pour savoir si c'était un dossier
-    UTILISATEUR (qu'il faut mémoriser) ou déjà une boîte d'état (qu'il ne faut pas)."""
+    UTILISATEUR (qu'il faut mémoriser) ou déjà une boîte d'état (qu'il ne faut pas). `uid` est
+    l'UID déjà obtenu pour la boîte d'arrivée.
+
+    POURQUOI L'UID EST PASSÉ ET NON CALCULÉ ICI, et ça a coûté un incident. On écrivait
+    `r.dossier_id` puis on appelait `attribuer()` pour l'UID. Or `attribuer()` exécute une requête,
+    et SQLAlchemy VIDE alors les modifications en attente : il envoyait donc `dossier_id = Trash`
+    avec l'ANCIEN `uid_servi`, qui heurtait `uq_rattachement_uid_servi` si la Corbeille utilisait
+    déjà ce numéro. Symptôme côté client : « erreur interne », et rien de déplacé.
+
+    La règle qui en sort : **entre le moment où l'on change de boîte aux lettres et celui où l'on
+    pose le nouvel UID, il ne doit y avoir AUCUNE requête.** Les deux champs forment un couple ;
+    les écrire séparément, c'est laisser exister un état interdit, ne serait-ce qu'un instant."""
     avant = r.exit_reason
     if cible is None:
         # PAS UN AVERTISSEMENT, UNE ERREUR : sans la boîte d'arrivée, l'état est écrit mais le
@@ -105,6 +116,7 @@ def _preparer(r: Rattachement, valeur: str | None, cible: Dossier | None, compte
                 and (courant is None or courant.exit_reason is None)):
             r.dossier_origine_id = r.dossier_id
         r.dossier_id = cible.dossier_id
+        r.uid_servi = uid          # même instant, même transaction, aucune requête entre les deux
     r.exit_reason = valeur
     if valeur in DATES:
         champ_date, champ_qui = DATES[valeur]
@@ -126,9 +138,14 @@ async def deplacer(s, r: Rattachement, valeur: str | None, compte_id, cible: Dos
     courant = await s.get(Dossier, r.dossier_id) if r.dossier_id else None
     if cible is None:
         cible = await s.scalar(_requete_cible(r.boite_id, valeur, r.dossier_origine_id).limit(1))
-    avant = _preparer(r, valeur, cible, compte_id, maintenant, courant)
-    if cible is not None:
-        r.uid_servi = await attribuer_async(s, cible.dossier_id)
+    # L'UID D'ABORD : toutes les requêtes ont lieu AVANT la première mutation (cf. `_preparer`).
+    uid = await attribuer_async(s, cible.dossier_id) if cible is not None else None
+    # ET CEINTURE EN PLUS DES BRETELLES. L'ordre suffit en principe ; `no_autoflush` garantit que
+    # même une requête ajoutée ici par distraction ne pourra pas faire partir un état à moitié
+    # appliqué — `dossier_id` neuf avec l'ancien `uid_servi` heurte l'unicité, et le client voit
+    # « erreur interne » sans rien de déplacé. L'invariant devient structurel, pas discipliné.
+    with s.no_autoflush:
+        avant = _preparer(r, valeur, cible, compte_id, maintenant, courant, uid)
     trace.tracer(s, compte_id, ACTIONS.get(valeur or "", "refiled"), "rattachement", r.comm_id,
                  {"boite_id": str(r.boite_id), "avant": avant, "apres": valeur})
     return avant
@@ -141,9 +158,10 @@ def deplacer_sync(s, r: Rattachement, valeur: str | None, compte_id, cible: Doss
     courant = s.get(Dossier, r.dossier_id) if r.dossier_id else None
     if cible is None:
         cible = s.scalar(_requete_cible(r.boite_id, valeur, r.dossier_origine_id).limit(1))
-    avant = _preparer(r, valeur, cible, compte_id, maintenant, courant)
-    if cible is not None:
-        r.uid_servi = attribuer(s, cible.dossier_id)
+    # L'UID D'ABORD, puis `no_autoflush` : voir `deplacer` — même raison, même garantie.
+    uid = attribuer(s, cible.dossier_id) if cible is not None else None
+    with s.no_autoflush:
+        avant = _preparer(r, valeur, cible, compte_id, maintenant, courant, uid)
     trace.tracer(s, compte_id, ACTIONS.get(valeur or "", "refiled"), "rattachement", r.comm_id,
                  {"boite_id": str(r.boite_id), "avant": avant, "apres": valeur})
     return avant
