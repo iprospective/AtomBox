@@ -29,7 +29,7 @@ CAPACITES = ["IMAP4rev1", "AUTH=PLAIN", "UIDPLUS", "MOVE", "SPECIAL-USE", "NAMES
 DRAPEAUX = ["\\Seen", "\\Flagged", "\\Answered", "\\Deleted"]
 # Ceux que le client peut MODIFIER — c'est ce que `PERMANENTFLAGS` annonce. `\\Answered` en fait
 # partie parce que répondre est un acte collectif que nous savons enregistrer.
-MODIFIABLES = ["\\Seen", "\\Flagged", "\\Answered", "\\Deleted"]
+WRITABLE_FLAGS = ["\\Seen", "\\Flagged", "\\Answered", "\\Deleted"]
 
 
 def authentifie(fn): fn._authentifie = True; return fn
@@ -102,7 +102,7 @@ class Session:
             # déplacement refusé, et le client n'obtenait plus que « erreur interne » jusqu'à ce
             # qu'il se reconnecte. Le client, lui, ne peut rien en déduire ni rien réparer.
             try:
-                self.vue.annuler()
+                self.vue.rollback()
             except Exception:
                 log.exception("l'annulation de la transaction a échoué elle aussi")
             return ["%s NO erreur interne" % tag]
@@ -304,7 +304,7 @@ class Session:
         # on accepte les STORE ferait que Thunderbird n'essaierait même pas ; annoncer des drapeaux
         # qu'on ignore lui ferait croire que ses écritures ont porté. La liste est donc celle qu'on
         # tient, ni plus ni moins — et EXAMINE, lui, reste en lecture seule par définition.
-        permanents = "" if self.lecture_seule else " ".join(MODIFIABLES)
+        permanents = "" if self.lecture_seule else " ".join(WRITABLE_FLAGS)
         return [
             "* %d EXISTS" % len(self.uids),
             "* 0 RECENT",                                   # on ne suit pas \\Recent : personne n'en dépend
@@ -334,18 +334,18 @@ class Session:
         if self.boite is None: return ["%s BAD sélectionnez une boîte aux lettres d'abord" % tag]
         if sous == "FETCH": return self._relever(tag, args[1:], par_uid=True)
         if sous == "SEARCH": return self._chercher(tag, args[1:], par_uid=True)
-        if sous in ("MOVE", "COPY"): return self._deplacer(tag, args[1:], sous, par_uid=True)
-        if sous == "STORE": return self._stocker(tag, args[1:], par_uid=True)
+        if sous in ("MOVE", "COPY"): return self._move(tag, args[1:], sous, par_uid=True)
+        if sous == "STORE": return self._store(tag, args[1:], par_uid=True)
         return ["%s BAD UID %s n'est pas servi" % (tag, sous)]
 
     @selectionne
-    def _c_move(self, tag, args): return self._deplacer(tag, args, "MOVE", par_uid=False)
+    def _c_move(self, tag, args): return self._move(tag, args, "MOVE", par_uid=False)
 
     @selectionne
-    def _c_copy(self, tag, args): return self._deplacer(tag, args, "COPY", par_uid=False)
+    def _c_copy(self, tag, args): return self._move(tag, args, "COPY", par_uid=False)
 
     @selectionne
-    def _c_store(self, tag, args): return self._stocker(tag, args, par_uid=False)
+    def _c_store(self, tag, args): return self._store(tag, args, par_uid=False)
 
     @selectionne
     def _c_expunge(self, tag, args):
@@ -359,7 +359,7 @@ class Session:
         return self._rafraichir() + ["%s OK EXPUNGE" % tag]
 
     # ── les écritures ───────────────────────────────────────────────────────────────────────────
-    def _deplacer(self, tag, args, quoi, par_uid):
+    def _move(self, tag, args, quoi, par_uid):
         """MOVE et COPY vers une autre boîte aux lettres.
 
         COPY FAIT LA MÊME CHOSE QUE MOVE, et il faut le dire : la clé d'un rattachement est
@@ -371,7 +371,7 @@ class Session:
         if len(args) < 2: return ["%s BAD %s demande un ensemble et une destination" % (tag, quoi)]
         vises = sequence(args[0], self.uids, par_uid)
         if not vises: return ["%s OK %s (rien à déplacer)" % (tag, quoi)]
-        couples = self.vue.deplacer(self.compte, self.boite, vises, args[1])
+        couples = self.vue.move(self.compte, self.boite, vises, args[1])
         if couples is None:
             # TRYCREATE dit au client « crée-la puis recommence » ; sans lui, il abandonne
             # silencieusement et l'utilisateur voit son geste ne rien faire (RFC 3501 § 6.4.7).
@@ -385,7 +385,7 @@ class Session:
         # est arrivé avant d'apprendre qu'il a quitté la boîte courante, sinon il le perd de vue.
         return lignes + self._rafraichir() + ["%s OK %s" % (tag, quoi)]
 
-    def _stocker(self, tag, args, par_uid):
+    def _store(self, tag, args, par_uid):
         """STORE ±FLAGS — et le silence de `.SILENT`, que les clients utilisent presque toujours."""
         if self.lecture_seule: return ["%s NO boîte ouverte en lecture seule" % tag]
         if len(args) < 3: return ["%s BAD STORE demande un ensemble, une opération et des drapeaux" % tag]
@@ -394,7 +394,7 @@ class Session:
         silencieux = op.endswith(".SILENT")
         if silencieux: op = op[:-len(".SILENT")]
         drapeaux = args[2] if isinstance(args[2], list) else [args[2]]
-        drapeaux = [_normaliser_drapeau(d) for d in drapeaux]
+        drapeaux = [_normalize_flag(d) for d in drapeaux]
         inconnus = [d for d in drapeaux if d not in DRAPEAUX]
         if inconnus:
             # On ne se tait pas sur ce qu'on ignore : un mot-clé qu'on jette en silence fait croire
@@ -403,11 +403,11 @@ class Session:
         connus = [d for d in drapeaux if d in DRAPEAUX]
         if op == "FLAGS":
             # remplacement : ce qui n'est pas dans la liste est retiré
-            ajouter, retirer = connus, [d for d in MODIFIABLES if d not in connus]
+            ajouter, retirer = connus, [d for d in WRITABLE_FLAGS if d not in connus]
         elif op == "+FLAGS": ajouter, retirer = connus, []
         elif op == "-FLAGS": ajouter, retirer = [], connus
         else: return ["%s BAD opération de STORE inconnue : %s" % (tag, op)]
-        self.vue.drapeaux(self.compte, self.boite, vises, ajouter, retirer)
+        self.vue.store_flags(self.compte, self.boite, vises, ajouter, retirer)
         lignes = []
         if not silencieux:
             for uid in vises:
@@ -433,7 +433,7 @@ def _correspond(nom: str, motif: str) -> bool:
     return re.match("^" + exp + "$", nom, re.I) is not None
 
 
-def _normaliser_drapeau(d) -> str:
+def _normalize_flag(d) -> str:
     """`\\seen` et `\\Seen` sont le même drapeau : la RFC les dit insensibles à la casse (§ 9).
 
     Sans ça, un client qui écrit en minuscules voyait ses STORE ignorés — et rien ne le lui disait."""

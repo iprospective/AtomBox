@@ -25,7 +25,7 @@ async def rechercher(s: AsyncSession, compte: Compte, q: str, sortis: bool = Fal
     adresses = {b: (await s.get(Adresse, (await s.get(Boite, b)).adresse_id)).adresse_complete for b in boites}
     lignes = (await s.execute(stmt)).all()
     from . import personal_state as perso
-    etats = await perso.etats_de(s, compte.compte_id, [c.comm_id for _, c in lignes])
+    etats = await perso.states_of(s, compte.compte_id, [c.comm_id for _, c in lignes])
     vus, out = set(), []
     for r, c in lignes:
         if c.comm_id in vus: continue

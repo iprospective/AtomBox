@@ -31,8 +31,8 @@ def monde(tmp_path):
     from atombox.ingestion.ingestion import adresse as adresse_de
     from atombox.magasin import Magasin
     from atombox.schema.modeles import Acces, Boite, Comm, Compte, Dossier, Rattachement
-    from atombox.schema.semences import semer
-    from atombox.services.mailbox import assurer
+    from atombox.schema.seeds import seed_builtins
+    from atombox.services.mailbox import ensure_mailboxes
     from atombox.uuid7 import uuid7
 
     nom = "atombox_plans_" + uuid.uuid4().hex[:8]
@@ -63,8 +63,8 @@ def monde(tmp_path):
     inbox = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom="INBOX", alias_imap="INBOX", protege=True)
     s.add(inbox)
     s.flush()
-    semer(s)
-    assurer(s, boite.boite_id)          # les quatre boîtes d'état (D183)
+    seed_builtins(s)
+    ensure_mailboxes(s, boite.boite_id)          # les quatre boîtes d'état (D183)
     cid = uuid7()
     s.add(Comm(comm_id=cid, type="email", date_recue=datetime.now(timezone.utc),
                date_ingestion=datetime.now(timezone.utc), sens="in", nature="humain",
@@ -189,7 +189,7 @@ async def _journal(comm_id):
     from atombox.db import fabrique_async
     from atombox.services import trace
     async with fabrique_async()() as s:
-        return await trace.lire(s, comm_id)
+        return await trace.history(s, comm_id)
 
 
 def test_remettre_en_file_efface_l_etat_et_garde_les_dates(monde):
@@ -271,7 +271,7 @@ def test_deplacer_vers_une_boite_qui_utilise_deja_cet_uid(monde):
     Un test qui n'emprunte pas le chemin du défaut ne garde rien, même s'il décrit bien le défaut.
 
     On met donc l'usurpateur en place exprès — un message déjà dans la corbeille avec l'UID que
-    porte celui qu'on va y envoyer — et on appelle `deplacer_sync`, comme le fait un `UID MOVE`."""
+    porte celui qu'on va y envoyer — et on appelle `move_sync`, comme le fait un `UID MOVE`."""
     from sqlalchemy import func, select
     from atombox.db import session as ouvrir_sync
     from atombox.schema.modeles import Comm, Dossier, Rattachement
@@ -299,7 +299,7 @@ def test_deplacer_vers_une_boite_qui_utilise_deja_cet_uid(monde):
     s2 = ouvrir_sync()
     try:
         cible = s2.scalar(select(Rattachement).where(Rattachement.comm_id == monde["comm_id"]))
-        mailbox.deplacer_sync(s2, cible, "deleted", monde["compte_id"])
+        mailbox.move_sync(s2, cible, "deleted", monde["compte_id"])
         s2.commit()
         neuf = cible.uid_servi
     finally:

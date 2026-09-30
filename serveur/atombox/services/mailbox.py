@@ -48,7 +48,7 @@ log = journal("api")
 # « Archive » à côté de la leur : le client en affichait deux, et l'utilisateur ne savait pas
 # laquelle regarder. Adopter le dossier existant fait aussi que la synchronisation montante range
 # le message là où le fournisseur l'attend.
-ETATS = {
+STATES = {
     "processed": ("Traités", "Processed", None,
                   ("PROCESSED", "TRAITÉS", "TRAITES")),
     "archived": ("Archivés", "Archive", "\\Archive",
@@ -60,15 +60,15 @@ ETATS = {
 }
 
 # la date et l'auteur que chaque transition pose (D175 § 4 bis)
-DATES = {"processed": ("processed_at", "processed_by"), "archived": ("archived_at", "archived_by"),
+TRANSITION_DATES = {"processed": ("processed_at", "processed_by"), "archived": ("archived_at", "archived_by"),
          "deleted": ("deleted_at", "deleted_by"), "junk": ("junk_at", "junk_by")}
 
-ACTIONS = {"processed": "processed", "archived": "archived", "deleted": "deleted", "junk": "junked"}
+JOURNAL_ACTIONS = {"processed": "processed", "archived": "archived", "deleted": "deleted", "junk": "junked"}
 
-RETENTION_CORBEILLE = timedelta(days=30)     # D121 — réglable par domaine, un jour
+TRASH_RETENTION = timedelta(days=30)     # D121 — réglable par domaine, un jour
 
 
-def _requete_cible(boite_id, valeur: str | None, origine_id):
+def _target_query(boite_id, valeur: str | None, origine_id):
     """le dossier d'arrivée : la boîte de l'état, ou — pour un retour en file — l'origine, à défaut INBOX"""
     if valeur is not None:
         return select(Dossier).where(Dossier.boite_id == boite_id, Dossier.exit_reason == valeur)
@@ -81,7 +81,7 @@ def _requete_cible(boite_id, valeur: str | None, origine_id):
                                  Dossier.alias_imap.in_(("INBOX", "Inbox", "inbox")))
 
 
-def _preparer(r: Rattachement, valeur: str | None, cible: Dossier | None, compte_id, maintenant,
+def _apply_move(r: Rattachement, valeur: str | None, cible: Dossier | None, compte_id, maintenant,
               courant: Dossier | None, uid: int | None):
     """LA MUTATION, SANS AUCUNE REQUÊTE : c'est toute la raison d'être de cette fonction.
 
@@ -102,10 +102,10 @@ def _preparer(r: Rattachement, valeur: str | None, cible: Dossier | None, compte
     if cible is None:
         # PAS UN AVERTISSEMENT, UNE ERREUR : sans la boîte d'arrivée, l'état est écrit mais le
         # message ne bouge pas — c'est-à-dire exactement le symptôme « je déplace et rien ne
-        # change ». `assurer()` les pose à l'amorçage et la migration 0012 pour l'existant ; s'il
+        # change ». `ensure_mailboxes()` les pose à l'amorçage et la migration 0012 pour l'existant ; s'il
         # en manque une, une boîte a été créée par un chemin qui ne les pose pas.
         log.error("boîte aux lettres « %s » absente de la boîte %s : l'état est écrit, le contenant "
-                  "ne bouge pas. Appeler services.mailbox.assurer() sur cette boîte (D183)",
+                  "ne bouge pas. Appeler services.mailbox.ensure_mailboxes() sur cette boîte (D183)",
                   valeur, r.boite_id)
     else:
         # LE DOSSIER D'ORIGINE EST « LE DERNIER DOSSIER ORDINAIRE », pas « le premier qu'on ait vu ».
@@ -118,17 +118,17 @@ def _preparer(r: Rattachement, valeur: str | None, cible: Dossier | None, compte
         r.dossier_id = cible.dossier_id
         r.uid_servi = uid          # même instant, même transaction, aucune requête entre les deux
     r.exit_reason = valeur
-    if valeur in DATES:
-        champ_date, champ_qui = DATES[valeur]
+    if valeur in TRANSITION_DATES:
+        champ_date, champ_qui = TRANSITION_DATES[valeur]
         if getattr(r, champ_date) is None:
             setattr(r, champ_date, maintenant)
             setattr(r, champ_qui, compte_id)
     if valeur == "deleted":
-        r.restaurable_jusqu_au = maintenant + RETENTION_CORBEILLE
+        r.restaurable_jusqu_au = maintenant + TRASH_RETENTION
     return avant
 
 
-async def deplacer(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier | None = None) -> str | None:
+async def move(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier | None = None) -> str | None:
     """API (session asynchrone) — rend l'état précédent.
 
     `cible` IMPOSE la boîte d'arrivée : un `MOVE` IMAP nomme sa destination, et déduire celle-ci de
@@ -137,41 +137,41 @@ async def deplacer(s, r: Rattachement, valeur: str | None, compte_id, cible: Dos
     maintenant = datetime.now(timezone.utc)
     courant = await s.get(Dossier, r.dossier_id) if r.dossier_id else None
     if cible is None:
-        cible = await s.scalar(_requete_cible(r.boite_id, valeur, r.dossier_origine_id).limit(1))
-    # L'UID D'ABORD : toutes les requêtes ont lieu AVANT la première mutation (cf. `_preparer`).
+        cible = await s.scalar(_target_query(r.boite_id, valeur, r.dossier_origine_id).limit(1))
+    # L'UID D'ABORD : toutes les requêtes ont lieu AVANT la première mutation (cf. `_apply_move`).
     uid = await attribuer_async(s, cible.dossier_id) if cible is not None else None
     # ET CEINTURE EN PLUS DES BRETELLES. L'ordre suffit en principe ; `no_autoflush` garantit que
     # même une requête ajoutée ici par distraction ne pourra pas faire partir un état à moitié
     # appliqué — `dossier_id` neuf avec l'ancien `uid_servi` heurte l'unicité, et le client voit
     # « erreur interne » sans rien de déplacé. L'invariant devient structurel, pas discipliné.
     with s.no_autoflush:
-        avant = _preparer(r, valeur, cible, compte_id, maintenant, courant, uid)
-    trace.tracer(s, compte_id, ACTIONS.get(valeur or "", "refiled"), "rattachement", r.comm_id,
+        avant = _apply_move(r, valeur, cible, compte_id, maintenant, courant, uid)
+    trace.record(s, compte_id, JOURNAL_ACTIONS.get(valeur or "", "refiled"), "rattachement", r.comm_id,
                  {"boite_id": str(r.boite_id), "avant": avant, "apres": valeur})
     return avant
 
 
-def deplacer_sync(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier | None = None) -> str | None:
+def move_sync(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier | None = None) -> str | None:
     """IMAP et démon (session synchrone) — le même geste, la même trace"""
     from ..uid_servi import attribuer
     maintenant = datetime.now(timezone.utc)
     courant = s.get(Dossier, r.dossier_id) if r.dossier_id else None
     if cible is None:
-        cible = s.scalar(_requete_cible(r.boite_id, valeur, r.dossier_origine_id).limit(1))
+        cible = s.scalar(_target_query(r.boite_id, valeur, r.dossier_origine_id).limit(1))
     # L'UID D'ABORD, puis `no_autoflush` : voir `deplacer` — même raison, même garantie.
     uid = attribuer(s, cible.dossier_id) if cible is not None else None
     with s.no_autoflush:
-        avant = _preparer(r, valeur, cible, compte_id, maintenant, courant, uid)
-    trace.tracer(s, compte_id, ACTIONS.get(valeur or "", "refiled"), "rattachement", r.comm_id,
+        avant = _apply_move(r, valeur, cible, compte_id, maintenant, courant, uid)
+    trace.record(s, compte_id, JOURNAL_ACTIONS.get(valeur or "", "refiled"), "rattachement", r.comm_id,
                  {"boite_id": str(r.boite_id), "avant": avant, "apres": valeur})
     return avant
 
 
-def etat_du_dossier(d: Dossier | None) -> str | None:
+def state_of_folder(d: Dossier | None) -> str | None:
     return d.exit_reason if d is not None else None
 
 
-def nom_servi(d: Dossier) -> str:
+def served_name(d: Dossier) -> str:
     """LE NOM QU'ON SERT EN IMAP — et il ne vient PAS de `alias_imap`.
 
     `alias_imap` est le nom du dossier CHEZ LE FOURNISSEUR (D043, D140b) : c'est par lui que la
@@ -183,12 +183,12 @@ def nom_servi(d: Dossier) -> str:
     Le nom servi est donc CANONIQUE, déduit de l'état : il est le même d'une boîte à l'autre, il est
     en ASCII (IMAP encode les noms en modified UTF-7, § 5.1.3, que nous ne produisons pas), et il ne
     dépend d'aucun fournisseur. Les attributs SPECIAL-USE font que le client affiche SON libellé."""
-    if d.exit_reason in ETATS:
-        return ETATS[d.exit_reason][1]
+    if d.exit_reason in STATES:
+        return STATES[d.exit_reason][1]
     return d.alias_imap or d.nom
 
 
-def assurer(s, boite_id) -> int:
+def ensure_mailboxes(s, boite_id) -> int:
     """crée les quatre boîtes d'état qui manquent à cette boîte — idempotent, en session SYNCHRONE.
 
     Une base montée de `schema.sql` (les tests, une instance neuve) n'a AUCUNE donnée : sans cet
@@ -201,13 +201,13 @@ def assurer(s, boite_id) -> int:
     libres = list(s.scalars(select(Dossier).where(Dossier.boite_id == boite_id,
                                                  Dossier.exit_reason.is_(None))))
     posees = 0
-    for etat, (nom, servi, special, alias) in ETATS.items():
+    for etat, (nom, servi, special, alias) in STATES.items():
         if etat in presents: continue
         existant = next((d for d in libres
                          if (d.alias_imap or d.nom or "").upper().split("/")[-1] in alias), None)
         if existant is not None:
             # ON N'ÉCRIT PAS `alias_imap` : c'est le nom du dossier chez le fournisseur, et la
-            # relève s'en sert pour le retrouver. Le nom SERVI est déduit de l'état (`nom_servi`).
+            # relève s'en sert pour le retrouver. Le nom SERVI est déduit de l'état (`served_name`).
             existant.exit_reason, existant.special_use, existant.protege = etat, special, True
             libres.remove(existant)
         else:

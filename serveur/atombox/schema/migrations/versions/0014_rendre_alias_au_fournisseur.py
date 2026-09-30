@@ -17,7 +17,7 @@ devant deux dossiers pour une seule idée.
 LA CONFUSION DE FOND, et elle valait d'être nommée : j'ai pris un champ pour deux choses. Le nom
 CHEZ LE FOURNISSEUR et le nom QU'ON SERT sont indépendants — le premier est une donnée qu'on
 reçoit, le second un choix qu'on fait. Depuis ce correctif, le nom servi est CANONIQUE et déduit de
-l'état (`services/mailbox.py :: nom_servi`) : `Processed`, `Archive`, `Trash`, `Junk`, les mêmes
+l'état (`services/mailbox.py :: served_name`) : `Processed`, `Archive`, `Trash`, `Junk`, les mêmes
 d'une boîte à l'autre, en ASCII, et indépendants de tout fournisseur.
 
 CE QUE CETTE MIGRATION RÉPARE :
@@ -30,7 +30,7 @@ CE QUE CETTE MIGRATION RÉPARE :
 """
 from alembic import op
 from atombox.journal import journal
-from atombox.services.mailbox import ETATS
+from atombox.services.mailbox import STATES
 
 log = journal("schema")
 
@@ -43,7 +43,7 @@ depends_on = None
 def upgrade():
     cnx = op.get_bind()
     repares, deplaces = 0, 0
-    for etat, (_nom, servi, _special, alias) in ETATS.items():
+    for etat, (_nom, servi, _special, alias) in STATES.items():
         liste = ", ".join("'%s'" % a.replace("'", "''") for a in alias)
         # LE FANTÔME EST LA SOURCE DE VÉRITÉ pour le nom du fournisseur : c'est le démon qui l'a
         # créé, en recopiant ce que le serveur distant lui a annoncé.

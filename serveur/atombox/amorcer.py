@@ -39,11 +39,11 @@ def amorcer(login: str, nom: str, mot_de_passe: str | None, boite_adresse: str, 
         s.add(Identite(identite_id=uuid7(), boite_id=boite.boite_id, nom_affiche=nom, adresse_id=a.adresse_id, au_nom_de=False, par_defaut=True))
     # LE VOCABULAIRE DU PRODUIT, pas de la configuration : sans les marqueurs intégrés, « à revoir »
     # et « me le rappeler le… » existent dans l'interface et ne font rien (D178).
-    from .schema.semences import semer
-    n = semer(s)
+    from .schema.seeds import seed_builtins
+    n = seed_builtins(s)
     # …et les quatre boîtes aux lettres d'état, sans quoi « Archiver » n'a nulle part où aller (D183)
-    from .services.mailbox import assurer
-    assurer(s, boite.boite_id)
+    from .services.mailbox import ensure_mailboxes
+    ensure_mailboxes(s, boite.boite_id)
     s.commit()
     log.info("amorçage : compte %s, boîte %s%s", compte.login, boite_adresse,
              (", %d marqueur(s) intégré(s) posé(s)" % n) if n else "")

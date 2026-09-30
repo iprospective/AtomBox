@@ -129,11 +129,11 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
         # et s'ils sont plusieurs sur la boîte, la règle ne marque personne : « lu » voudrait dire
         # « lu par tous », ce qui est faux, et écrase la seule information qu'on aurait pu garder.
         from ..services import personal_state as perso
-        releveur = perso.compte_releveur(s, boite_id) if (p.get("lu") or p.get("drapeau")) else None
+        releveur = perso.polling_account(s, boite_id) if (p.get("lu") or p.get("drapeau")) else None
         if releveur is not None:
             s.flush()
-            if p.get("lu"): s.execute(perso.ordre_ouvrir(releveur, comm_id, boite_id))
-            if p.get("drapeau"): s.execute(perso.ordre_drapeau(releveur, comm_id, boite_id, True))
+            if p.get("lu"): s.execute(perso.open_stmt(releveur, comm_id, boite_id))
+            if p.get("drapeau"): s.execute(perso.flag_stmt(releveur, comm_id, boite_id, True))
         elif p.get("lu") or p.get("drapeau"):
             log.info("règle avec lu/drapeau sur une boîte à plusieurs membres : état personnel non imputé (D175)")
         # CE QU'UNE RÈGLE POSE DOIT PARTIR VERS IMAP (RM3188). Sans cet ordre, la synchronisation

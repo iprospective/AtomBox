@@ -41,7 +41,7 @@ class FausseVue:
 
     def authentifier(self, ident, mdp): return "compte" if (ident, mdp) == ("mathieu", "secret") else None
 
-    def annuler(self): self.annule = getattr(self, "annule", 0) + 1
+    def rollback(self): self.annule = getattr(self, "annule", 0) + 1
     def boites(self, compte): return list(self.b.values())
     def ouvrir(self, compte, nom): return self.b.get(nom)
     def etat(self, compte, nom):
@@ -275,6 +275,6 @@ def test_un_message_de_la_corbeille_n_est_pas_masque():
         "un message de la corbeille porterait \\Deleted, donc Thunderbird le masquerait"
 
     # …mais le client doit pouvoir le POSER : c'est sa façon de dire « supprime »
-    from atombox.imap.session import MODIFIABLES, DRAPEAUX
-    assert "\\Deleted" in MODIFIABLES and "\\Deleted" in DRAPEAUX, \
+    from atombox.imap.session import WRITABLE_FLAGS, DRAPEAUX
+    assert "\\Deleted" in WRITABLE_FLAGS and "\\Deleted" in DRAPEAUX, \
         "le client doit pouvoir poser \\Deleted : c'est ce STORE qui déplace vers la corbeille"

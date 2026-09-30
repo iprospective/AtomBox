@@ -28,12 +28,12 @@ from ..schema.modeles import Acces, Marker, MarkerPersonal, Rattachement, ReadSt
 
 log = journal("api")
 
-A_REVOIR = "to_review"
-SOMMEIL = "snooze"
+TO_REVIEW = "to_review"
+SNOOZE = "snooze"
 
 
 # ── ce que le compte a ouvert, en SQL ───────────────────────────────────────────────────────────
-def ouvert_par(compte_id):
+def opened_by(compte_id):
     """« ce compte a-t-il ouvert ce rattachement ? » — un EXISTS corrélé, avec la relève.
 
     EXISTS et non une jointure externe : une jointure multiplierait les lignes, et tous les
@@ -54,12 +54,12 @@ def ouvert_par(compte_id):
             .exists())
 
 
-def non_ouvert_par(compte_id):
+def not_opened_by(compte_id):
     """jamais ouvert PAR MOI (ou par celui que je relève)"""
-    return ~ouvert_par(compte_id)
+    return ~opened_by(compte_id)
 
 
-def marque_par(compte_id, code: str):
+def marked_by(compte_id, code: str):
     """« ce compte a-t-il posé CE marqueur sur ce rattachement ? » — un EXISTS corrélé de plus"""
     return (select(MarkerPersonal.compte_id)
             .join(Marker, Marker.marker_id == MarkerPersonal.marker_id)
@@ -69,7 +69,7 @@ def marque_par(compte_id, code: str):
             .exists())
 
 
-def a_voir_par(compte_id):
+def needs_attention_by(compte_id):
     """CE QUE LA LISTE MET EN GRAS, et donc ce que le compteur doit compter : jamais ouvert, OU
     remis de côté par « à revoir ».
 
@@ -77,11 +77,11 @@ def a_voir_par(compte_id):
     plus rien — parfait —, mais le message ne revenait pas dans la liste, donc le geste ne servait
     plus à rien. Un test l'a trouvé. Et le compteur lit la MÊME expression que la liste, parce que
     D166 interdit qu'ils disent deux choses."""
-    return or_(non_ouvert_par(compte_id), marque_par(compte_id, A_REVOIR))
+    return or_(not_opened_by(compte_id), marked_by(compte_id, TO_REVIEW))
 
 
 # ── lire l'état de toute une liste, en une passe ────────────────────────────────────────────────
-async def etats_de(s: AsyncSession, compte_id, comm_ids: list) -> dict:
+async def states_of(s: AsyncSession, compte_id, comm_ids: list) -> dict:
     """{(comm_id, boite_id): {"lu": bool, "drapeau": bool, "a_revoir": bool, "sommeil": iso|None}}
 
     Une requête pour la liste entière, comme les tags (D078) : une requête par ligne rendrait la
@@ -101,13 +101,13 @@ async def etats_de(s: AsyncSession, compte_id, comm_ids: list) -> dict:
                                      MarkerPersonal.comm_id.in_(comm_ids)))
     for m, code in marques:
         e = out.setdefault((m.comm_id, m.boite_id), {})
-        if code == A_REVOIR: e["a_revoir"] = True
-        elif code == SOMMEIL: e["sommeil"] = m.due_at
+        if code == TO_REVIEW: e["a_revoir"] = True
+        elif code == SNOOZE: e["sommeil"] = m.due_at
         e.setdefault("marqueurs", []).append(code)
     return out
 
 
-def serialiser_etat(e: dict | None) -> dict:
+def serialize_state(e: dict | None) -> dict:
     """ce que le webmail lit — les noms du contrat (D141), pas ceux des colonnes"""
     e = e or {}
     return {"lu": bool(e.get("lu")), "drapeau": bool(e.get("drapeau")),
@@ -121,10 +121,10 @@ def serialiser_etat(e: dict | None) -> dict:
 # asynchrone, le démon d'ingestion une session synchrone, et les deux doivent poser exactement le
 # même fait. Deux implémentations auraient divergé au premier correctif — c'est arrivé ailleurs.
 #
-#     await s.execute(ordre_ouvrir(...))     depuis l'API
-#     s.execute(ordre_ouvrir(...))           depuis le démon
+#     await s.execute(open_stmt(...))     depuis l'API
+#     s.execute(open_stmt(...))           depuis le démon
 
-def ordre_ouvrir(compte_id, comm_id, boite_id, quand=None):
+def open_stmt(compte_id, comm_id, boite_id, quand=None):
     """OUVERT : la première fois pose `opened_at` et ne la retouche plus jamais.
 
     Un UPSERT et non « lire, puis écrire » : deux onglets qui ouvrent le même message en même temps
@@ -143,7 +143,7 @@ def ordre_ouvrir(compte_id, comm_id, boite_id, quand=None):
               "last_seen_at": maintenant, "open_count": ReadState.open_count + 1})
 
 
-def ordre_drapeau(compte_id, comm_id, boite_id, flagged: bool, quand=None):
+def flag_stmt(compte_id, comm_id, boite_id, flagged: bool, quand=None):
     """pose ou retire le drapeau — crée la ligne au besoin, SANS prétendre à une ouverture.
 
     C'est pour ce cas qu'`opened_at` est nullable : mettre un drapeau sur un message qu'on n'a pas
@@ -155,15 +155,15 @@ def ordre_drapeau(compte_id, comm_id, boite_id, flagged: bool, quand=None):
     return st.on_conflict_do_update(constraint="pk_read_state", set_={"flagged": bool(flagged)})
 
 
-async def ouvrir(s: AsyncSession, compte_id, comm_id, boite_id) -> None:
-    await s.execute(ordre_ouvrir(compte_id, comm_id, boite_id))
+async def mark_opened(s: AsyncSession, compte_id, comm_id, boite_id) -> None:
+    await s.execute(open_stmt(compte_id, comm_id, boite_id))
 
 
-async def toucher(s: AsyncSession, compte_id, comm_id, boite_id, flagged: bool | None = None) -> None:
-    await s.execute(ordre_drapeau(compte_id, comm_id, boite_id, bool(flagged)))
+async def set_flag(s: AsyncSession, compte_id, comm_id, boite_id, flagged: bool | None = None) -> None:
+    await s.execute(flag_stmt(compte_id, comm_id, boite_id, bool(flagged)))
 
 
-def compte_releveur(s, boite_id):
+def polling_account(s, boite_id):
     """LE compte sur qui la synchronisation IMAP descendante impute l'état (D175 § 3).
 
     L'IMAP d'un FOURNISSEUR n'a qu'un jeu de drapeaux pour toute la boîte : il ne dit pas qui a lu.
@@ -176,7 +176,7 @@ def compte_releveur(s, boite_id):
     return lignes[0] if len(lignes) == 1 else None
 
 
-class EtatPersonnel:
+class PersonalState:
     """L'état d'un message pour UNE personne, réduit à ce que les deux IMAP en tirent.
 
     Un objet de valeur et non la ligne ORM, pour une raison précise : `vu` n'est PAS `opened_at`.
@@ -196,16 +196,16 @@ class EtatPersonnel:
         return self.opened_at is not None and not self.a_revoir
 
 
-def etat_sync(s, compte_id, comm_id, boite_id) -> EtatPersonnel | None:
+def state_sync(s, compte_id, comm_id, boite_id) -> PersonalState | None:
     """l'état d'UN message pour UN compte, en session synchrone (le démon, le serveur IMAP)"""
     if compte_id is None: return None
     ligne = s.get(ReadState, (compte_id, comm_id, boite_id))
     marque = s.scalar(select(MarkerPersonal.set_at)
                       .join(Marker, Marker.marker_id == MarkerPersonal.marker_id)
                       .where(MarkerPersonal.compte_id == compte_id, MarkerPersonal.comm_id == comm_id,
-                             MarkerPersonal.boite_id == boite_id, Marker.code == A_REVOIR))
+                             MarkerPersonal.boite_id == boite_id, Marker.code == TO_REVIEW))
     if ligne is None and marque is None: return None
-    return EtatPersonnel(opened_at=ligne.opened_at if ligne else None,
+    return PersonalState(opened_at=ligne.opened_at if ligne else None,
                          last_seen_at=ligne.last_seen_at if ligne else None,
                          flagged=ligne.flagged if ligne else False,
                          a_revoir=marque is not None)
@@ -214,7 +214,7 @@ def etat_sync(s, compte_id, comm_id, boite_id) -> EtatPersonnel | None:
 # ── les marqueurs ───────────────────────────────────────────────────────────────────────────────
 # Même principe que pour les faits : l'ORDRE d'un côté, les deux façons de le passer de l'autre.
 
-def ordre_poser(marker_id, compte_id, comm_id, boite_id, due_at=None, value=None, quand=None):
+def set_marker_stmt(marker_id, compte_id, comm_id, boite_id, due_at=None, value=None, quand=None):
     st = insert(MarkerPersonal).values(compte_id=compte_id, comm_id=comm_id, boite_id=boite_id,
                                        marker_id=marker_id, set_at=quand or datetime.now(timezone.utc),
                                        due_at=due_at, value=value)
@@ -222,18 +222,18 @@ def ordre_poser(marker_id, compte_id, comm_id, boite_id, due_at=None, value=None
                                     set_={"due_at": due_at, "value": value})
 
 
-def ordre_retirer(marker_id, compte_id, comm_id, boite_id):
+def unset_marker_stmt(marker_id, compte_id, comm_id, boite_id):
     return delete(MarkerPersonal).where(MarkerPersonal.compte_id == compte_id,
                                         MarkerPersonal.comm_id == comm_id,
                                         MarkerPersonal.boite_id == boite_id,
                                         MarkerPersonal.marker_id == marker_id)
 
 
-def _requete_marqueur(code: str):
+def _marker_query(code: str):
     return select(Marker).where(Marker.code == code, Marker.actif.is_(True))
 
 
-def _verifier(m, code: str):
+def _check_scope(m, code: str):
     """un marqueur COLLECTIF n'a rien à faire dans la table personnelle : la portée est déclarée
     une fois pour toutes (D178), et s'y tromper mettrait l'annotation de la boîte sur une personne"""
     if m is None:
@@ -243,29 +243,29 @@ def _verifier(m, code: str):
     return True
 
 
-async def poser(s: AsyncSession, compte_id, comm_id, boite_id, code: str, due_at=None, value=None) -> bool:
-    m = await s.scalar(_requete_marqueur(code))
-    if not _verifier(m, code): return False
-    await s.execute(ordre_poser(m.marker_id, compte_id, comm_id, boite_id, due_at, value))
+async def set_marker(s: AsyncSession, compte_id, comm_id, boite_id, code: str, due_at=None, value=None) -> bool:
+    m = await s.scalar(_marker_query(code))
+    if not _check_scope(m, code): return False
+    await s.execute(set_marker_stmt(m.marker_id, compte_id, comm_id, boite_id, due_at, value))
     return True
 
 
-async def retirer(s: AsyncSession, compte_id, comm_id, boite_id, code: str) -> bool:
-    m = await s.scalar(_requete_marqueur(code))
+async def unset_marker(s: AsyncSession, compte_id, comm_id, boite_id, code: str) -> bool:
+    m = await s.scalar(_marker_query(code))
     if m is None: return False
-    await s.execute(ordre_retirer(m.marker_id, compte_id, comm_id, boite_id))
+    await s.execute(unset_marker_stmt(m.marker_id, compte_id, comm_id, boite_id))
     return True
 
 
-def poser_sync(s, compte_id, comm_id, boite_id, code: str, due_at=None, value=None) -> bool:
-    m = s.scalar(_requete_marqueur(code))
-    if not _verifier(m, code): return False
-    s.execute(ordre_poser(m.marker_id, compte_id, comm_id, boite_id, due_at, value))
+def set_marker_sync(s, compte_id, comm_id, boite_id, code: str, due_at=None, value=None) -> bool:
+    m = s.scalar(_marker_query(code))
+    if not _check_scope(m, code): return False
+    s.execute(set_marker_stmt(m.marker_id, compte_id, comm_id, boite_id, due_at, value))
     return True
 
 
-def retirer_sync(s, compte_id, comm_id, boite_id, code: str) -> bool:
-    m = s.scalar(_requete_marqueur(code))
+def unset_marker_sync(s, compte_id, comm_id, boite_id, code: str) -> bool:
+    m = s.scalar(_marker_query(code))
     if m is None: return False
-    s.execute(ordre_retirer(m.marker_id, compte_id, comm_id, boite_id))
+    s.execute(unset_marker_stmt(m.marker_id, compte_id, comm_id, boite_id))
     return True

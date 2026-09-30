@@ -20,7 +20,7 @@ from ..uuid7 import uuid7
 log = journal("api")
 
 
-def tracer(s, compte_id, action: str, cible_type: str, cible_id, details: dict | None = None) -> None:
+def record(s, compte_id, action: str, cible_type: str, cible_id, details: dict | None = None) -> None:
     """ajoute une ligne — SYNCHRONE au sens ORM : on empile, l'appelant commite.
 
     Pas de commit ici : une trace qui se commite seule sortirait du même coup l'acte à moitié
@@ -29,7 +29,7 @@ def tracer(s, compte_id, action: str, cible_type: str, cible_id, details: dict |
                   action=action, cible_type=cible_type, cible_id=cible_id, details=details or None))
 
 
-async def lire(s: AsyncSession, cible_id, limite: int = 50) -> list[dict]:
+async def history(s: AsyncSession, cible_id, limite: int = 50) -> list[dict]:
     """l'histoire d'une cible, la plus récente d'abord — « traité puis archivé » se relit ici"""
     from sqlalchemy import select
     lignes = await s.scalars(select(Journal).where(Journal.cible_id == cible_id)

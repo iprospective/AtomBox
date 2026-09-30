@@ -59,9 +59,9 @@ def serveur_imap(tmp_path_factory):
     s.flush()
     # LES CINQ BOÎTES AUX LETTRES (D183) : `schema.sql` est un DDL, il n'apporte aucune donnée, et
     # sans « Archive » un MOVE vers elle répond TRYCREATE — exactement le geste qui « ne fait rien ».
-    from atombox.schema.semences import semer
-    from atombox.services.mailbox import assurer
-    semer(s); assurer(s, boite.boite_id)
+    from atombox.schema.seeds import seed_builtins
+    from atombox.services.mailbox import ensure_mailboxes
+    seed_builtins(s); ensure_mailboxes(s, boite.boite_id)
     s.commit()
     for i in range(3):
         ingerer(s, magasin, boite.boite_id, MESSAGE.replace(b"<c4412@", b"<c%d@" % i), dossier_id=inbox.dossier_id)
