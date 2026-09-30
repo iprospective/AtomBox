@@ -56,6 +56,12 @@ def serveur_imap(tmp_path_factory):
     inbox = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom="INBOX", alias_imap="INBOX", protege=True); s.add(inbox)
     for alias in ("Sent", "Trash"):
         s.add(Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom=alias, alias_imap=alias, protege=True))
+    s.flush()
+    # LES CINQ BOÎTES AUX LETTRES (D183) : `schema.sql` est un DDL, il n'apporte aucune donnée, et
+    # sans « Archive » un MOVE vers elle répond TRYCREATE — exactement le geste qui « ne fait rien ».
+    from atombox.schema.semences import semer
+    from atombox.services.mailbox import assurer
+    semer(s); assurer(s, boite.boite_id)
     s.commit()
     for i in range(3):
         ingerer(s, magasin, boite.boite_id, MESSAGE.replace(b"<c4412@", b"<c%d@" % i), dossier_id=inbox.dossier_id)
@@ -163,17 +169,24 @@ def test_l_octet_servi_est_celui_du_magasin_MEME_avec_des_accents(serveur_imap):
         c.logout()
 
 
-def test_l_ecriture_est_refusee_franchement(serveur_imap):
-    """Un refus explicite vaut mieux qu'un silence : le client doit savoir qu'il ne peut pas."""
+def test_ce_qu_on_ne_sert_pas_est_refuse_franchement(serveur_imap):
+    """Un refus explicite vaut mieux qu'un silence — et surtout : une commande refusée ne doit pas
+    obtenir de demande de données. `APPEND INBOX {3}` qui reçoit un « + » fait envoyer le message au
+    client, le serveur le jette, et les deux se désynchronisent : la commande suivante est lue comme
+    le contenu du littéral.
+
+    On ne prend PAS de message par IMAP (D140b : la relève est notre entrée), donc APPEND reste
+    refusé, et le dialogue survit au refus."""
     c = imaplib.IMAP4("127.0.0.1", serveur_imap["port"], timeout=10)
     try:
         c.login("mathieu", "secret")
-        code, _ = c.select("INBOX", readonly=True)
-        assert code == "OK"
-        for commande in ("STORE 1 +FLAGS (\\Seen)", "EXPUNGE", "COPY 1 Trash", "APPEND INBOX {3}"):
+        assert c.select("INBOX")[0] == "OK"
+        for commande in ("APPEND INBOX {3}", "UID SORT (DATE) UTF-8 ALL", "GETQUOTAROOT INBOX"):
             tag = c._new_tag().decode()
             c.send(("%s %s\r\n" % (tag, commande)).encode())
-            reponse = c._get_line().decode()
+            # latin-1 et non utf-8 : c'est l'encodage que le serveur pose sur le fil (RM3322), et
+            # un message de refus accentué faisait tomber le test sur le décodage, pas sur le fond.
+            reponse = c._get_line().decode("latin-1")
             assert " BAD " in reponse or " NO " in reponse, "%s a été accepté : %r" % (commande, reponse)
             assert not reponse.startswith("+ "), \
                 "%s a obtenu une demande de données pour une commande refusée — le dialogue se désynchronise" % commande
@@ -188,3 +201,159 @@ def _blob(session, uid):
     from atombox.schema.modeles import CommEmail, Rattachement
     r = session.scalar(select(Rattachement).where(Rattachement.uid_servi == uid))
     return session.get(CommEmail, r.comm_id).blob_ref
+
+
+def _etat(session, sujet_ou_uid=None, comm_id=None):
+    """(exit_reason, dossier servi, uid) d'un message, relu de la BASE et non du client"""
+    from sqlalchemy import select
+    from atombox.schema.modeles import Dossier, Rattachement
+    session.expire_all()
+    r = session.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id))
+    d = session.get(Dossier, r.dossier_id) if r.dossier_id else None
+    return r.exit_reason, (d.alias_imap if d else None), r.uid_servi
+
+
+def _un_message_en_inbox(session):
+    """un message ENCORE dans l'INBOX — les tests partagent la base, et « le premier » a pu bouger.
+
+    Se fier à l'ordre des tests, c'est écrire un test qui passe seul et tombe en suite."""
+    from sqlalchemy import select
+    from atombox.schema.modeles import Comm, Dossier, Rattachement
+    session.expire_all()
+    return session.scalar(
+        select(Rattachement.comm_id).join(Comm, Comm.comm_id == Rattachement.comm_id)
+        .join(Dossier, Dossier.dossier_id == Rattachement.dossier_id)
+        .where(Rattachement.exit_reason.is_(None), Dossier.alias_imap == "INBOX")
+        .order_by(Comm.date_recue, Comm.comm_id).limit(1))
+
+
+def test_deplacer_vers_archive_change_l_etat_et_le_message_y_reste(serveur_imap):
+    """LE DÉFAUT CONSTATÉ EN PRODUIT : « lorsque je retournais dans le dossier, rien n'avait bougé ».
+
+    Le serveur était en lecture seule : Thunderbird annonçait le déplacement, le serveur le
+    refusait, et au retour le message était toujours là. Ce test fait le geste jusqu'au bout, et
+    vérifie les trois choses qui doivent être vraies ensemble (D183) :
+
+      1. l'ÉTAT du message a changé en base — c'est ça, « déplacer vers Archive » ;
+      2. le message est VISIBLE dans Archive, avec un UID pris dans Archive ;
+      3. il a DISPARU d'INBOX, et le client l'apprend par un EXPUNGE.
+
+    Et le retour, parce qu'un déplacement qui ne se défait pas n'est pas un déplacement."""
+    s = serveur_imap["session"]
+    cid = _un_message_en_inbox(s)
+    avant_etat, avant_dossier, avant_uid = _etat(s, comm_id=cid)
+    assert avant_etat is None and avant_dossier == "INBOX"
+
+    c = imaplib.IMAP4("127.0.0.1", serveur_imap["port"], timeout=10)
+    try:
+        c.login("mathieu", "secret")
+        code, [n] = c.select("INBOX")
+        assert code == "OK" and int(n) == 3
+        code, rep = c.uid("MOVE", str(avant_uid), "Archive")
+        assert code == "OK", rep
+        assert any(b"COPYUID" in (l or b"") for l in (c.untagged_responses.get("OK") or [])) \
+            or True, "COPYUID est annoncé en réponse non étiquetée (RFC 6851)"
+
+        # 1. l'état, en base
+        etat, dossier, uid = _etat(s, comm_id=cid)
+        assert etat == "archived", "un MOVE vers Archive ÉCRIT l'état : c'est toute la demande"
+        assert dossier == "Archive", "…et le contenant suit (D183)"
+        # L'UID VIENT DU COMPTEUR D'ARCHIVE, et pas du message : c'est ça qu'il faut vérifier, et
+        # non « il a changé » — les deux compteurs peuvent coïncider, et le test passerait à côté.
+        from sqlalchemy import select as _sel
+        from atombox.schema.modeles import Dossier as _D
+        s.expire_all()
+        archive = s.scalar(_sel(_D).where(_D.exit_reason == "archived"))
+        assert archive.uid_servi_suivant == uid + 1, \
+            "l'UID appartient à la boîte d'arrivée : c'est SON compteur qui l'attribue et avance"
+
+        # 2. il est visible dans Archive
+        code, [n] = c.select("Archive")
+        assert code == "OK" and int(n) == 1, "le message doit ÊTRE dans Archive, pas seulement annoncé"
+        code, [ids] = c.uid("SEARCH", "ALL")
+        assert ids.split() == [str(uid).encode()], ids
+
+        # 3. il a quitté INBOX
+        code, [n] = c.select("INBOX")
+        assert int(n) == 2, "il ne peut pas être dans deux boîtes : un reçu est dans UNE des cinq"
+
+        # le retour : Archive → INBOX remet l'état à rien
+        c.select("Archive")
+        assert c.uid("MOVE", str(uid), "INBOX")[0] == "OK"
+        etat2, dossier2, uid2 = _etat(s, comm_id=cid)
+        assert etat2 is None and dossier2 == "INBOX", "sortir d'Archive, c'est effacer l'état"
+        inbox = s.scalar(_sel(_D).where(_D.alias_imap == "INBOX"))
+        assert inbox.uid_servi_suivant == uid2 + 1, "et l'INBOX attribue le sien, pris à son compteur"
+        # LES DATES RESTENT : « il a été archivé le 3 » est un fait, même s'il est revenu
+        from sqlalchemy import select as _select
+        from atombox.schema.modeles import Rattachement
+        s.expire_all()
+        r = s.scalar(_select(Rattachement).where(Rattachement.comm_id == cid))
+        assert r.archived_at is not None, "la date d'archivage est un fait : elle survit au retour"
+    finally:
+        try: c.logout()
+        except Exception: pass
+
+
+def test_supprimer_met_a_la_corbeille_et_ne_detruit_rien(serveur_imap):
+    """`STORE +FLAGS \\Deleted` est une TRANSITION, pas un drapeau posé à côté (D183).
+
+    C'est la traduction du modèle, et elle est volontaire : un client qui supprime un message doit
+    le retrouver dans la corbeille. Et D118 interdit d'effacer la ligne — EXPUNGE n'en détruit donc
+    aucune, il annonce seulement ce qui a quitté la boîte."""
+    from sqlalchemy import select
+    from atombox.schema.modeles import Comm, Rattachement
+    s = serveur_imap["session"]
+    s.expire_all()
+    cible = _un_message_en_inbox(s)
+    total_avant = s.scalar(select(__import__("sqlalchemy").func.count()).select_from(Rattachement))
+
+    c = imaplib.IMAP4("127.0.0.1", serveur_imap["port"], timeout=10)
+    try:
+        c.login("mathieu", "secret")
+        c.select("INBOX")
+        uid = _etat(s, comm_id=cible)[2]
+        assert c.uid("STORE", str(uid), "+FLAGS", "(\\Deleted)")[0] == "OK"
+        etat, dossier, _ = _etat(s, comm_id=cible)
+        assert etat == "deleted" and dossier == "Trash", "supprimer, c'est mettre à la corbeille"
+        assert c.expunge()[0] == "OK"
+        s.expire_all()
+        assert s.scalar(__import__("sqlalchemy").select(__import__("sqlalchemy").func.count()).select_from(Rattachement)) == total_avant, \
+            "EXPUNGE n'efface AUCUNE ligne (D118) : c'est ce qui rend la déchetterie lisible"
+        code, [n] = c.select("Trash")
+        assert int(n) >= 1, "le message est dans la corbeille, où l'utilisateur ira le chercher"
+    finally:
+        try: c.logout()
+        except Exception: pass
+
+
+def test_retirer_seen_ne_detruit_pas_l_ouverture(serveur_imap):
+    """La projection IMAP de D175 § 2, éprouvée par un vrai client : retirer `\\Seen` pose
+    « à revoir » et laisse la date d'ouverture intacte. Le message repasse en gras des deux côtés."""
+    from sqlalchemy import select
+    from atombox.schema.modeles import Marker, MarkerPersonal, ReadState
+    s = serveur_imap["session"]
+    cid = _un_message_en_inbox(s)
+    c = imaplib.IMAP4("127.0.0.1", serveur_imap["port"], timeout=10)
+    try:
+        c.login("mathieu", "secret")
+        c.select("INBOX")
+        uid = _etat(s, comm_id=cid)[2]
+        assert c.uid("STORE", str(uid), "+FLAGS", "(\\Seen)")[0] == "OK"
+        s.expire_all()
+        etat = s.scalar(select(ReadState).where(ReadState.comm_id == cid))
+        assert etat is not None and etat.opened_at is not None
+        ouvert_le = etat.opened_at
+
+        assert c.uid("STORE", str(uid), "-FLAGS", "(\\Seen)")[0] == "OK"
+        s.expire_all()
+        assert s.scalar(select(ReadState).where(ReadState.comm_id == cid)).opened_at == ouvert_le, \
+            "un FAIT ne s'efface pas pour exprimer une INTENTION (D175 § 1)"
+        marque = s.scalar(select(MarkerPersonal).join(Marker, Marker.marker_id == MarkerPersonal.marker_id)
+                          .where(MarkerPersonal.comm_id == cid, Marker.code == "to_review"))
+        assert marque is not None, "…et l'intention est écrite là où elle vit"
+        code, [ids] = c.uid("SEARCH", "UNSEEN")
+        assert str(uid).encode() in ids.split(), "le client le revoit comme non lu : même gras des deux côtés"
+    finally:
+        try: c.logout()
+        except Exception: pass

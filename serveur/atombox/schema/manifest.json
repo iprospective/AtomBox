@@ -1664,11 +1664,23 @@
      "nom": "uid_servi_suivant",
      "type": "bigint",
      "obligatoire": false
+    },
+    {
+     "nom": "exit_reason",
+     "type": "text",
+     "obligatoire": false
+    },
+    {
+     "nom": "special_use",
+     "type": "text",
+     "obligatoire": false
     }
    ],
    "decisions": [
     "D051",
-    "D075"
+    "D075",
+    "D175",
+    "D183"
    ]
   },
   "filtre": {

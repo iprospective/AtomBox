@@ -349,6 +349,8 @@ class Dossier(BaseModel):
     uid_suivant: int | None = None
     uid_validity_servie: int | None = None
     uid_servi_suivant: int | None = None
+    exit_reason: str | None = None
+    special_use: str | None = None
 
 class Filtre(BaseModel):
     model_config = ConfigDict(from_attributes=True)

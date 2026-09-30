@@ -41,6 +41,9 @@ def amorcer(login: str, nom: str, mot_de_passe: str | None, boite_adresse: str, 
     # et « me le rappeler le… » existent dans l'interface et ne font rien (D178).
     from .schema.semences import semer
     n = semer(s)
+    # …et les quatre boîtes aux lettres d'état, sans quoi « Archiver » n'a nulle part où aller (D183)
+    from .services.mailbox import assurer
+    assurer(s, boite.boite_id)
     s.commit()
     log.info("amorçage : compte %s, boîte %s%s", compte.login, boite_adresse,
              (", %d marqueur(s) intégré(s) posé(s)" % n) if n else "")

@@ -262,3 +262,10 @@ def poser_sync(s, compte_id, comm_id, boite_id, code: str, due_at=None, value=No
     if not _verifier(m, code): return False
     s.execute(ordre_poser(m.marker_id, compte_id, comm_id, boite_id, due_at, value))
     return True
+
+
+def retirer_sync(s, compte_id, comm_id, boite_id, code: str) -> bool:
+    m = s.scalar(_requete_marqueur(code))
+    if m is None: return False
+    s.execute(ordre_retirer(m.marker_id, compte_id, comm_id, boite_id))
+    return True

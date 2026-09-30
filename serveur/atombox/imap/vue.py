@@ -7,10 +7,15 @@ protocole.
 
 Trois d'entre eux méritent d'être dits :
 
-1. **Une boîte aux lettres IMAP est un dossier d'une boîte AtomBox.** Quand le compte en a
-   plusieurs, les noms se préfixent par l'adresse (`contact@exemple.fr/Archives`) : sans ça, deux
-   « INBOX » se marchent dessus et le client n'a aucun moyen de les distinguer. La boîte principale
-   garde le nom nu `INBOX`, qu'IMAP traite à part (RFC 3501 § 5.1).
+1. **Une boîte aux lettres IMAP est une ligne de `dossier`** (D183) — un dossier utilisateur, ou
+   l'une des quatre boîtes d'état (Traités, Archivés, Corbeille, Indésirables). Quand le compte a
+   plusieurs boîtes, les noms se préfixent par l'adresse (`contact@exemple.fr/Archive`) : sans ça,
+   deux « INBOX » se marchent dessus et le client n'a aucun moyen de les distinguer. La boîte
+   principale garde le nom nu `INBOX`, qu'IMAP traite à part (RFC 3501 § 5.1).
+
+   **Déplacer un message vers `Archive`, c'est écrire son état** — pas le recopier. C'est le sens de
+   la demande, et c'est ce que `MOVE` fait ici : `exit_reason` change, le message apparaît dans la
+   boîte d'arrivée avec un UID neuf, et disparaît de celle d'où il vient.
 
 2. **Les drapeaux sont PERSONNELS** (D175 § 3, RM3320). Ils ont été collectifs le temps que l'état
    personnel n'existe pas ; il existe. Et c'est ici que ça se justifie le mieux : une session IMAP
@@ -24,6 +29,7 @@ Trois d'entre eux méritent d'être dits :
 """
 from __future__ import annotations
 import email.utils
+from datetime import datetime, timezone
 from sqlalchemy import select
 from ..journal import journal
 from ..schema.modeles import Acces, Adresse, Boite, Comm, CommEmail, Compte, Dossier, Rattachement
@@ -34,10 +40,14 @@ log = journal("imap")
 class BoiteAuxLettres:
     """une boîte aux lettres telle qu'un client la voit : un nom, des UID, une validité"""
 
-    def __init__(self, nom, dossier, uids, uid_validity, uid_next):
+    def __init__(self, nom, dossier, uids, uid_validity, uid_next, special_use=None, etat=None):
         self.nom, self.dossier_id = nom, dossier
         self.uids, self.uid_validity, self.uid_next = uids, uid_validity, uid_next
-        self.attributs = ["\\HasNoChildren"]
+        self.etat = etat                 # l'exit_reason que cette boîte représente, ou None
+        # SPECIAL-USE (RFC 6154) : c'est ce qui permet à un client de savoir qu'une boîte EST la
+        # corbeille, et donc d'y envoyer le bouton « supprimer », sans que l'utilisateur configure
+        # quoi que ce soit. Sans cet attribut, Thunderbird crée SA propre « Trash » à côté.
+        self.attributs = ["\\HasNoChildren"] + ([special_use] if special_use else [])
 
 
 class MessageServi:
@@ -143,7 +153,8 @@ class Vue:
             select(Rattachement.uid_servi).where(Rattachement.dossier_id == d.dossier_id,
                                                  Rattachement.uid_servi.isnot(None))
             .order_by(Rattachement.uid_servi))]
-        return BoiteAuxLettres(nom, d.dossier_id, uids, d.uid_validity_servie or 1, d.uid_servi_suivant or 1)
+        return BoiteAuxLettres(nom, d.dossier_id, uids, d.uid_validity_servie or 1,
+                               d.uid_servi_suivant or 1, d.special_use, d.exit_reason)
 
     def ouvrir(self, compte, nom):
         for n, d in self._dossiers(compte):
@@ -188,3 +199,74 @@ class Vue:
                 select(Participant).where(Participant.comm_id == c.comm_id, Participant.role == champ.lower()))]
             return aiguille in " ".join(roles).lower()
         return aiguille in (ou.get(champ, "")).lower()
+
+    # ── que peut-on écrire ──────────────────────────────────────────────────────────────────────
+    def dossier_nomme(self, compte, nom):
+        """le Dossier derrière un nom IMAP, ou None — la destination d'un MOVE"""
+        for n, d in self._dossiers(compte):
+            if n.lower() == (nom or "").lower(): return d
+        return None
+
+    def deplacer(self, compte, boite, uids: list[int], nom_dest: str):
+        """MOVE — écrit l'ÉTAT du message, et rend [(uid source, uid d'arrivée)].
+
+        Ce n'est pas une copie suivie d'une suppression : c'est UNE écriture, celle de
+        `exit_reason`, faite par le même service que le clic du webmail (D183). Rend None si la
+        destination n'existe pas, pour que la session réponde `TRYCREATE` plutôt qu'un succès muet.
+
+        LE MESSAGE NE PEUT PAS ÊTRE DANS DEUX BOÎTES DE LA MÊME ADRESSE : la clé du rattachement
+        est (message, boîte), et c'est le modèle — un message reçu est dans une et une seule des
+        cinq (D175 § 4). Un déplacement est donc le seul geste possible, et le bon."""
+        from ..services import mailbox
+        dest = self.dossier_nomme(compte, nom_dest)
+        if dest is None: return None
+        couples = []
+        for uid in uids:
+            r = self.s.scalar(select(Rattachement).where(Rattachement.dossier_id == boite.dossier_id,
+                                                        Rattachement.uid_servi == uid))
+            if r is None: continue
+            # L'ÉTAT SUIT LA DESTINATION : une boîte d'état l'impose, un dossier ordinaire le remet
+            # à rien — sortir de la corbeille en déplaçant vers INBOX, c'est la même écriture.
+            mailbox.deplacer_sync(self.s, r, dest.exit_reason, compte.compte_id, cible=dest)
+            couples.append((uid, r.uid_servi))
+        self.s.commit()
+        if couples: log.info("MOVE de %d message(s) vers « %s » (état %s)",
+                             len(couples), nom_dest, dest.exit_reason or "aucun")
+        return couples
+
+    def drapeaux(self, compte, boite, uids: list[int], ajouter: list[str], retirer: list[str]):
+        """STORE — les drapeaux qu'on sait écrire, et rien d'autre.
+
+        `\\Seen` et `\\Flagged` vont sur l'état PERSONNEL du compte connecté (D175) ; `\\Deleted`
+        est une TRANSITION vers la corbeille, pas un drapeau qu'on pose à côté — c'est la
+        traduction du modèle, et elle est volontaire : un client qui supprime un message doit le
+        retrouver dans la corbeille, pas le voir disparaître.
+
+        Un `\\Seen` RETIRÉ ne détruit pas la date d'ouverture : il pose « à revoir » (D175 § 2).
+        Le message repasse en gras chez le client comme dans le webmail, et le fait reste écrit."""
+        from ..services import mailbox, personal_state as perso
+        touches = []
+        for uid in uids:
+            r = self.s.scalar(select(Rattachement).where(Rattachement.dossier_id == boite.dossier_id,
+                                                        Rattachement.uid_servi == uid))
+            if r is None: continue
+            for f in ajouter:
+                if f == "\\Seen":
+                    self.s.execute(perso.ordre_ouvrir(compte.compte_id, r.comm_id, r.boite_id))
+                    perso.retirer_sync(self.s, compte.compte_id, r.comm_id, r.boite_id, perso.A_REVOIR)
+                elif f == "\\Flagged":
+                    self.s.execute(perso.ordre_drapeau(compte.compte_id, r.comm_id, r.boite_id, True))
+                elif f == "\\Deleted" and r.exit_reason != "deleted":
+                    mailbox.deplacer_sync(self.s, r, "deleted", compte.compte_id)
+                elif f == "\\Answered":
+                    r.repondu_le = r.repondu_le or datetime.now(timezone.utc)
+            for f in retirer:
+                if f == "\\Seen":
+                    perso.poser_sync(self.s, compte.compte_id, r.comm_id, r.boite_id, perso.A_REVOIR)
+                elif f == "\\Flagged":
+                    self.s.execute(perso.ordre_drapeau(compte.compte_id, r.comm_id, r.boite_id, False))
+                elif f == "\\Deleted" and r.exit_reason == "deleted":
+                    mailbox.deplacer_sync(self.s, r, None, compte.compte_id)
+            touches.append(uid)
+        self.s.commit()
+        return touches

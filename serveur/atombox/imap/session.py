@@ -1,4 +1,4 @@
-"""UNE SESSION IMAP, en LECTURE SEULE (D180) — sans socket : elle prend une commande, rend des lignes.
+"""UNE SESSION IMAP (D180, D183) — sans socket : elle prend une commande, rend des lignes.
 
 Séparer la session du réseau n'est pas une coquetterie : c'est ce qui permet d'éprouver tout le
 dialogue — connexion, sélection, relevé — dans un test, sans écouter sur un port ni attendre.
@@ -15,13 +15,21 @@ from ..journal import journal
 
 log = journal("imap")
 
-# Lecture seule : ni STORE, ni APPEND, ni EXPUNGE, ni MOVE. `LOGINDISABLED` n'y est pas car le
-# transport est chiffré par le serveur qui nous précède ; hors TLS, l'écouteur l'ajoute.
-CAPACITES = ["IMAP4rev1", "AUTH=PLAIN", "UIDPLUS", "NAMESPACE"]
+# CE QU'ON ANNONCE, ON LE TIENT. `MOVE` (RFC 6851) parce qu'un déplacement est UNE écriture chez
+# nous et qu'un client qui l'a préfère toujours à COPY+STORE+EXPUNGE ; `SPECIAL-USE` (RFC 6154)
+# parce que sans lui le client ne sait pas laquelle de nos boîtes est la corbeille, et s'en crée une.
+# Toujours ni APPEND ni CONDSTORE/QRESYNC : on ne les annonce pas, donc on ne les sert pas.
+# `LOGINDISABLED` n'y est pas car le transport est chiffré par le serveur qui nous précède ; hors
+# TLS, l'écouteur l'ajoute.
+CAPACITES = ["IMAP4rev1", "AUTH=PLAIN", "UIDPLUS", "MOVE", "SPECIAL-USE", "NAMESPACE"]
 
-# Ce qu'un message peut porter comme drapeau chez nous aujourd'hui. `\\Seen` et `\\Flagged` sont
-# collectifs tant que l'état personnel n'existe pas (D175, RM3320) : on les sert, on ne les écrit pas.
+# Les drapeaux qu'un message peut porter chez nous. `\\Seen` et `\\Flagged` sont PERSONNELS depuis
+# D175 ; `\\Deleted` n'est pas un drapeau posé à côté mais une TRANSITION vers la corbeille (D183) —
+# la traduction est volontaire : un message supprimé doit se retrouver dans la corbeille.
 DRAPEAUX = ["\\Seen", "\\Flagged", "\\Answered", "\\Deleted"]
+# Ceux que le client peut MODIFIER — c'est ce que `PERMANENTFLAGS` annonce. `\\Answered` en fait
+# partie parce que répondre est un acte collectif que nous savons enregistrer.
+MODIFIABLES = ["\\Seen", "\\Flagged", "\\Answered", "\\Deleted"]
 
 
 def authentifie(fn): fn._authentifie = True; return fn
@@ -40,6 +48,7 @@ class Session:
         self.boite = None             # la boîte aux lettres sélectionnée
         self.uids: list[int] = []     # ses UID, dans l'ordre — l'index+1 est le numéro de séquence
         self.fini = False
+        self.lecture_seule = True     # SELECT ouvre en écriture, EXAMINE non (RFC 3501 § 6.3.2)
         self.attente_litteral = None  # (ligne_partielle, octets_attendus) quand un littéral est en cours
 
     # ── entrée ──────────────────────────────────────────────────────────────────────────────────
@@ -281,16 +290,20 @@ class Session:
             self.boite = None
             return ["%s NO boîte aux lettres inconnue" % tag]
         self.boite, self.uids = boite, boite.uids
+        self.lecture_seule = (quoi == "EXAMINE")
+        # LE CLIENT DOIT SAVOIR CE QU'IL PEUT ÉCRIRE, exactement. Annoncer PERMANENTFLAGS () quand
+        # on accepte les STORE ferait que Thunderbird n'essaierait même pas ; annoncer des drapeaux
+        # qu'on ignore lui ferait croire que ses écritures ont porté. La liste est donc celle qu'on
+        # tient, ni plus ni moins — et EXAMINE, lui, reste en lecture seule par définition.
+        permanents = "" if self.lecture_seule else " ".join(MODIFIABLES)
         return [
             "* %d EXISTS" % len(self.uids),
             "* 0 RECENT",                                   # on ne suit pas \\Recent : personne n'en dépend
             "* FLAGS (%s)" % " ".join(DRAPEAUX),
-            "* OK [PERMANENTFLAGS ()] lecture seule",       # () = le client ne peut RIEN modifier
+            "* OK [PERMANENTFLAGS (%s)] " % permanents,
             "* OK [UIDVALIDITY %d] " % boite.uid_validity,
             "* OK [UIDNEXT %d] " % boite.uid_next,
-            # LE CLIENT DOIT SAVOIR QU'IL NE PEUT PAS ÉCRIRE. Sans [READ-ONLY], Thunderbird croit
-            # que ses STORE ont porté, et son affichage diverge de la réalité sans rien dire.
-            "%s OK [READ-ONLY] %s" % (tag, quoi),
+            "%s OK [%s] %s" % (tag, "READ-ONLY" if self.lecture_seule else "READ-WRITE", quoi),
         ]
 
     @selectionne
@@ -312,7 +325,92 @@ class Session:
         if self.boite is None: return ["%s BAD sélectionnez une boîte aux lettres d'abord" % tag]
         if sous == "FETCH": return self._relever(tag, args[1:], par_uid=True)
         if sous == "SEARCH": return self._chercher(tag, args[1:], par_uid=True)
-        return ["%s BAD UID %s n'est pas servi (lecture seule)" % (tag, sous)]
+        if sous in ("MOVE", "COPY"): return self._deplacer(tag, args[1:], sous, par_uid=True)
+        if sous == "STORE": return self._stocker(tag, args[1:], par_uid=True)
+        return ["%s BAD UID %s n'est pas servi" % (tag, sous)]
+
+    @selectionne
+    def _c_move(self, tag, args): return self._deplacer(tag, args, "MOVE", par_uid=False)
+
+    @selectionne
+    def _c_copy(self, tag, args): return self._deplacer(tag, args, "COPY", par_uid=False)
+
+    @selectionne
+    def _c_store(self, tag, args): return self._stocker(tag, args, par_uid=False)
+
+    @selectionne
+    def _c_expunge(self, tag, args):
+        """EXPUNGE — chez nous, il ne DÉTRUIT rien, et c'est voulu.
+
+        Un message « supprimé » est dans la corbeille (D183), et un rattachement marqué supprimé
+        n'est JAMAIS effacé (D118) : c'est ce qui rend la déchetterie lisible par domaine. EXPUNGE
+        se contente donc d'annoncer ce qui a quitté la boîte sélectionnée — ce que le client attend
+        de lui, et la seule partie de son contrat que nous puissions honnêtement tenir."""
+        if self.lecture_seule: return ["%s NO boîte ouverte en lecture seule" % tag]
+        return self._rafraichir() + ["%s OK EXPUNGE" % tag]
+
+    # ── les écritures ───────────────────────────────────────────────────────────────────────────
+    def _deplacer(self, tag, args, quoi, par_uid):
+        """MOVE et COPY vers une autre boîte aux lettres.
+
+        COPY FAIT LA MÊME CHOSE QUE MOVE, et il faut le dire : la clé d'un rattachement est
+        (message, boîte), donc un message ne peut pas être dans deux boîtes aux lettres de la même
+        adresse — un message reçu est dans une et une seule des cinq (D175 § 4). Refuser COPY
+        laisserait sans recours les clients qui ne connaissent pas MOVE ; le traiter comme un
+        déplacement leur donne le résultat attendu, et le `COPYUID` le leur dit sans ambiguïté."""
+        if self.lecture_seule: return ["%s NO boîte ouverte en lecture seule" % tag]
+        if len(args) < 2: return ["%s BAD %s demande un ensemble et une destination" % (tag, quoi)]
+        vises = sequence(args[0], self.uids, par_uid)
+        if not vises: return ["%s OK %s (rien à déplacer)" % (tag, quoi)]
+        couples = self.vue.deplacer(self.compte, self.boite, vises, args[1])
+        if couples is None:
+            # TRYCREATE dit au client « crée-la puis recommence » ; sans lui, il abandonne
+            # silencieusement et l'utilisateur voit son geste ne rien faire (RFC 3501 § 6.4.7).
+            return ["%s NO [TRYCREATE] boîte aux lettres inconnue : %s" % (tag, args[1])]
+        if not couples: return ["%s OK %s (aucun message visé)" % (tag, quoi)]
+        dest = self.vue.ouvrir(self.compte, args[1])
+        lignes = ["* OK [COPYUID %d %s %s] déplacé" % (
+            dest.uid_validity if dest else 1,
+            ",".join(str(a) for a, _ in couples), ",".join(str(b) for _, b in couples))]
+        # L'EXPUNGE VIENT APRÈS le COPYUID (RFC 6851 § 3.3) : le client doit savoir où le message
+        # est arrivé avant d'apprendre qu'il a quitté la boîte courante, sinon il le perd de vue.
+        return lignes + self._rafraichir() + ["%s OK %s" % (tag, quoi)]
+
+    def _stocker(self, tag, args, par_uid):
+        """STORE ±FLAGS — et le silence de `.SILENT`, que les clients utilisent presque toujours."""
+        if self.lecture_seule: return ["%s NO boîte ouverte en lecture seule" % tag]
+        if len(args) < 3: return ["%s BAD STORE demande un ensemble, une opération et des drapeaux" % tag]
+        vises = sequence(args[0], self.uids, par_uid)
+        op = str(args[1]).upper()
+        silencieux = op.endswith(".SILENT")
+        if silencieux: op = op[:-len(".SILENT")]
+        drapeaux = args[2] if isinstance(args[2], list) else [args[2]]
+        drapeaux = [_normaliser_drapeau(d) for d in drapeaux]
+        inconnus = [d for d in drapeaux if d not in DRAPEAUX]
+        if inconnus:
+            # On ne se tait pas sur ce qu'on ignore : un mot-clé qu'on jette en silence fait croire
+            # au client qu'il est posé, et il l'affichera jusqu'à la fin des temps.
+            log.info("STORE : drapeaux non servis, ignorés : %s", " ".join(inconnus))
+        connus = [d for d in drapeaux if d in DRAPEAUX]
+        if op == "FLAGS":
+            # remplacement : ce qui n'est pas dans la liste est retiré
+            ajouter, retirer = connus, [d for d in MODIFIABLES if d not in connus]
+        elif op == "+FLAGS": ajouter, retirer = connus, []
+        elif op == "-FLAGS": ajouter, retirer = [], connus
+        else: return ["%s BAD opération de STORE inconnue : %s" % (tag, op)]
+        self.vue.drapeaux(self.compte, self.boite, vises, ajouter, retirer)
+        lignes = []
+        if not silencieux:
+            for uid in vises:
+                m = self.vue.message(self.boite, uid)
+                if m is None: continue
+                rang = self.uids.index(uid) + 1 if uid in self.uids else None
+                if rang: lignes.append("* %d FETCH (FLAGS (%s)%s)" % (
+                    rang, " ".join(m.drapeaux), " UID %d" % uid if par_uid else ""))
+        # PAS D'EXPUNGE ICI : la RFC 3501 § 5.2 l'interdit pendant un STORE — le client compte les
+        # messages par numéro de séquence, et retirer une ligne au milieu décale ce qu'il lit. Un
+        # `\\Deleted` posé fait bien quitter la boîte, mais il l'apprendra au NOOP suivant.
+        return lignes + ["%s OK STORE" % tag]
 
 
 def _correspond(nom: str, motif: str) -> bool:
@@ -324,3 +422,13 @@ def _correspond(nom: str, motif: str) -> bool:
     # remplacement de `\%` ne trouvait rien et le motif « % » ne correspondait à RIEN.
     exp = "".join(".*" if c == "*" else "[^/]*" if c == "%" else re.escape(c) for c in motif)
     return re.match("^" + exp + "$", nom, re.I) is not None
+
+
+def _normaliser_drapeau(d) -> str:
+    """`\\seen` et `\\Seen` sont le même drapeau : la RFC les dit insensibles à la casse (§ 9).
+
+    Sans ça, un client qui écrit en minuscules voyait ses STORE ignorés — et rien ne le lui disait."""
+    s = str(d)
+    for connu in DRAPEAUX:
+        if s.lower() == connu.lower(): return connu
+    return s
