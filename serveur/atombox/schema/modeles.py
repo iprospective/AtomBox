@@ -445,7 +445,7 @@ class CommTag(Base):
     __table_args__ = (PrimaryKeyConstraint("comm_id", "tag_id", name="pk_comm_tag"),)
 
 class Dossier(Base):
-    """Un dossier UTILISATEUR classique (un message dans un seul). Les spéciaux sont des vues calculées ; les virtuels sont des"""
+    """Une BOÎTE AUX LETTRES au sens IMAP : un dossier utilisateur, ou l'une des quatre boîtes d'état (Traités, Archivés, Corbe"""
     __tablename__ = "dossier"
     dossier_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     boite_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("boite.boite_id", name="fk_dossier_boite_id"), nullable=False)
@@ -458,9 +458,11 @@ class Dossier(Base):
     uid_suivant: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     uid_validity_servie: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     uid_servi_suivant: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    exit_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    special_use: Mapped[str | None] = mapped_column(Text, nullable=True)
     boite: Mapped[Boite | None] = relationship("Boite", foreign_keys=[boite_id])
     parent: Mapped[Dossier | None] = relationship("Dossier", foreign_keys=[parent_id], remote_side=[dossier_id])
-    __table_args__ = (PrimaryKeyConstraint("dossier_id", name="pk_dossier"), UniqueConstraint("boite_id", "alias_imap", name="uq_dossier_boite_id_alias_imap"),)
+    __table_args__ = (PrimaryKeyConstraint("dossier_id", name="pk_dossier"), UniqueConstraint("boite_id", "alias_imap", name="uq_dossier_boite_id_alias_imap"), CheckConstraint("\"exit_reason\" IN ('processed', 'archived', 'deleted', 'junk')", name="ck_dossier_exit_reason"),)
 
 class Filtre(Base):
     """Une règle du moteur : prédicat + action, ordre explicite, portée en cascade, rétroactive possible, compteur de déclenche"""

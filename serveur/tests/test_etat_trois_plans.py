@@ -32,6 +32,7 @@ def monde(tmp_path):
     from atombox.magasin import Magasin
     from atombox.schema.modeles import Acces, Boite, Comm, Compte, Dossier, Rattachement
     from atombox.schema.semences import semer
+    from atombox.services.mailbox import assurer
     from atombox.uuid7 import uuid7
 
     nom = "atombox_plans_" + uuid.uuid4().hex[:8]
@@ -61,7 +62,9 @@ def monde(tmp_path):
                 debut=datetime.now(timezone.utc), accorde_par=compte.compte_id))
     inbox = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom="INBOX", alias_imap="INBOX", protege=True)
     s.add(inbox)
+    s.flush()
     semer(s)
+    assurer(s, boite.boite_id)          # les quatre boîtes d'état (D183)
     cid = uuid7()
     s.add(Comm(comm_id=cid, type="email", date_recue=datetime.now(timezone.utc),
                date_ingestion=datetime.now(timezone.utc), sens="in", nature="humain",
@@ -197,3 +200,58 @@ def test_remettre_en_file_efface_l_etat_et_garde_les_dates(monde):
     assert m["motif_sortie"] is None, "il est de retour dans l'INBOX"
     assert m["traite_le"], "et il porte toujours la trace de son passage par « traité »"
     assert m["sorti_le"] is None, "mais il n'est plus SORTI : l'état courant est vide"
+
+
+# ── D183 : l'état et le contenant ne se contredisent jamais ─────────────────────────────────────
+def test_l_etat_et_la_boite_aux_lettres_concordent(monde):
+    """L'INVARIANT DE D183, et la seule raison pour laquelle la dénormalisation est tenable.
+
+    `rattachement.exit_reason` est la vérité ; `rattachement.dossier_id` est sa projection IMAP.
+    Deux représentations ne sont acceptables que si UNE fonction les écrit et qu'une règle les lie.
+    Ce test est cette règle. S'il rougit, c'est qu'un chemin d'écriture a été oublié — et le
+    symptôme côté client serait un message visible dans deux boîtes, ou dans aucune."""
+    from sqlalchemy import select
+    from atombox.schema.modeles import Dossier, Rattachement
+    s = monde["session"]
+    for valeur in ("processed", "archived", "deleted", "junk", None):
+        _patch(monde, {"motif_sortie": valeur})
+        s.expire_all()
+        r = s.scalar(select(Rattachement).where(Rattachement.comm_id == monde["comm_id"]))
+        d = s.get(Dossier, r.dossier_id)
+        assert r.exit_reason == valeur
+        assert d is not None and d.exit_reason == valeur, \
+            "état %r mais boîte aux lettres %r : la projection a divergé de la vérité" % (valeur, d and d.exit_reason)
+        assert r.uid_servi is not None and r.uid_servi < (d.uid_servi_suivant or 1), \
+            "l'UID doit venir du compteur de CETTE boîte aux lettres (RFC 3501 § 2.3.1.1)"
+
+
+def test_traiter_depuis_un_dossier_utilisateur_n_oublie_pas_d_ou_il_vient(monde):
+    """Le cas qui aurait été perdu : un message rangé dans « Devis 2026 » qu'on traite.
+
+    Il quitte le dossier pour « Traités » — sinon il n'apparaîtrait pas dans la bonne boîte aux
+    lettres —, mais son dossier d'origine est mémorisé (D088). Sans cette mémoire, traiter un
+    message rangé le déclasserait définitivement."""
+    from sqlalchemy import select
+    from atombox.schema.modeles import Dossier, Rattachement
+    from atombox.uuid7 import uuid7
+    s = monde["session"]
+    devis = Dossier(dossier_id=uuid7(), boite_id=monde["boite_id"], nom="Devis 2026",
+                    alias_imap="Devis 2026", protege=False, uid_servi_suivant=1,
+                    uid_validity_servie=1)
+    s.add(devis); s.commit()
+    _patch(monde, {"dossier": str(devis.dossier_id)})
+    s.expire_all()
+    r = s.scalar(select(Rattachement).where(Rattachement.comm_id == monde["comm_id"]))
+    assert r.dossier_id == devis.dossier_id, "rangé dans un dossier utilisateur"
+
+    _patch(monde, {"motif_sortie": "processed"})
+    s.expire_all()
+    r = s.scalar(select(Rattachement).where(Rattachement.comm_id == monde["comm_id"]))
+    assert s.get(Dossier, r.dossier_id).exit_reason == "processed", "il est dans « Traités »"
+    assert r.dossier_origine_id == devis.dossier_id, \
+        "…et il se souvient de « Devis 2026 » : un retour en file l'y remettra (D088)"
+
+    _patch(monde, {"motif_sortie": None})
+    s.expire_all()
+    r = s.scalar(select(Rattachement).where(Rattachement.comm_id == monde["comm_id"]))
+    assert r.dossier_id == devis.dossier_id, "remis en file, il retourne là où l'utilisateur l'avait mis"

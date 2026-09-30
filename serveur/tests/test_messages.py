@@ -163,7 +163,10 @@ def monde(tmp_path_factory):
     inbox = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom="INBOX", alias_imap="INBOX", protege=True); s.add(inbox)
     for alias in ("Sent", "Drafts", "Trash", "Junk"): s.add(Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom=alias, alias_imap=alias, protege=True))
     from atombox.schema.semences import semer
+    from atombox.services.mailbox import assurer
+    s.flush()
     semer(s)                      # schema.sql est un DDL : il n'apporte aucune donnée
+    assurer(s, boite.boite_id)    # …et sans les boîtes d'état, « archiver » n'a nulle part où aller
     s.commit()
     ids = [ingerer(s, m, boite.boite_id, lire(f), dossier_id=inbox.dossier_id)["comm_id"] for f in ("simple.eml", "reponse.eml", "pieces.eml", "liste.eml")]
     yield {"session": s, "ids": ids, "url": u}

@@ -58,17 +58,24 @@ def dialogue(*lignes, connecte=True):
 
 
 def test_la_capability_n_annonce_que_ce_qu_on_sert():
-    """Le garde-fou de D180. Un client à qui l'on promet CONDSTORE sans le tenir corrompt son
-    cache, et le symptôme apparaît des jours plus tard, chez lui."""
+    """Le garde-fou de D180, dans les deux sens. Un client à qui l'on promet CONDSTORE sans le tenir
+    CORROMPT SON CACHE, et le symptôme apparaît des jours plus tard, chez lui. Mais l'inverse coûte
+    aussi : ne pas annoncer MOVE alors qu'on le sert, c'est laisser tous les clients faire
+    COPY+STORE+EXPUNGE pour rien.
+
+    Ce test tient donc les deux bouts, et il se maintient seul : il lit la liste annoncée."""
     s = Session(FausseVue(), magasin=None)
     annonce = " ".join(s.accueil())
-    for jamais in ("CONDSTORE", "QRESYNC", "IDLE", "MOVE", "NOTIFY"):
+    for jamais in ("CONDSTORE", "QRESYNC", "IDLE", "NOTIFY", "APPENDLIMIT"):
         assert jamais not in annonce, "%s est annoncé alors qu'on ne le sert pas" % jamais
     assert "IMAP4rev1" in annonce
     servies = {n[3:].upper().replace("_", ".") for n in dir(Session) if n.startswith("_c_")}
     assert "FETCH" in servies and "SELECT" in servies
-    for ecriture in ("STORE", "APPEND", "EXPUNGE", "COPY", "MOVE"):
-        assert ecriture not in servies, "%s existe alors que le serveur est en LECTURE SEULE" % ecriture
+    # ce qu'on annonce et qui est une COMMANDE doit exister
+    for cap in ("MOVE",):
+        assert cap in annonce and cap in servies, "%s est annoncé mais pas servi" % cap
+    # APPEND n'est pas annoncé, donc pas servi : on ne prend pas de message par IMAP (D140b)
+    assert "APPEND" not in servies, "APPEND existe alors qu'on n'accepte pas de dépôt par IMAP"
 
 
 def test_rien_avant_de_s_etre_connecte():
@@ -77,14 +84,32 @@ def test_rien_avant_de_s_etre_connecte():
     assert dialogue("a2 LOGIN mathieu FAUX")[1][0][0].startswith("a2 NO")
 
 
-def test_selectionner_annonce_la_lecture_seule():
+def test_select_ouvre_en_ecriture_et_examine_non():
+    """SELECT ouvre en écriture, EXAMINE en lecture — et chacun l'ANNONCE.
+
+    Les deux erreurs symétriques coûtent cher et sont silencieuses : annoncer `[READ-ONLY]` quand on
+    accepte les STORE fait que le client n'essaie même pas ; annoncer `[READ-WRITE]` sans tenir fait
+    qu'il croit ses écritures passées et diverge sans rien dire. Et `PERMANENTFLAGS` doit lister
+    exactement ce qu'on sait écrire."""
     _, (r,) = dialogue("a1 SELECT INBOX")
     assert "* 3 EXISTS" in r
     assert "* OK [UIDVALIDITY 1234] " in r
     assert "* OK [UIDNEXT 10] " in r
-    assert any("[PERMANENTFLAGS ()]" in l for l in r), "aucun drapeau modifiable : le client doit le savoir"
-    assert r[-1].startswith("a1 OK [READ-ONLY]"), \
-        "sans [READ-ONLY], le client croit que ses STORE ont porté et son affichage diverge en silence"
+    permanents = next(l for l in r if "PERMANENTFLAGS" in l)
+    for d in ("\\Seen", "\\Flagged", "\\Deleted"):
+        assert d in permanents, "%s est modifiable : le client doit le savoir" % d
+    assert r[-1].startswith("a1 OK [READ-WRITE]")
+
+    _, (r2,) = dialogue("a1 EXAMINE INBOX")
+    assert any("[PERMANENTFLAGS ()]" in l for l in r2), "EXAMINE n'autorise RIEN, et le dit"
+    assert r2[-1].startswith("a1 OK [READ-ONLY]")
+
+
+def test_une_boite_ouverte_en_lecture_refuse_les_ecritures():
+    """Un refus explicite, jamais un succès muet : le client doit pouvoir se replier."""
+    for commande in ("a2 STORE 1 +FLAGS (\\Seen)", "a2 EXPUNGE", "a2 UID MOVE 1 Trash"):
+        _, (_, r) = dialogue("a1 EXAMINE INBOX", commande)
+        assert r[-1].startswith("a2 NO"), "%s accepté sur une boîte en lecture seule : %r" % (commande, r)
 
 
 def test_uid_fetch_rend_l_octet_exact_et_toujours_l_uid():

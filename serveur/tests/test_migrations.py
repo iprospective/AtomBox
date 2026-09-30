@@ -158,6 +158,33 @@ UPDATE rattachement SET motif_sortie = 'archive', sorti_le = now() - interval '4
         assert c.execute("select count(*) from marker where integre").fetchone()[0] == 2, \
             "les deux marqueurs livrés d'office sont posés par la migration"
 
+        # ── 0012 : les quatre boîtes aux lettres d'état, et l'invariant qui les lie ────────────
+        boites = dict(c.execute("""select "alias_imap", "exit_reason" from "dossier"
+                                    where "exit_reason" is not null
+                                      and "boite_id" = '11111111-0000-7000-8000-000000000004'""").fetchall())
+        assert boites == {"Processed": "processed", "Archive": "archived",
+                          "Trash": "deleted", "Junk": "junk"}, boites
+        assert c.execute("""select count(*) from "dossier" where "special_use" = '\\Trash'
+                             and "boite_id" = '11111111-0000-7000-8000-000000000004'""").fetchone()[0] == 1, \
+            "la Corbeille du fournisseur est ADOPTÉE, pas doublée : sinon le client en voit deux"
+
+        assert c.execute("""select count(*) from "rattachement" r
+                             left join "dossier" d on d."dossier_id" = r."dossier_id"
+                            where r."exit_reason" is distinct from d."exit_reason" """).fetchone()[0] == 0, \
+            "L'INVARIANT DE D183 : l'état et son contenant ne se contredisent jamais"
+        assert c.execute("""select count(*) from (
+                              select "dossier_id", "uid_servi" from "rattachement"
+                               where "uid_servi" is not null
+                               group by "dossier_id", "uid_servi" having count(*) > 1) x""").fetchone()[0] == 0, \
+            "un UID réutilisé ferait lire au client un message pour un autre (Q024)"
+        # LE DÉFAUT QUE LES DONNÉES RÉELLES ONT RÉVÉLÉ : la Corbeille contenait DÉJÀ un UID 1.
+        # Repartir de 1 pour les messages déplacés heurtait l'unicité. Les neufs commencent après.
+        trash_uids = [u for (u,) in c.execute("""select r."uid_servi" from "rattachement" r
+                                                  join "dossier" d on d."dossier_id" = r."dossier_id"
+                                                 where d."exit_reason" = 'deleted'
+                                                 order by r."uid_servi" """).fetchall()]
+        assert len(trash_uids) == len(set(trash_uids)) and all(u for u in trash_uids), trash_uids
+
     # ET LE RETOUR : une migration qu'on ne sait pas défaire est une porte à sens unique.
     _alembic(u, "-0010")
     with psycopg.connect(u) as c:

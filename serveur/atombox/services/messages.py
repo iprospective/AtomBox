@@ -13,6 +13,7 @@ from ..schema.modeles import Acces, Adresse, Blob, Boite, Comm, CommCitation, Co
 from ..uuid7 import uuid7
 from ..journal import journal
 from ..sync import sync
+from . import mailbox
 from . import personal_state as perso
 from . import trace
 from .. import settings
@@ -39,8 +40,13 @@ def special_de(alias: str | None) -> str | None:
         if a in s["alias"]: return s["id"]
     return None
 
+# Les quatre boîtes d'état (D183) sont des lignes de `dossier` : sans cette table, elles
+# apparaîtraient dans l'arborescence comme des dossiers utilisateur nommés « Processed ».
+COURT_DE_L_ETAT = {"processed": "traites", "archived": "archives", "deleted": "trash", "junk": "junk"}
+
 def dossier_id_court(d: Dossier | None) -> str | None:
     if d is None: return None
+    if d.exit_reason: return COURT_DE_L_ETAT.get(d.exit_reason, d.exit_reason)
     return special_de(d.alias_imap) or str(d.dossier_id)
 
 def iso(t: datetime | None) -> str | None: return t.astimezone(timezone.utc).isoformat() if t else None
@@ -108,7 +114,7 @@ async def referentiels(s: AsyncSession, compte: Compte) -> dict:
     adresses = {b.boite_id: (await s.get(Adresse, b.adresse_id)).adresse_complete for b in boites}
     dossiers = list(await s.scalars(select(Dossier).where(Dossier.boite_id.in_([b.boite_id for b in boites])).order_by(Dossier.ordre, Dossier.nom)))
     util = [ {"id": str(d.dossier_id), "label": d.nom, "icon": "📁", "boite": adresses.get(d.boite_id)}
-             for d in dossiers if not special_de(d.alias_imap) ]
+             for d in dossiers if not special_de(d.alias_imap) and not d.exit_reason ]
     # `action` sans action : NULL SQL, ou le JSON `null` des lignes écrites avant le correctif —
     # les deux veulent dire « ce filtre est un dossier virtuel, pas une règle » (D143).
     sans_action = or_(Filtre.action.is_(None), func.jsonb_typeof(Filtre.action) == "null")
@@ -496,19 +502,11 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
     maintenant = datetime.now(timezone.utc)
 
     async def sortir(valeur: str | None):
-        """pose l'état courant, la date et l'auteur de CETTE transition, et la trace"""
+        """Le déplacement vit dans `services/mailbox.py` : trois chemins y mènent — ce clic, un
+        `UID MOVE` d'un client IMAP, une règle à l'ingestion — et ils doivent écrire exactement la
+        même chose (D183). Ici on ne fait que compter le changement."""
         nonlocal n
-        avant = r.exit_reason
-        r.exit_reason = valeur
-        if valeur in SORTIES:
-            champ_date, champ_qui = SORTIES[valeur]
-            # `processed_at` ne se réécrit pas : il commande l'archivage (D014). Les autres non plus,
-            # par symétrie — une date posée est un fait, et un fait ne se repose pas.
-            if getattr(r, champ_date) is None:
-                setattr(r, champ_date, maintenant); setattr(r, champ_qui, compte.compte_id)
-        trace.tracer(s, compte.compte_id, {"processed": "processed", "archived": "archived",
-                                           "deleted": "deleted", "junk": "junked"}.get(valeur, "refiled"),
-                     "rattachement", comm_id, {"boite_id": str(r.boite_id), "avant": avant, "apres": valeur})
+        await mailbox.deplacer(s, r, valeur, compte.compte_id)
         n += 1
 
     for k, v in (patch or {}).items():
@@ -549,12 +547,20 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
             await perso.toucher(s, compte.compte_id, comm_id, r.boite_id, flagged=bool(v)); n += 1
         elif k == "personnel": r.personnel = bool(v); n += 1
         elif k == "dossier":
-            if r.dossier_origine_id is None: r.dossier_origine_id = r.dossier_id
-            if v is None: r.dossier_id = r.dossier_origine_id
-            else:
-                cible = next((d for d in ds.values() if d.boite_id == r.boite_id and dossier_id_court(d) == v), None)
-                if cible is None: log.warning("PATCH %s : dossier inconnu %r", comm_id, v); continue
-                r.dossier_id = cible.dossier_id
+            # RANGER DANS UNE BOÎTE D'ÉTAT, C'EST CHANGER D'ÉTAT (D183). Le webmail envoie encore
+            # `{dossier: "trash"}` pour mettre à la corbeille : ce n'est pas un rangement, c'est une
+            # transition, et elle doit poser sa date, son auteur et sa trace comme les autres.
+            cible = next((d for d in ds.values() if d.boite_id == r.boite_id and dossier_id_court(d) == v), None) if v else None
+            if v is not None and cible is None:
+                log.warning("PATCH %s : boîte aux lettres inconnue %r", comm_id, v); continue
+            if (cible is not None and cible.exit_reason) or v is None:
+                await sortir(cible.exit_reason if cible is not None else None)
+                continue
+            # PAS D'ÉCRITURE DE L'ORIGINE ICI : ranger un message dans « Devis 2026 », c'est lui
+            # donner sa place, pas le faire partir de quelque part. Écrire l'origine à ce moment
+            # faisait que tout revenait à l'INBOX — et un message traité depuis « Devis » ne
+            # retrouvait jamais son dossier.
+            r.dossier_id = cible.dossier_id
             # DÉPLACER, C'EST CHANGER DE BOÎTE AUX LETTRES : l'UID appartient au dossier, pas au
             # message (Q024). En garder l'ancien ferait lire au client un message pour un autre.
             from ..uid_servi import attribuer_async as attribuer_uid
@@ -562,7 +568,6 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
             n += 1
         elif k == "suppr" and v:
             await sortir("deleted")
-            r.restaurable_jusqu_au = maintenant + timedelta(days=30)
         elif k == "tags": log.info("PATCH %s : tags ignorés en V0 (pas d'axe métier, D140b)", comm_id)
         else: log.debug("PATCH %s : champ ignoré %s", comm_id, k)
     # SYNCHRONISATION MONTANTE (F113) : l'état part vers IMAP hors processus, jamais dans la

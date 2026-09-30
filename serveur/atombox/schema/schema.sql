@@ -412,7 +412,7 @@ CREATE TABLE "comm_tag" (
   CONSTRAINT "pk_comm_tag" PRIMARY KEY ("comm_id", "tag_id")
 );
 
--- dossier — Un dossier UTILISATEUR classique (un message dans un seul). Les spéciaux sont des vues calculées ; les virtuel
+-- dossier — Une BOÎTE AUX LETTRES au sens IMAP : un dossier utilisateur, ou l'une des quatre boîtes d'état (Traités, Archi
 CREATE TABLE "dossier" (
   "dossier_id" uuid NOT NULL,
   "boite_id" uuid NOT NULL,
@@ -425,7 +425,10 @@ CREATE TABLE "dossier" (
   "uid_suivant" bigint,
   "uid_validity_servie" bigint,
   "uid_servi_suivant" bigint,
-  CONSTRAINT "pk_dossier" PRIMARY KEY ("dossier_id")
+  "exit_reason" text,
+  "special_use" text,
+  CONSTRAINT "pk_dossier" PRIMARY KEY ("dossier_id"),
+  CONSTRAINT "ck_dossier_exit_reason" CHECK ("exit_reason" IN ('processed', 'archived', 'deleted', 'junk'))
 );
 
 -- filtre — Une règle du moteur : prédicat + action, ordre explicite, portée en cascade, rétroactive possible, compteur de
