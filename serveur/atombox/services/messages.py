@@ -31,7 +31,7 @@ SPECIAUX = [ {"id": "inbox", "label": "Boîte de réception", "icon": "📥", "a
 # entre le serveur, le webmail et la base, pas le mot affiché.
 STATUTS = [ {"id": "new", "label": "Nouveau"}, {"id": "todo", "label": "À faire"}, {"id": "doing", "label": "En cours"},
             {"id": "waiting", "label": "En attente"}, {"id": "processed", "label": "Traité"} ]
-EN_TRAVAIL = ("todo", "doing")           # ce que le compteur « à faire » compte (D176 § 4)
+IN_PROGRESS = ("todo", "doing")           # ce que le compteur « à faire » compte (D176 § 4)
 VUES = ["trash", "junk", "archives", "traites"]
 
 def special_de(alias: str | None) -> str | None:
@@ -42,11 +42,11 @@ def special_de(alias: str | None) -> str | None:
 
 # Les quatre boîtes d'état (D183) sont des lignes de `dossier` : sans cette table, elles
 # apparaîtraient dans l'arborescence comme des dossiers utilisateur nommés « Processed ».
-COURT_DE_L_ETAT = {"processed": "traites", "archived": "archives", "deleted": "trash", "junk": "junk"}
+SHORT_ID_OF_STATE = {"processed": "traites", "archived": "archives", "deleted": "trash", "junk": "junk"}
 
 def dossier_id_court(d: Dossier | None) -> str | None:
     if d is None: return None
-    if d.exit_reason: return COURT_DE_L_ETAT.get(d.exit_reason, d.exit_reason)
+    if d.exit_reason: return SHORT_ID_OF_STATE.get(d.exit_reason, d.exit_reason)
     return special_de(d.alias_imap) or str(d.dossier_id)
 
 def iso(t: datetime | None) -> str | None: return t.astimezone(timezone.utc).isoformat() if t else None
@@ -55,12 +55,12 @@ def iso(t: datetime | None) -> str | None: return t.astimezone(timezone.utc).iso
 # (`exit_reason`), mais quatre couples de dates : un message est généralement traité PUIS archivé
 # des années après, et si l'archivage écrasait la date de traitement on perdrait la clé d'archivage
 # (D014) — la donnée qui commande la transition suivante (D175 § 4 bis).
-SORTIES = { "processed": ("processed_at", "processed_by"), "archived": ("archived_at", "archived_by"),
+EXIT_DATES = { "processed": ("processed_at", "processed_by"), "archived": ("archived_at", "archived_by"),
             "deleted": ("deleted_at", "deleted_by"), "junk": ("junk_at", "junk_by") }
 
-def sorti_le(r: Rattachement) -> datetime | None:
+def exit_date(r: Rattachement) -> datetime | None:
     """la date de l'état COURANT — ce que l'ancien `sorti_le` disait, sans l'écraser au passage"""
-    champ = SORTIES.get(r.exit_reason or "")
+    champ = EXIT_DATES.get(r.exit_reason or "")
     return getattr(r, champ[0]) if champ else None
 
 def quand(v) -> datetime | None:
@@ -155,7 +155,7 @@ async def compteurs(s: AsyncSession, compte: Compte) -> dict:
     # LE « NON LU » N'EST PLUS UNE COLONNE (D175) : c'est « moi, je ne l'ai pas ouvert », donc un
     # EXISTS sur read_state. Il entre dans le GROUP BY comme le faisait `lu_le IS NULL` — même forme,
     # même nombre de requêtes ; ce qui change, c'est que deux personnes ne lisent plus le même chiffre.
-    non_lu = perso.a_voir_par(compte.compte_id).label("non_lu")
+    non_lu = perso.needs_attention_by(compte.compte_id).label("non_lu")
     rows = (await s.execute(select(Rattachement.dossier_id, Rattachement.exit_reason, non_lu,
                                    Rattachement.status, func.count().label("n"))
                             .where(_portee(boites)).group_by(Rattachement.dossier_id, Rattachement.exit_reason, non_lu, Rattachement.status))).all()
@@ -163,7 +163,7 @@ async def compteurs(s: AsyncSession, compte: Compte) -> dict:
     def bump(k, n, non_lu, statut):
         x = c.setdefault(k, {"t": 0, "u": 0, "f": 0}); x["t"] += n
         if non_lu: x["u"] += n
-        if statut in EN_TRAVAIL: x["f"] += n
+        if statut in IN_PROGRESS: x["f"] += n
     # L'ORDRE COMPTE : l'état de sortie prime sur le dossier, parce qu'il EST la boîte aux lettres
     # (D175 § 4). Un message archivé rangé dans un dossier utilisateur se compte dans Archives, pas
     # dans son dossier — sinon le compteur annonce ce que la liste ne montre pas (D166).
@@ -197,11 +197,11 @@ async def _compteurs_axes(s: AsyncSession, boites, ds: dict, compte) -> dict:
     Sans lui, « Projet » afficherait plus de messages que la somme de ce qu'il contient."""
     from ..schema.modeles import Axe, CommTag, Tag
     corbeilles = [d.dossier_id for d in ds.values() if dossier_id_court(d) == "trash"]
-    non_lu = perso.a_voir_par(compte.compte_id)
+    non_lu = perso.needs_attention_by(compte.compte_id)
     q = (select(Axe.nom, Tag.valeur,
                 func.count(func.distinct(Rattachement.comm_id)).label("t"),
                 func.count(func.distinct(case((non_lu, Rattachement.comm_id)))).label("u"),
-                func.count(func.distinct(case((Rattachement.status.in_(EN_TRAVAIL), Rattachement.comm_id)))).label("f"))
+                func.count(func.distinct(case((Rattachement.status.in_(IN_PROGRESS), Rattachement.comm_id)))).label("f"))
          .select_from(CommTag)
          .join(Tag, Tag.tag_id == CommTag.tag_id).join(Axe, Axe.axe_id == Tag.axe_id)
          .join(Rattachement, Rattachement.comm_id == CommTag.comm_id)
@@ -219,7 +219,7 @@ async def _compteurs_axes(s: AsyncSession, boites, ds: dict, compte) -> dict:
     qa = (select(Axe.nom,
                  func.count(func.distinct(Rattachement.comm_id)).label("t"),
                  func.count(func.distinct(case((non_lu, Rattachement.comm_id)))).label("u"),
-                 func.count(func.distinct(case((Rattachement.status.in_(EN_TRAVAIL), Rattachement.comm_id)))).label("f"))
+                 func.count(func.distinct(case((Rattachement.status.in_(IN_PROGRESS), Rattachement.comm_id)))).label("f"))
           .select_from(CommTag)
           .join(Tag, Tag.tag_id == CommTag.tag_id).join(Axe, Axe.axe_id == Tag.axe_id)
           .join(Rattachement, Rattachement.comm_id == CommTag.comm_id)
@@ -256,8 +256,8 @@ async def _compteurs_virtuels(s: AsyncSession, boites, ds: dict, compte, virtuel
         ou = and_(*conds)
         cles.append(v["id"])
         colonnes.append(func.count().filter(ou).label("t%d" % len(cles)))
-        colonnes.append(func.count().filter(and_(ou, perso.a_voir_par(compte.compte_id))).label("u%d" % len(cles)))
-        colonnes.append(func.count().filter(and_(ou, Rattachement.status.in_(EN_TRAVAIL))).label("f%d" % len(cles)))
+        colonnes.append(func.count().filter(and_(ou, perso.needs_attention_by(compte.compte_id))).label("u%d" % len(cles)))
+        colonnes.append(func.count().filter(and_(ou, Rattachement.status.in_(IN_PROGRESS))).label("f%d" % len(cles)))
     if not cles:
         return {}
     corbeilles = [d.dossier_id for d in ds.values() if dossier_id_court(d) == "trash"]
@@ -328,7 +328,7 @@ async def liste(s: AsyncSession, compte: Compte, dossier: str, kind: str | None,
             elif filtre != "tous": q = q.where(Rattachement.exit_reason.is_(None))
         # « non lus » veut dire « que MOI je n'ai pas ouverts », et « à revoir » y entre : c'est le
         # même geste qu'avant (D175 § 2), il ne détruit plus la trace de l'ouverture.
-        if filtre == "non_lus": q = q.where(perso.a_voir_par(compte.compte_id))
+        if filtre == "non_lus": q = q.where(perso.needs_attention_by(compte.compte_id))
         if filtre == "recents": q = q.where(Comm.date_recue >= datetime.now(timezone.utc) - timedelta(days=30))
         if filtre == "pj": q = q.where(Comm.nb_pieces_jointes > 0)
         if filtre == "lourds": q = q.where(Comm.taille > 2048 * 1024)
@@ -339,7 +339,7 @@ async def liste(s: AsyncSession, compte: Compte, dossier: str, kind: str | None,
     # deuxième page inutilisable, et c'est le tag qui porte le classement (D002)
     from .tags import tags_de
     tags = await tags_de(s, [c.comm_id for _, c in lignes])
-    etats = await perso.etats_de(s, compte.compte_id, [c.comm_id for _, c in lignes])
+    etats = await perso.states_of(s, compte.compte_id, [c.comm_id for _, c in lignes])
     return [serialiser(r, c, ds, adresses.get(r.boite_id), extra={"tags": tags.get(c.comm_id, [])},
                        etat=etats.get((r.comm_id, r.boite_id)))
             for r, c in lignes]
@@ -353,9 +353,9 @@ def serialiser(r: Rattachement, c: Comm, ds: dict, boite_adresse: str | None, co
     o = { "id": str(c.comm_id), "sujet": c.sujet, "from_nom": c.from_nom, "from_adresse": c.from_adresse,
           "date_recue": iso(c.date_recue), "thread_id": str(c.thread_id) if c.thread_id else None,
           "nb_pieces_jointes": c.nb_pieces_jointes, "taille": c.taille, "sens": c.sens, "nature": c.nature, "snippet": c.snippet,
-          "boite": boite_adresse, "statut": r.status, "sorti_le": iso(sorti_le(r)), "motif_sortie": r.exit_reason,
+          "boite": boite_adresse, "statut": r.status, "sorti_le": iso(exit_date(r)), "motif_sortie": r.exit_reason,
           "statut_le": iso(r.status_at), "traite_le": iso(r.processed_at), "archive_le": iso(r.archived_at),
-          **perso.serialiser_etat(etat),
+          **perso.serialize_state(etat),
           "dossier_origine": origine or "inbox", "dossier": courant if courant != origine else None,
           "tags": [], "connu": False, "usurpation": False, "valide": False, "suppr": r.exit_reason == "deleted",
           "reponse_possible": None, "list_id": None, "destinataires": [], "reference": None, "composition": None, "fiabilite": None, "contact_alternatif": None, "dsn": None, "dom": None }
@@ -397,7 +397,7 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, magasin=None) -> dict
     provenance = await _provenance_de(s, comm_id)
     ref = str(provenance) if provenance else None
     vers = await _messages_des_encapsules(s, comm_id, boites, pjs)      # D168
-    etats = await perso.etats_de(s, compte.compte_id, [comm_id])
+    etats = await perso.states_of(s, compte.compte_id, [comm_id])
     return serialiser(r, c, ds, adresse, True, etat=etats.get((r.comm_id, r.boite_id)), extra={
         "tags": (await tags_de(s, [comm_id])).get(comm_id, []), "reference": ref,
         "destinataires": list(dest) + list(copies), "composition": _composition(r, c, ds, adresse, dest, copies, corps, ref),
@@ -473,7 +473,7 @@ async def fil(s: AsyncSession, compte: Compte, comm_id) -> list[dict]:
     q = select(Rattachement, Comm).join(Comm, Comm.comm_id == Rattachement.comm_id).where(_portee(boites), Comm.thread_id == (c.thread_id or c.comm_id)).order_by(Comm.date_recue.asc())
     adresses = {b: (await s.get(Adresse, (await s.get(Boite, b)).adresse_id)).adresse_complete for b in boites}
     lignes = (await s.execute(q)).all()
-    etats = await perso.etats_de(s, compte.compte_id, [cc.comm_id for _, cc in lignes])
+    etats = await perso.states_of(s, compte.compte_id, [cc.comm_id for _, cc in lignes])
     vus, out = set(), []
     for r, cc in lignes:
         if cc.comm_id in vus: continue
@@ -506,35 +506,35 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
         `UID MOVE` d'un client IMAP, une règle à l'ingestion — et ils doivent écrire exactement la
         même chose (D183). Ici on ne fait que compter le changement."""
         nonlocal n
-        await mailbox.deplacer(s, r, valeur, compte.compte_id)
+        await mailbox.move(s, r, valeur, compte.compte_id)
         n += 1
 
     for k, v in (patch or {}).items():
         if k == "lu":
             if v:
-                await perso.ouvrir(s, compte.compte_id, comm_id, r.boite_id)
-                await perso.retirer(s, compte.compte_id, comm_id, r.boite_id, perso.A_REVOIR)
-                trace.tracer(s, compte.compte_id, "opened", "rattachement", comm_id, {"boite_id": str(r.boite_id)})
+                await perso.mark_opened(s, compte.compte_id, comm_id, r.boite_id)
+                await perso.unset_marker(s, compte.compte_id, comm_id, r.boite_id, perso.TO_REVIEW)
+                trace.record(s, compte.compte_id, "opened", "rattachement", comm_id, {"boite_id": str(r.boite_id)})
             else:
                 # « NON LU » N'EXISTE PLUS (D175 § 2) : le geste veut dire « j'y suis passé, il faut
                 # que j'y retourne ». On le dit, au lieu d'effacer la preuve du passage.
-                await perso.poser(s, compte.compte_id, comm_id, r.boite_id, perso.A_REVOIR)
-                trace.tracer(s, compte.compte_id, "marked", "rattachement", comm_id,
-                             {"boite_id": str(r.boite_id), "marqueur": perso.A_REVOIR, "pose": True})
+                await perso.set_marker(s, compte.compte_id, comm_id, r.boite_id, perso.TO_REVIEW)
+                trace.record(s, compte.compte_id, "marked", "rattachement", comm_id,
+                             {"boite_id": str(r.boite_id), "marqueur": perso.TO_REVIEW, "pose": True})
             n += 1
         elif k == "a_revoir":
-            if v: await perso.poser(s, compte.compte_id, comm_id, r.boite_id, perso.A_REVOIR)
-            else: await perso.retirer(s, compte.compte_id, comm_id, r.boite_id, perso.A_REVOIR)
-            trace.tracer(s, compte.compte_id, "marked", "rattachement", comm_id,
-                         {"boite_id": str(r.boite_id), "marqueur": perso.A_REVOIR, "pose": bool(v)})
+            if v: await perso.set_marker(s, compte.compte_id, comm_id, r.boite_id, perso.TO_REVIEW)
+            else: await perso.unset_marker(s, compte.compte_id, comm_id, r.boite_id, perso.TO_REVIEW)
+            trace.record(s, compte.compte_id, "marked", "rattachement", comm_id,
+                         {"boite_id": str(r.boite_id), "marqueur": perso.TO_REVIEW, "pose": bool(v)})
             n += 1
         elif k == "sommeil":
-            await perso.poser(s, compte.compte_id, comm_id, r.boite_id, perso.SOMMEIL, due_at=quand(v)) if v \
-                else await perso.retirer(s, compte.compte_id, comm_id, r.boite_id, perso.SOMMEIL)
+            await perso.set_marker(s, compte.compte_id, comm_id, r.boite_id, perso.SNOOZE, due_at=quand(v)) if v \
+                else await perso.unset_marker(s, compte.compte_id, comm_id, r.boite_id, perso.SNOOZE)
             n += 1
         elif k == "statut" and v in [x["id"] for x in STATUTS]:
             if v != r.status:
-                trace.tracer(s, compte.compte_id, "status_changed", "rattachement", comm_id,
+                trace.record(s, compte.compte_id, "status_changed", "rattachement", comm_id,
                              {"boite_id": str(r.boite_id), "avant": r.status, "apres": v})
             r.status, r.status_at, r.status_by = v, maintenant, compte.compte_id; n += 1
         elif k == "motif_sortie": await sortir(v or None)
@@ -544,7 +544,7 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
             # traitement sans dire qu'il avait eu lieu.
             log.debug("PATCH %s : sorti_le ignoré — la date suit la transition (D175)", comm_id)
         elif k == "drapeau":
-            await perso.toucher(s, compte.compte_id, comm_id, r.boite_id, flagged=bool(v)); n += 1
+            await perso.set_flag(s, compte.compte_id, comm_id, r.boite_id, flagged=bool(v)); n += 1
         elif k == "personnel": r.personnel = bool(v); n += 1
         elif k == "dossier":
             # RANGER DANS UNE BOÎTE D'ÉTAT, C'EST CHANGER D'ÉTAT (D183). Le webmail envoie encore
@@ -585,7 +585,7 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
                                         "dossier_avant": str(dossier_avant) if dossier_avant else None})
     await s.commit()
     c = await s.get(Comm, comm_id); boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
-    etats = await perso.etats_de(s, compte.compte_id, [comm_id])
+    etats = await perso.states_of(s, compte.compte_id, [comm_id])
     return {"modifies": n, "message": serialiser(r, c, ds, adresse, etat=etats.get((r.comm_id, r.boite_id)))}
 
 async def detacher(s: AsyncSession, compte: Compte, comm_id) -> bool:
@@ -888,7 +888,7 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_c
     await s.flush()
     # CE QUE J'ÉCRIS, JE L'AI LU : la ligne de lecture se pose sur MOI (D175), et non plus sur le
     # rattachement. Sans elle, mon propre envoi me reviendrait en gras dans « Envoyés ».
-    await s.execute(perso.ordre_ouvrir(compte.compte_id, comm_id, boite.boite_id, maintenant))
+    await s.execute(perso.open_stmt(compte.compte_id, comm_id, boite.boite_id, maintenant))
     await _poser_participants(s, comm_id, a.participants)
     await _poser_pieces(s, comm_id, a.pieces, magasin, maintenant)
     await _poser_provenance(s, comm_id, src_id, maintenant)

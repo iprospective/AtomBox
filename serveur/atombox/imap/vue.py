@@ -151,9 +151,9 @@ class Vue:
         sortie = []
         for i, b in enumerate(boites):
             adresse = self.s.get(Adresse, b.adresse_id).adresse_complete
-            from ..services.mailbox import nom_servi
+            from ..services.mailbox import served_name
             for d in self.s.scalars(select(Dossier).where(Dossier.boite_id == b.boite_id).order_by(Dossier.nom)):
-                alias = nom_servi(d)
+                alias = served_name(d)
                 # La boîte PRINCIPALE garde le nom nu : IMAP traite « INBOX » à part (RFC 3501
                 # § 5.1), et un client qui ne trouve pas d'INBOX refuse souvent de continuer.
                 nom = alias if i == 0 else "%s/%s" % (adresse, alias)
@@ -182,10 +182,10 @@ class Vue:
         # UNSEEN est le compte de CE client, pas celui de la boîte (D175) : deux personnes sur une
         # boîte partagée n'ont pas le même nombre de non-lus, et annoncer un chiffre commun ferait
         # clignoter l'une pour ce que l'autre a déjà lu.
-        from ..services.personal_state import a_voir_par
+        from ..services.personal_state import needs_attention_by
         non_lus = self.s.scalar(select(__import__("sqlalchemy").func.count()).select_from(Rattachement)
                                 .where(Rattachement.dossier_id == b.dossier_id,
-                                       a_voir_par(compte.compte_id))) or 0
+                                       needs_attention_by(compte.compte_id))) or 0
         return {"MESSAGES": len(b.uids), "RECENT": 0, "UIDNEXT": b.uid_next,
                 "UIDVALIDITY": b.uid_validity, "UNSEEN": non_lus}
 
@@ -197,8 +197,8 @@ class Vue:
         c = self.s.get(Comm, r.comm_id)
         e = self.s.get(CommEmail, r.comm_id)
         if c is None: return None
-        from ..services.personal_state import etat_sync
-        etat = etat_sync(self.s, self.compte.compte_id if self.compte else None, r.comm_id, r.boite_id)
+        from ..services.personal_state import state_sync
+        etat = state_sync(self.s, self.compte.compte_id if self.compte else None, r.comm_id, r.boite_id)
         return MessageServi(uid, c, r, self.magasin, e.blob_ref if e else None,
                             message_id=e.message_id if e else None, etat=etat)
 
@@ -215,7 +215,7 @@ class Vue:
             return aiguille in " ".join(roles).lower()
         return aiguille in (ou.get(champ, "")).lower()
 
-    def annuler(self):
+    def rollback(self):
         """rend la session utilisable après une écriture refusée — appelée par la session IMAP.
 
         C'est la vue qui tient la session SQLAlchemy, donc c'est elle qui sait l'annuler. Sans ça,
@@ -223,13 +223,13 @@ class Vue:
         self.s.rollback()
 
     # ── que peut-on écrire ──────────────────────────────────────────────────────────────────────
-    def dossier_nomme(self, compte, nom):
+    def folder_named(self, compte, nom):
         """le Dossier derrière un nom IMAP, ou None — la destination d'un MOVE"""
         for n, d in self._dossiers(compte):
             if n.lower() == (nom or "").lower(): return d
         return None
 
-    def deplacer(self, compte, boite, uids: list[int], nom_dest: str):
+    def move(self, compte, boite, uids: list[int], nom_dest: str):
         """MOVE — écrit l'ÉTAT du message, et rend [(uid source, uid d'arrivée)].
 
         Ce n'est pas une copie suivie d'une suppression : c'est UNE écriture, celle de
@@ -240,7 +240,7 @@ class Vue:
         est (message, boîte), et c'est le modèle — un message reçu est dans une et une seule des
         cinq (D175 § 4). Un déplacement est donc le seul geste possible, et le bon."""
         from ..services import mailbox
-        dest = self.dossier_nomme(compte, nom_dest)
+        dest = self.folder_named(compte, nom_dest)
         if dest is None: return None
         couples = []
         for uid in uids:
@@ -249,14 +249,14 @@ class Vue:
             if r is None: continue
             # L'ÉTAT SUIT LA DESTINATION : une boîte d'état l'impose, un dossier ordinaire le remet
             # à rien — sortir de la corbeille en déplaçant vers INBOX, c'est la même écriture.
-            mailbox.deplacer_sync(self.s, r, dest.exit_reason, compte.compte_id, cible=dest)
+            mailbox.move_sync(self.s, r, dest.exit_reason, compte.compte_id, cible=dest)
             couples.append((uid, r.uid_servi))
         self.s.commit()
         if couples: log.info("MOVE de %d message(s) vers « %s » (état %s)",
                              len(couples), nom_dest, dest.exit_reason or "aucun")
         return couples
 
-    def drapeaux(self, compte, boite, uids: list[int], ajouter: list[str], retirer: list[str]):
+    def store_flags(self, compte, boite, uids: list[int], ajouter: list[str], retirer: list[str]):
         """STORE — les drapeaux qu'on sait écrire, et rien d'autre.
 
         `\\Seen` et `\\Flagged` vont sur l'état PERSONNEL du compte connecté (D175) ; `\\Deleted`
@@ -274,21 +274,21 @@ class Vue:
             if r is None: continue
             for f in ajouter:
                 if f == "\\Seen":
-                    self.s.execute(perso.ordre_ouvrir(compte.compte_id, r.comm_id, r.boite_id))
-                    perso.retirer_sync(self.s, compte.compte_id, r.comm_id, r.boite_id, perso.A_REVOIR)
+                    self.s.execute(perso.open_stmt(compte.compte_id, r.comm_id, r.boite_id))
+                    perso.unset_marker_sync(self.s, compte.compte_id, r.comm_id, r.boite_id, perso.TO_REVIEW)
                 elif f == "\\Flagged":
-                    self.s.execute(perso.ordre_drapeau(compte.compte_id, r.comm_id, r.boite_id, True))
+                    self.s.execute(perso.flag_stmt(compte.compte_id, r.comm_id, r.boite_id, True))
                 elif f == "\\Deleted" and r.exit_reason != "deleted":
-                    mailbox.deplacer_sync(self.s, r, "deleted", compte.compte_id)
+                    mailbox.move_sync(self.s, r, "deleted", compte.compte_id)
                 elif f == "\\Answered":
                     r.repondu_le = r.repondu_le or datetime.now(timezone.utc)
             for f in retirer:
                 if f == "\\Seen":
-                    perso.poser_sync(self.s, compte.compte_id, r.comm_id, r.boite_id, perso.A_REVOIR)
+                    perso.set_marker_sync(self.s, compte.compte_id, r.comm_id, r.boite_id, perso.TO_REVIEW)
                 elif f == "\\Flagged":
-                    self.s.execute(perso.ordre_drapeau(compte.compte_id, r.comm_id, r.boite_id, False))
+                    self.s.execute(perso.flag_stmt(compte.compte_id, r.comm_id, r.boite_id, False))
                 elif f == "\\Deleted" and r.exit_reason == "deleted":
-                    mailbox.deplacer_sync(self.s, r, None, compte.compte_id)
+                    mailbox.move_sync(self.s, r, None, compte.compte_id)
             touches.append(uid)
         self.s.commit()
         return touches

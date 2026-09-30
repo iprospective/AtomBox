@@ -27,7 +27,7 @@ def ratt(**k):
 
 # L'objet de valeur du PRODUIT, pas une doublure locale : c'est lui qui porte la règle
 # « vu = ouvert ET pas à revoir », et une doublure l'aurait contournée sans qu'on le voie.
-from atombox.services.personal_state import EtatPersonnel as EtatFeint
+from atombox.services.personal_state import PersonalState as EtatFeint
 
 
 def test_traduction_vers_imap():
@@ -118,7 +118,7 @@ def _boite_avec(s, membres: int):
     """une boîte, son INBOX, un message rattaché, et `membres` comptes qui y accèdent"""
     from atombox.ingestion.ingestion import adresse as adresse_de
     from atombox.schema.modeles import Acces, Boite, Comm, Compte, Dossier
-    from atombox.schema.semences import semer
+    from atombox.schema.seeds import seed_builtins
     from atombox.uuid7 import uuid7
     a = adresse_de(s, "boite@exemple.fr")
     b = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="personnelle"); s.add(b)
@@ -130,7 +130,7 @@ def _boite_avec(s, membres: int):
         s.add(c); comptes.append(c)
         s.add(Acces(compte_id=c.compte_id, boite_id=b.boite_id, role="membre",
                     debut=datetime.now(timezone.utc), accorde_par=c.compte_id))
-    semer(s)      # les marqueurs livrés d'office : schema.sql est un DDL, il n'apporte pas de données
+    seed_builtins(s)      # les marqueurs livrés d'office : schema.sql est un DDL, il n'apporte pas de données
     cid = uuid7()
     s.add(Comm(comm_id=cid, type="email", date_recue=datetime.now(timezone.utc),
                date_ingestion=datetime.now(timezone.utc), sens="in", nature="humain",
@@ -198,7 +198,7 @@ def test_la_descendante_n_ecrase_pas_un_etat_en_vol(base):
     from atombox.services import personal_state as perso
     s, _ = base
     b, d, r, (m,) = _boite_avec(s, membres=1)
-    s.execute(perso.ordre_ouvrir(m.compte_id, r.comm_id, r.boite_id)); s.commit()   # lu dans AtomBox
+    s.execute(perso.open_stmt(m.compte_id, r.comm_id, r.boite_id)); s.commit()   # lu dans AtomBox
     marqueur = s.scalar(select(Marker).where(Marker.code == "to_review"))
     cle = (m.compte_id, r.comm_id, r.boite_id, marqueur.marker_id)
 

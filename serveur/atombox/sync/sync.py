@@ -53,19 +53,19 @@ def appliquer_descendante(s, ratt, flags: list[str]) -> list[str]:
     rester silencieux."""
     from ..services import personal_state as perso
     e = etat_imap(flags); change = []
-    compte_id = perso.compte_releveur(s, ratt.boite_id)
+    compte_id = perso.polling_account(s, ratt.boite_id)
     if compte_id is None:
         log.debug("boîte %s : pas de relève unique, les drapeaux du fournisseur ne sont imputés à personne", ratt.boite_id)
         return change
-    etat = perso.etat_sync(s, compte_id, ratt.comm_id, ratt.boite_id)
+    etat = perso.state_sync(s, compte_id, ratt.comm_id, ratt.boite_id)
     with en_descendante():
         if e["lu"] and not (etat and etat.opened_at):
-            s.execute(perso.ordre_ouvrir(compte_id, ratt.comm_id, ratt.boite_id)); change.append("lu")
+            s.execute(perso.open_stmt(compte_id, ratt.comm_id, ratt.boite_id)); change.append("lu")
         elif not e["lu"] and etat and etat.opened_at:
             # on ne rend pas le message « non ouvert » — ça n'existe pas. On dit « à revoir ».
-            perso.poser_sync(s, compte_id, ratt.comm_id, ratt.boite_id, perso.A_REVOIR)
+            perso.set_marker_sync(s, compte_id, ratt.comm_id, ratt.boite_id, perso.TO_REVIEW)
             change.append("à revoir")
         if e["drapeau"] != bool(etat.flagged if etat else False):
-            s.execute(perso.ordre_drapeau(compte_id, ratt.comm_id, ratt.boite_id, e["drapeau"]))
+            s.execute(perso.flag_stmt(compte_id, ratt.comm_id, ratt.boite_id, e["drapeau"]))
             change.append("drapeau")
     return change

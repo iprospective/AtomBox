@@ -49,12 +49,12 @@ down_revision = "0010"
 branch_labels = None
 depends_on = None
 
-# Les deux marqueurs livrés d'office (D178) viennent de `atombox/schema/semences.py` : une base
+# Les deux marqueurs livrés d'office (D178) viennent de `atombox/schema/seeds.py` : une base
 # créée de `schema.sql` (les tests, une instance neuve) n'en reçoit aucun, et deux listes auraient
 # divergé au premier marqueur ajouté. Une seule table de vérité, deux chemins qui la lisent.
-from atombox.schema.semences import MARQUEURS_INTEGRES
-MARQUEUR_A_REVOIR = MARQUEURS_INTEGRES[0]["marker_id"]
-MARQUEUR_SOMMEIL = MARQUEURS_INTEGRES[1]["marker_id"]
+from atombox.schema.seeds import BUILTIN_MARKERS
+MARQUEUR_A_REVOIR = BUILTIN_MARKERS[0]["marker_id"]
+MARQUEUR_SOMMEIL = BUILTIN_MARKERS[1]["marker_id"]
 
 
 def upgrade():
@@ -136,7 +136,7 @@ CREATE TABLE "marker_personal" (
     # c'est la seule raison pour laquelle la date est une COLONNE et non une clé du json.
     op.execute('CREATE INDEX "ix_marker_personal_due_at" ON "marker_personal" ("due_at") WHERE "due_at" IS NOT NULL')
     op.execute('CREATE INDEX "ix_marker_collective_due_at" ON "marker_collective" ("due_at") WHERE "due_at" IS NOT NULL')
-    for m in MARQUEURS_INTEGRES:
+    for m in BUILTIN_MARKERS:
         op.execute("""INSERT INTO "marker" ("marker_id", "code", "libelle", "scope", "value_type",
                                             "actif", "integre")
                       VALUES ('%(marker_id)s', '%(code)s', '%(libelle)s', '%(scope)s',

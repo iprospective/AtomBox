@@ -66,3 +66,44 @@ def test_le_repli_nomme_son_remplacant():
         assert neuf.startswith("ATOMBOX_") and ancien.startswith("ATOMBOX_")
         assert neuf != ancien
         assert not any(mot in neuf for mot in FRANCAIS), "le NOUVEAU nom %s est encore français" % neuf
+
+
+# ── la passe en anglais (RM3351, D181) : ce qui est CONVERTI ne régresse pas ────────────────────
+# La passe se fait par étages — le code est trop gros pour un seul geste, et une branche voisine ne
+# doit pas tomber en conflit avec l'ensemble. Ce test porte donc la LISTE de ce qui est déjà
+# converti : ajouter un fichier à `CONVERTIS` le met sous garde, et rien ne peut l'y ramener au
+# français sans faire rougir la suite.
+#
+# Les COMMENTAIRES restent en français (consigne explicite) : on ne regarde que les identifiants
+# définis — `def`, `class`, et les constantes de module.
+CONVERTIS = (
+    "atombox/services/mailbox.py",
+    "atombox/services/personal_state.py",
+    "atombox/services/trace.py",
+    "atombox/schema/seeds.py",
+)
+
+# Un dictionnaire, comme celui des réglages : des MOTS, pas une grammaire. Une heuristique sur les
+# terminaisons (-er, -ir) prendrait `set_marker`, `polling` ou `folder` pour du français.
+MOTS_FR = ("deplacer", "poser", "retirer", "ouvrir", "toucher", "etat", "etats", "dossier",
+           "boite", "compte", "drapeau", "drapeaux", "marqueur", "marqueurs", "semer", "semences",
+           "assurer", "tracer", "lire", "courant", "cible", "avant", "apres", "sortie", "sorties",
+           "requete", "preparer", "verifier", "annuler", "releveur", "servi", "nom", "valeur",
+           "maintenant", "modifiables", "corbeille", "integres", "travail", "court")
+
+
+def test_les_fichiers_convertis_restent_en_anglais():
+    """Chaque identifiant DÉFINI dans un fichier converti est en anglais — le mot français y est
+    une régression, pas un choix de style."""
+    fautifs = {}
+    for rel in CONVERTIS:
+        f = RACINE / rel
+        assert f.exists(), "fichier converti introuvable : %s (déplacé ? retirer de CONVERTIS)" % rel
+        for nom in re.findall(r"^(?:async )?(?:def|class)\s+(\w+)|^([A-Z][A-Z0-9_]{2,})\s*=",
+                              f.read_text(encoding="utf-8"), re.M):
+            nom = nom[0] or nom[1]
+            morceaux = {m for m in nom.lower().split("_") if m}
+            trouves = morceaux & set(MOTS_FR)
+            if trouves: fautifs.setdefault(rel, []).append("%s (%s)" % (nom, ", ".join(sorted(trouves))))
+    assert not fautifs, "identifiants français dans des fichiers convertis :\n" + "\n".join(
+        "  %s : %s" % (f, ", ".join(n)) for f, n in sorted(fautifs.items()))

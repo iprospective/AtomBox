@@ -42,7 +42,7 @@ depends_on = None
 # LES QUATRE BOÎTES D'ÉTAT viennent de `services/mailbox.py` : c'est la même table que le service
 # lit pour poser celles qui manquent à une boîte neuve. Deux listes auraient divergé au premier
 # alias ajouté — et un alias oublié crée une SECONDE « Archive » à côté de celle du fournisseur.
-from atombox.services.mailbox import ETATS
+from atombox.services.mailbox import STATES
 
 # Ces deux-là n'ont pas d'état à porter : ce sont des dossiers ordinaires, mais leur attribut
 # SPECIAL-USE permet au client de savoir où sont les envoyés et les brouillons (RFC 6154).
@@ -69,7 +69,7 @@ def upgrade():
     # NOTRE « Archive » côte à côte : deux boîtes pour une idée, et l'utilisateur ne sait pas
     # laquelle regarder. Le `LIMIT 1` protège du cas où deux alias du même état coexistent
     # (« Junk » et « Spam ») : l'index unique n'en accepte qu'un, et on prend le premier.
-    for etat, (_nom, servi, special, alias) in ETATS.items():
+    for etat, (_nom, servi, special, alias) in STATES.items():
         op.execute("""UPDATE "dossier" SET "exit_reason" = '%s', "special_use" = %s,
                              "alias_imap" = '%s', "protege" = true
                        WHERE "dossier_id" IN (
@@ -89,7 +89,7 @@ def upgrade():
     # d'horloge en millisecondes, le chiffre de version `7`, le variant `8`, le reste au hasard —
     # et le découpage 8-4-4-4-12 écrit à la main, parce qu'un uuid mal groupé passe ou ne passe pas
     # selon la tolérance de l'analyseur, et qu'on ne construit pas une clé sur une tolérance.
-    for etat, (nom, servi, special, _alias) in ETATS.items():
+    for etat, (nom, servi, special, _alias) in STATES.items():
         op.execute("""
 INSERT INTO "dossier" ("dossier_id", "boite_id", "nom", "alias_imap", "protege", "exit_reason",
                        "special_use", "uid_validity_servie", "uid_servi_suivant")
