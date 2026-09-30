@@ -1,16 +1,25 @@
 [Unit]
-Description=AtomBox — serveur IMAP en LECTURE SEULE (D180, RM3322)
+Description=AtomBox — serveur IMAP (D180, D183)
 After=network.target postgresql.service
 Wants=postgresql.service
 
 [Service]
 User=mathieu
+Group=mathieu
 WorkingDirectory=__SERVEUR__
 EnvironmentFile=/etc/atombox/env
-# Le port vient de /etc/atombox/env (ATOMBOX_IMAPD_PORT). PAS 143 ni 993 : un Dovecot tourne sur
-# cette machine, et deux serveurs sur le même port, c'est le second qui ne démarre pas.
-# L'écoute est sur 127.0.0.1 par défaut : tant que le service est en clair et en lecture seule,
-# il n'a rien à faire sur un réseau.
+# Le port et l'adresse viennent de /etc/atombox/env (ATOMBOX_IMAPD_PORT, ATOMBOX_IMAPD_LISTEN).
+# PAS 143 ni 993 : un Dovecot tourne sur cette machine, et deux serveurs sur le même port, c'est
+# le second qui ne démarre pas.
+#
+# L'ADRESSE D'ÉCOUTE EST À POSER, ET SON DÉFAUT PIÈGE. Sans ATOMBOX_IMAPD_LISTEN, le serveur écoute
+# 127.0.0.1 — la boucle locale DU CONTENEUR. Un client sur la machine hôte ne voit alors RIEN, et
+# le service a l'air parfaitement sain : il tourne, il écoute, personne ne peut lui parler. C'est
+# arrivé le 30/09, juste après un déploiement réussi.
+#
+# CE SERVICE EXISTE POUR QUE PERSONNE NE LANCE LE SERVEUR À LA MAIN. Un serveur lancé à la main
+# survit aux déploiements, garde le code de son démarrage, et le client continue de lui parler —
+# on croit avoir déployé, et on a déployé à côté.
 ExecStart=__SERVEUR__/.venv/bin/python -m atombox.imap.serveur
 Restart=always
 RestartSec=5
