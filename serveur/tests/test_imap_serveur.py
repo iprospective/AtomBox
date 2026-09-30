@@ -40,6 +40,8 @@ class FausseVue:
                   "Projets/Dupont": FausseBoite("Projets/Dupont", [])}
 
     def authentifier(self, ident, mdp): return "compte" if (ident, mdp) == ("mathieu", "secret") else None
+
+    def annuler(self): self.annule = getattr(self, "annule", 0) + 1
     def boites(self, compte): return list(self.b.values())
     def ouvrir(self, compte, nom): return self.b.get(nom)
     def etat(self, compte, nom):
@@ -226,3 +228,24 @@ def test_list_et_le_joker():
     _, (r2,) = dialogue('a1 LIST "" "%"')
     assert any('"INBOX"' in l for l in r2)
     assert not any("Projets/Dupont" in l for l in r2), "%% s'arrête au séparateur, * le traverse"
+
+
+def test_une_erreur_n_empoisonne_pas_la_connexion():
+    """LE DÉFAUT VU EN PRODUIT, et il est pire que celui qui l'a déclenché. Une écriture refusée
+    laissait la session SQLAlchemy en transaction avortée : tout ce qui suivait levait
+    `PendingRollbackError`, y compris un NOOP. Le client n'obtenait plus que « erreur interne »
+    jusqu'à reconnexion, et il n'avait aucun moyen de le deviner ni de le réparer.
+
+    On annule donc la transaction en même temps qu'on refuse la commande. Le client reçoit un NO
+    sur ce qu'il a demandé, et la commande d'après fonctionne."""
+    class VueQuiCasse(FausseVue):
+        def message(self, boite, uid): raise RuntimeError("écriture refusée par la base")
+
+    v = VueQuiCasse()
+    s = Session(v, magasin=None)
+    s.ligne("a0 LOGIN mathieu secret")
+    s.ligne("a1 SELECT INBOX")
+    r = s.ligne("a2 UID FETCH 1 (FLAGS)")
+    assert r[-1].startswith("a2 NO"), r
+    assert getattr(v, "annule", 0) == 1, "la transaction doit être annulée, sinon la suite est perdue"
+    assert s.ligne("a3 NOOP")[-1].startswith("a3 OK"), "et la commande suivante doit passer"

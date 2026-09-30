@@ -96,6 +96,15 @@ class Session:
             return methode(tag, args)
         except Exception:
             log.exception("commande %s en échec", cmd)
+            # UNE ERREUR NE DOIT PAS EMPOISONNER LA CONNEXION. Une écriture qui échoue laisse la
+            # session SQLAlchemy en transaction avortée : tout ce qui suit lève
+            # `PendingRollbackError`, y compris un NOOP. C'est arrivé en produit — un seul
+            # déplacement refusé, et le client n'obtenait plus que « erreur interne » jusqu'à ce
+            # qu'il se reconnecte. Le client, lui, ne peut rien en déduire ni rien réparer.
+            try:
+                self.vue.annuler()
+            except Exception:
+                log.exception("l'annulation de la transaction a échoué elle aussi")
             return ["%s NO erreur interne" % tag]
 
 

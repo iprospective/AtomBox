@@ -194,3 +194,48 @@ UPDATE rattachement SET motif_sortie = 'archive', sorti_le = now() - interval '4
         assert c.execute("select count(*) from rattachement where lu_le is not null").fetchone()[0] == 1, \
             "le retour recolle ce qu'il sait recoller, et rien de plus"
         assert c.execute("select count(*) from information_schema.tables where table_name = 'read_state'").fetchone()[0] == 0
+
+
+def test_une_base_migree_a_les_memes_contraintes_qu_une_base_engendree(base_vide):
+    """LA DEUXIÈME FOIS QUE CET ANGLE MORT COÛTE UN INCIDENT — et celle où il se ferme.
+
+    Les bases de test sont montées de `schema.sql`, engendré du dictionnaire : elles ont donc
+    toujours les BONNES contraintes. La production, elle, passe par les MIGRATIONS. Quand la
+    migration 0011 a renommé les valeurs de `action_journal` dans le dictionnaire sans toucher
+    `ck_journal_action` en base, 128 tests sont restés verts et la production a refusé toute
+    écriture au journal une heure après la mise en service.
+
+    Ce test ne relit pas du SQL à la main : il monte DEUX bases — une par la file des migrations,
+    une par `schema.sql` — et demande à PostgreSQL lui-même de décrire ses contraintes. Ce qui
+    diverge est un oubli de migration, quelle qu'en soit la forme."""
+    import psycopg, re as _re
+    u_migree = base_vide
+    _alembic(u_migree, "head")
+
+    # la seconde base, engendrée — même serveur, nom voisin
+    nom2 = "atombox_ref_" + _uuid.uuid4().hex[:8]
+    admin = psycopg.connect(os.environ["DATABASE_URL"], autocommit=True)
+    admin.execute('CREATE DATABASE "%s"' % nom2)
+    u_ref = _re.sub(r"/[^/?]*(\?|$)", "/" + nom2 + r"\1", os.environ["DATABASE_URL"], count=1)
+    try:
+        with psycopg.connect(u_ref) as c:
+            c.execute(open(os.path.join(ICI, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read())
+            c.commit()
+
+        def contraintes(url):
+            with psycopg.connect(url) as c:
+                return {n: d for n, d in c.execute(
+                    "select conname, pg_get_constraintdef(oid) from pg_constraint "
+                    "where contype = 'c' and conname like 'ck_%'").fetchall()}
+
+        m, r = contraintes(u_migree), contraintes(u_ref)
+        ecarts = []
+        for nom in sorted(set(m) | set(r)):
+            if m.get(nom) != r.get(nom):
+                ecarts.append("%s\n      migrée   : %s\n      engendrée: %s"
+                              % (nom, m.get(nom, "(absente)"), r.get(nom, "(absente)")))
+        assert not ecarts, ("une base MIGRÉE et une base ENGENDRÉE n'ont pas les mêmes contraintes "
+                            "— une migration a oublié d'en modifier une :\n    " + "\n    ".join(ecarts))
+    finally:
+        admin.execute("select pg_terminate_backend(pid) from pg_stat_activity where datname=%s and pid<>pg_backend_pid()", (nom2,))
+        admin.execute('DROP DATABASE "%s"' % nom2); admin.close()

@@ -28,6 +28,11 @@ ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CIBLE="$(cd "$ICI/../.." && pwd)"          # la racine du dépôt où vit ce script
 BRANCHE="${ATOMBOX_BRANCH:-dev}"
 SERVICES="atombox-api atombox-ingestion atombox-taches"
+# LE SERVEUR IMAP AUSSI, DÈS QU'IL A UNE UNITÉ. Tant qu'il se lance à la main, il survit aux
+# déploiements en gardant le code de son démarrage, et le client continue de lui parler : on croit
+# avoir déployé et l'on a déployé à côté (30/09). Avec l'unité, il s'arrête et repart comme les
+# autres, et `imapd.sh` redevient ce qu'il devrait être — un outil de mise au point.
+[ -f /etc/systemd/system/atombox-imapd.service ] && SERVICES="$SERVICES atombox-imapd"
 MODE="deployer"
 
 while [ $# -gt 0 ]; do
@@ -69,6 +74,13 @@ etat() {
   # `imapd.sh status` de la CIBLE, pas le nôtre : c'est lui qui tourne là-bas, et c'est son avis
   # sur ses propres serveurs qui compte — y compris ceux lancés hors de lui.
   bash "$SRV/outils/imapd.sh" status 2>/dev/null | sed 's/^/  imap  /'
+  # « il tourne » ne veut pas dire « on peut lui parler ». Un serveur sur 127.0.0.1 dans un
+  # conteneur est invisible depuis la machine hôte, et rien dans son état ne le laisse voir.
+  local mienne; mienne="$(ip -4 addr show 2>/dev/null | grep -oE 'inet 10\.[0-9.]+|inet 192\.168\.[0-9.]+' | head -1 | awk '{print $2}')"
+  if [ -n "$mienne" ] && ! ss -ltn 2>/dev/null | grep -qE "(0\.0\.0\.0|\*|$mienne):1143"; then
+    info "⚠ le serveur IMAP n'écoute QUE la boucle locale du conteneur : un client sur la machine"
+    info "  hôte ne peut pas s'y connecter. Poser ATOMBOX_IMAPD_LISTEN=$mienne dans /etc/atombox/env."
+  fi
 }
 
 if [ "$MODE" = "verifier" ]; then
@@ -76,6 +88,37 @@ if [ "$MODE" = "verifier" ]; then
   etat
   exit 0
 fi
+
+# --- 0. LES MOYENS D'ABORD ----------------------------------------------------------------------
+# VÉRIFIER CE QU'ON SAIT FAIRE AVANT DE COMMENCER. Le premier essai a avancé le code de huit
+# commits, PUIS s'est arrêté sur un sudo qui réclamait un mot de passe — laissant le worktree servi
+# sur le code neuf et la base sur l'ancien schéma. Un demi-déploiement est pire qu'un refus : les
+# services continuaient de tourner sur du code chargé en mémoire, et le moindre redémarrage les
+# aurait fait échouer à chaque requête.
+#
+# Un script qui modifie l'état doit donc s'assurer de pouvoir aller AU BOUT avant de faire le
+# premier pas.
+echo "-- 0. les moyens"
+if ! sudo -n true 2>/dev/null; then
+  rouge "sudo réclame un mot de passe, et il n'y a pas de terminal pour le taper."
+  info "Rien n'a été touché. Deux façons d'avancer :"
+  info ""
+  info "  1. lancer ce script dans un VRAI terminal (le mot de passe une fois) :"
+  info "       cd $CIBLE && bash serveur/outils/deployer.sh"
+  info ""
+  info "  2. ou autoriser ces trois gestes SANS mot de passe — trois commandes exactes, pas un"
+  info "     blanc-seing —, ce qui rend le déploiement jouable par l'outillage :"
+  info "       sudo tee /etc/sudoers.d/atombox <<'EOF'"
+  info "       $USER ALL=(root) NOPASSWD: /usr/bin/systemctl stop $SERVICES"
+  info "       $USER ALL=(root) NOPASSWD: /usr/bin/systemctl start $SERVICES"
+  info "       $USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart $SERVICES"
+  info "       EOF"
+  info "       sudo chmod 0440 /etc/sudoers.d/atombox"
+  info ""
+  info "  (La seconde est une modification de la machine : c'est une décision, pas une commodité.)"
+  exit 2
+fi
+vert "sudo disponible sans mot de passe"
 
 # --- 1. LE FETCH, ET IL DOIT RÉUSSIR ------------------------------------------------------------
 # C'est la cause nº 1 du déploiement fantôme. Un fetch qui échoue laisse `origin/dev` sur une valeur
@@ -152,7 +195,16 @@ fi
 
 echo "-- 6. redémarrage"
 sudo systemctl start $SERVICES || { rouge "le redémarrage a échoué — les services sont arrêtés"; exit 7; }
-bash "$SRV/outils/imapd.sh" start | sed 's/^/    /'
+# Le serveur IMAP par `imapd.sh` SEULEMENT s'il n'a pas d'unité : sinon systemd vient de le démarrer,
+# et en lancer un second à côté recrée l'orphelin que tout ceci corrige.
+if [ ! -f /etc/systemd/system/atombox-imapd.service ]; then
+  bash "$SRV/outils/imapd.sh" start | sed 's/^/    /'
+  info "⚠ le serveur IMAP n'a pas d'unité systemd : il vient d'être lancé par imapd.sh, donc il ne"
+  info "  repartira pas tout seul au prochain démarrage de la machine. Pour l'installer :"
+  info "     sudo sed \"s#__SERVEUR__#$SRV#g\" $SRV/outils/atombox-imapd.service \\"
+  info "       > /etc/systemd/system/atombox-imapd.service"
+  info "     sudo systemctl daemon-reload && sudo systemctl enable --now atombox-imapd"
+fi
 
 echo "-- 7. ce qui tourne VRAIMENT, mesuré"
 etat
