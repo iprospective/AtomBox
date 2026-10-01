@@ -6,11 +6,11 @@ from fastapi import Depends, HTTPException, Query
 from ..api.routage import Controleur, action
 from ..api.securite import compte_courant
 from ..api.dependances import session_async
-from ..journal import DOMAINES, dossier, journal
+from ..journal import DOMAINS, directory, journal
 from ..schema.modeles import Compte
 
 NIVEAUX = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-log = journal("etat")
+log = journal("status")
 
 class EtatControleur(Controleur):
     prefixe = "/etat"
@@ -27,14 +27,14 @@ class EtatControleur(Controleur):
         return PlainTextResponse(rendre(await calculer(s, compte)), media_type="text/plain; version=0.0.4")
 
     @action("GET", "/journal")
-    async def journal(self, domaine: str = Query("atombox", description="atombox (tout), erreurs, ou un domaine : " + ", ".join(DOMAINES)),
+    async def journal(self, domaine: str = Query("atombox", description="atombox (tout), erreurs, ou un domaine : " + ", ".join(DOMAINS)),
                       niveau: str = Query("INFO", description="niveau minimal : DEBUG, INFO, WARNING, ERROR"),
                       lignes: int = Query(200, ge=1, le=2000), filtre: str | None = Query(None, description="un mot à retrouver"),
                       compte: Compte = Depends(compte_courant)):
-        if domaine not in DOMAINES + ("atombox", "erreurs"): raise HTTPException(404, "journal inconnu")
+        if domaine not in DOMAINS + ("atombox", "erreurs"): raise HTTPException(404, "journal inconnu")
         niveau = niveau.upper()
         if niveau not in NIVEAUX: raise HTTPException(400, "niveau inconnu")
-        chemin = os.path.join(dossier(), domaine + ".log")
+        chemin = os.path.join(directory(), domaine + ".log")
         if not os.path.exists(chemin): return {"domaine": domaine, "lignes": [], "fichier": chemin}
         seuil = NIVEAUX.index(niveau)
         motif = re.compile(r"^\S+ \S+ (\w+)\s+(\S+)\s+(.*)$")

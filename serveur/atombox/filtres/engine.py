@@ -16,7 +16,7 @@ import re
 from datetime import datetime, timezone
 from ..journal import journal
 
-log = journal("filtres")
+log = journal("filters")
 
 # --- ce sur quoi une règle peut porter, et comment on l'extrait d'une analyse (F001)
 CHAMPS = {

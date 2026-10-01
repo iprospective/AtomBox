@@ -52,7 +52,7 @@ class FausseVue:
 
 
 def dialogue(*lignes, connecte=True):
-    s = Session(FausseVue(), magasin=None)
+    s = Session(FausseVue(), store=None)
     sortie = [s.accueil()]
     if connecte: s.ligne("a0 LOGIN mathieu secret")
     for l in lignes: sortie.append(s.ligne(l))
@@ -66,7 +66,7 @@ def test_la_capability_n_annonce_que_ce_qu_on_sert():
     COPY+STORE+EXPUNGE pour rien.
 
     Ce test tient donc les deux bouts, et il se maintient seul : il lit la liste annoncée."""
-    s = Session(FausseVue(), magasin=None)
+    s = Session(FausseVue(), store=None)
     annonce = " ".join(s.accueil())
     for jamais in ("CONDSTORE", "QRESYNC", "IDLE", "NOTIFY", "APPENDLIMIT"):
         assert jamais not in annonce, "%s est annoncé alors qu'on ne le sert pas" % jamais
@@ -140,7 +140,7 @@ def test_le_client_apprend_ce_qui_a_disparu():
     """Sans EXPUNGE, un message retiré chez nous reste affiché chez le client POUR TOUJOURS :
     rien ne le lui apprend. C'est ce qui s'est vu en produit — un message supprimé au webmail
     restait dans l'INBOX de Thunderbird."""
-    v = FausseVue(); s = Session(v, magasin=None)
+    v = FausseVue(); s = Session(v, store=None)
     s.ligne("a0 LOGIN mathieu secret")
     assert "* 3 EXISTS" in s.ligne("a1 SELECT INBOX")
     del v.b["INBOX"].messages[4]; v.b["INBOX"].uids = sorted(v.b["INBOX"].messages)
@@ -156,14 +156,14 @@ def test_les_rangs_d_expunge_s_entendent_sur_la_liste_qui_retrecit():
     v = FausseVue()
     brut = b"From: a@x.fr\r\n\r\nx\r\n"
     v.b["INBOX"] = FausseBoite("INBOX", [FauxMessage(u, brut) for u in (1, 2, 3, 4, 5, 6)])
-    s = Session(v, magasin=None); s.ligne("a0 LOGIN mathieu secret"); s.ligne("a1 SELECT INBOX")
+    s = Session(v, store=None); s.ligne("a0 LOGIN mathieu secret"); s.ligne("a1 SELECT INBOX")
     for u in (2, 5): del v.b["INBOX"].messages[u]
     v.b["INBOX"].uids = sorted(v.b["INBOX"].messages)
     assert [l for l in s.ligne("a2 NOOP") if "EXPUNGE" in l] == ["* 2 EXPUNGE", "* 4 EXPUNGE"]
 
 
 def test_un_message_qui_ARRIVE_est_annonce_aussi():
-    v = FausseVue(); s = Session(v, magasin=None)
+    v = FausseVue(); s = Session(v, store=None)
     s.ligne("a0 LOGIN mathieu secret"); s.ligne("a1 SELECT INBOX")
     b = v.b["INBOX"]
     b.messages[12] = FauxMessage(12, b"From: a@x.fr\r\n\r\nneuf\r\n"); b.uids = sorted(b.messages)
@@ -173,7 +173,7 @@ def test_un_message_qui_ARRIVE_est_annonce_aussi():
 def test_aucun_expunge_pendant_un_fetch_ou_un_search():
     """RFC 3501 § 5.2 : le client y compte par NUMÉRO DE SÉQUENCE, et retirer une ligne au milieu
     décale tout ce qu'il est en train de lire."""
-    v = FausseVue(); s = Session(v, magasin=None)
+    v = FausseVue(); s = Session(v, store=None)
     s.ligne("a0 LOGIN mathieu secret"); s.ligne("a1 SELECT INBOX")
     del v.b["INBOX"].messages[4]; v.b["INBOX"].uids = sorted(v.b["INBOX"].messages)
     for commande in ("a2 UID FETCH 1:* (UID)", "a3 UID SEARCH ALL"):
@@ -198,7 +198,7 @@ def test_un_litteral_suspend_l_analyse():
     with pytest.raises(BesoinDeLitteral) as e:
         decouper('a3 LOGIN "jean" {12}')
     assert e.value.n == 12
-    s = Session(FausseVue(), magasin=None)
+    s = Session(FausseVue(), store=None)
     assert s.ligne('a3 LOGIN mathieu {6}')[0].startswith("+ "), "le serveur demande la suite"
     assert s.ligne("secret")[0].startswith("a3 OK"), "et la recolle à la commande"
 
@@ -207,7 +207,7 @@ def test_on_ne_demande_pas_de_donnees_pour_une_commande_refusee():
     """`APPEND INBOX {3}` obtenait un « + » : le client envoyait son message, le serveur le jetait,
     et les deux se désynchronisaient — la commande suivante était lue comme le contenu du littéral.
     Sur un serveur en lecture seule, c'est aussi accepter un téléversement de taille arbitraire."""
-    s = Session(FausseVue(), magasin=None)
+    s = Session(FausseVue(), store=None)
     s.ligne("a0 LOGIN mathieu secret")
     r = s.ligne("a7 APPEND INBOX {3}")
     assert r[0].startswith("a7 BAD"), r
@@ -242,7 +242,7 @@ def test_une_erreur_n_empoisonne_pas_la_connexion():
         def message(self, boite, uid): raise RuntimeError("écriture refusée par la base")
 
     v = VueQuiCasse()
-    s = Session(v, magasin=None)
+    s = Session(v, store=None)
     s.ligne("a0 LOGIN mathieu secret")
     s.ligne("a1 SELECT INBOX")
     r = s.ligne("a2 UID FETCH 1 (FLAGS)")
@@ -270,7 +270,7 @@ def test_un_message_de_la_corbeille_n_est_pas_masque():
     class FauxRatt:
         repondu_le, exit_reason, comm_id, boite_id = None, "deleted", None, None
 
-    m = MessageServi(1, FauxComm(), FauxRatt(), magasin=None, blob_ref=None)
+    m = MessageServi(1, FauxComm(), FauxRatt(), store=None, blob_ref=None)
     assert "\\Deleted" not in m.drapeaux, \
         "un message de la corbeille porterait \\Deleted, donc Thunderbird le masquerait"
 

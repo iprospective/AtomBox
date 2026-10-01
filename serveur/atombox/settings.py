@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 from .journal import journal
 
-log = journal("etat")      # les réglages relèvent de l'exploitation : c'est là qu'on les lit
+log = journal("status")      # les réglages relèvent de l'exploitation : c'est là qu'on les lit
 
 # nouveau nom → nom d'hier. Une ligne qui disparaît est une migration finie.
 FORMER_NAMES = {

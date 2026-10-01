@@ -42,8 +42,8 @@ class Session:
     Les deux sont injectés : le harnais en pose des doubles, et la session ne sait pas qu'ils sont
     doubles — c'est la seule façon d'éprouver le protocole sans base ni disque."""
 
-    def __init__(self, vue, magasin, tls: bool = True):
-        self.vue, self.magasin, self.tls = vue, magasin, tls
+    def __init__(self, vue, store, tls: bool = True):
+        self.vue, self.store, self.tls = vue, store, tls
         self.compte = None            # None = pas encore authentifié
         self.boite = None             # la boîte aux lettres sélectionnée
         self.uids: list[int] = []     # ses UID, dans l'ordre — l'index+1 est le numéro de séquence

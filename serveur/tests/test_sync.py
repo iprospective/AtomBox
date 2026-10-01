@@ -109,7 +109,7 @@ def base():
         yield s, u
     finally:
         s.close()
-        import atombox.db as db; db.moteur(u).dispose(); db._sync.clear()
+        import atombox.db as db; db.engine(u).dispose(); db._sync.clear()
         admin.execute("select pg_terminate_backend(pid) from pg_stat_activity where datname=%s and pid<>pg_backend_pid()", (nom,))
         admin.execute('DROP DATABASE "%s"' % nom); admin.close()
 

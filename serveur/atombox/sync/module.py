@@ -82,8 +82,8 @@ class ModuleSync(Module):
         dossier = s.get(Dossier, r.dossier_id)
         if dossier is None or not (dossier.alias_imap or dossier.nom):
             log.warning("%s : dossier des envoyés inconnu — rien à copier", comm_id); return
-        from ..magasin import Magasin
-        octets = Magasin(settings.read("ATOMBOX_STORE", "./magasin")).lire(str(comm_id))
+        from ..store import Store
+        octets = Store(settings.read("ATOMBOX_STORE", "./magasin")).lire(str(comm_id))
         e = s.get(CommEmail, comm_id)
         boite = s.get(Boite, boite_id); adresse = s.get(Adresse, boite.adresse_id).adresse_complete
         releve = Releve(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_de(adresse, cfg["master"]), cfg["mot_de_passe"])

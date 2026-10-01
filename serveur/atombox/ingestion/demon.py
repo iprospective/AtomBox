@@ -15,7 +15,7 @@ from sqlalchemy import select
 from ..db import session as ouvrir_session
 from ..schema.modeles import Adresse, Boite, Dossier, Evenement, Rattachement
 from ..sync.sync import appliquer_descendante
-from ..magasin import Magasin
+from ..store import Store
 from ..uuid7 import uuid7
 from .imap import Releve, tls_imap
 from .ingestion import ingerer
@@ -23,7 +23,7 @@ from ..modules import chargement
 from ..modules.accroches import accroches
 from .. import settings
 
-log = journal("demon")
+log = journal("daemon")
 
 def _dossier(s, boite_id, alias: str) -> Dossier:
     d = s.scalar(select(Dossier).where(Dossier.boite_id == boite_id, Dossier.alias_imap == alias))
@@ -33,7 +33,7 @@ def _dossier(s, boite_id, alias: str) -> Dossier:
     s.add(d); s.commit()
     return d
 
-def relever_boite(s, magasin: Magasin, releve: Releve, boite_id, adresse: str) -> int:
+def relever_boite(s, store: Store, releve: Releve, boite_id, adresse: str) -> int:
     """un passage complet sur tous les dossiers d'une boîte ; rend le nombre de messages ingérés"""
     n = 0
     log.debug("%s : relève", adresse)
@@ -47,7 +47,7 @@ def relever_boite(s, magasin: Magasin, releve: Releve, boite_id, adresse: str) -
         for uid in releve.nouveaux(depuis):
             try:
                 octets, date, drapeaux = releve.lire(uid)
-                r = ingerer(s, magasin, boite_id, octets, uid=uid, uid_validity=validity, dossier_id=d.dossier_id,
+                r = ingerer(s, store, boite_id, octets, uid=uid, uid_validity=validity, dossier_id=d.dossier_id,
                             date_recue=date, dossier_alias=d.alias_imap)
                 n += 1
                 log.debug("%s/%s uid %d → %s (%s)", adresse, alias, uid, "nouveau" if r["nouveau"] else "rattaché", r["nature"])
@@ -113,14 +113,14 @@ def _resynchroniser(s, releve: Releve, boite_id, adresse: str, alias: str) -> in
 async def surveiller_boite(boite_id, adresse: str, config: dict):
     while True:
         try:
-            s = ouvrir_session(); magasin = Magasin(config["magasin"])
+            s = ouvrir_session(); store = Store(config["magasin"])
             # compte master (chapitre 06) : « boite*master » ; sans master, ou si le master EST la boîte, le login est l'adresse
             master = (config.get("master") or "").strip()
             login = adresse if not master or master.lower() == adresse.lower() else "%s*%s" % (adresse, master)
             releve = Releve(config["hote"], config["port"], tls=tls_imap()).ouvrir(login, config["mot_de_passe"])
             try:
                 while True:
-                    await asyncio.to_thread(relever_boite, s, magasin, releve, boite_id, adresse)
+                    await asyncio.to_thread(relever_boite, s, store, releve, boite_id, adresse)
                     _, uidnext = releve.selectionner("INBOX")
                     # UN MESSAGE ARRIVÉ PENDANT LA RELÈVE existe déjà quand IDLE commence, et IDLE ne
                     # signale que ce qui arrive APRÈS (RFC 2177) : il attendait le réveil suivant, 25

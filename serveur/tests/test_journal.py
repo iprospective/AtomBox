@@ -5,9 +5,9 @@ from atombox import journal as J
 @pytest.fixture
 def logs(tmp_path, monkeypatch):
     d = str(tmp_path / "logs")
-    J.configurer(dossier_logs=d, niveau="info", niveaux="imap=debug,auth=warning", console=False, forcer=True)
+    J.configure(log_directory=d, level="info", levels="imap=debug,auth=warning", console=False, force=True)
     yield d
-    J.configurer(forcer=True)
+    J.configure(force=True)
 
 def lire(d, nom):
     p = os.path.join(d, nom); return open(p, encoding="utf-8").read() if os.path.exists(p) else ""

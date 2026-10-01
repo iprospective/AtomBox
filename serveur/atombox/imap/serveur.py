@@ -31,8 +31,8 @@ LIMITE_LIGNE = 64 * 1024        # une commande IMAP raisonnable ; au-delà, on c
 
 
 class Ecouteur:
-    def __init__(self, fabrique_session_bd, magasin, maximum: int | None = None):
-        self.fabrique, self.magasin = fabrique_session_bd, magasin
+    def __init__(self, fabrique_session_bd, store, maximum: int | None = None):
+        self.fabrique, self.store = fabrique_session_bd, store
         self.places = asyncio.Semaphore(maximum or int(settings.read("ATOMBOX_IMAPD_MAX", "20")))
         self.vivantes = 0
 
@@ -49,7 +49,7 @@ class Ecouteur:
         async with self.places:
             self.vivantes += 1
             bd = self.fabrique()
-            session = Session(Vue(bd, self.magasin), self.magasin)
+            session = Session(Vue(bd, self.store), self.store)
             log.info("connexion IMAP de %s (%d vivante(s))", pair, self.vivantes)
             try:
                 await self._envoyer(ecrivain, session.accueil())
@@ -113,10 +113,10 @@ def contexte_tls():
 
 async def principal():
     from ..db import session as ouvrir
-    from ..magasin import Magasin
+    from ..store import Store
     url = os.environ["DATABASE_URL"]
-    magasin = Magasin(settings.read("ATOMBOX_STORE", "./magasin"))
-    ecouteur = Ecouteur(lambda: ouvrir(url), magasin)
+    store = Store(settings.read("ATOMBOX_STORE", "./magasin"))
+    ecouteur = Ecouteur(lambda: ouvrir(url), store)
     hote = settings.read("ATOMBOX_IMAPD_LISTEN", "127.0.0.1")
     port = int(settings.read("ATOMBOX_IMAPD_PORT", "1143"))
     tls = contexte_tls()

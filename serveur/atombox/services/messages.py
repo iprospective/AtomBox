@@ -375,7 +375,7 @@ def _composition(r: Rattachement, c: Comm, ds: dict, adresse: str, dest: list, c
             "a": ", ".join(dest), "cc": ", ".join(copies), "sujet": c.sujet or "",
             "corps": corps, "pieces_jointes": [], "reference": ref}
 
-async def detail(s: AsyncSession, compte: Compte, comm_id, magasin=None) -> dict | None:
+async def detail(s: AsyncSession, compte: Compte, comm_id, store=None) -> dict | None:
     boites = [b.boite_id for b in await boites_du_compte(s, compte)]
     r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, _portee(boites)).limit(1))
     if not r: return None
@@ -388,10 +388,10 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, magasin=None) -> dict
     pjs = (await s.execute(select(CommPieceJointe, PieceJointe).join(PieceJointe, PieceJointe.piece_jointe_id == CommPieceJointe.piece_jointe_id)
                            .where(CommPieceJointe.comm_id == comm_id).order_by(CommPieceJointe.ordre))).all()
     corps = ""
-    if magasin is not None and magasin.existe(str(comm_id)):
+    if store is not None and store.existe(str(comm_id)):
         try:
             from ..ingestion.analyse import analyser
-            corps = analyser(magasin.lire(str(comm_id))).corps_texte
+            corps = analyser(store.lire(str(comm_id))).corps_texte
         except Exception as ex: log.warning("corps de %s illisible : %s", comm_id, ex)
     from .tags import tags_de
     provenance = await _provenance_de(s, comm_id)
@@ -407,7 +407,7 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, magasin=None) -> dict
                              "content_id": l.content_id, "disposition": l.disposition,
                              "comm_id": vers.get(str(p.piece_jointe_id))} for l, p in pjs ] })
 
-async def piece_jointe(s: AsyncSession, compte: Compte, comm_id, pj_id, magasin=None) -> dict | None:
+async def piece_jointe(s: AsyncSession, compte: Compte, comm_id, pj_id, store=None) -> dict | None:
     """Les OCTETS d'une pièce jointe (F136), dans la portée du compte (D036) — hors portée : None,
     donc 404, jamais 403 (D108).
 
@@ -421,8 +421,8 @@ async def piece_jointe(s: AsyncSession, compte: Compte, comm_id, pj_id, magasin=
                                                         CommPieceJointe.piece_jointe_id == pj_id).limit(1))
     if ligne is None: return None
     p = await s.get(PieceJointe, pj_id)
-    if p is None or magasin is None or not magasin.existe(p.blob_ref): return None
-    return {"octets": magasin.lire(p.blob_ref), "type": p.type_detecte or "application/octet-stream",
+    if p is None or store is None or not store.existe(p.blob_ref): return None
+    return {"octets": store.lire(p.blob_ref), "type": p.type_detecte or "application/octet-stream",
             "nom": _nom_de_fichier(ligne.nom_declare or ("piece-%d" % ligne.ordre)),
             "disposition": ligne.disposition or "attachment"}
 
@@ -452,9 +452,9 @@ async def _messages_des_encapsules(s: AsyncSession, comm_id, boites: list, pjs: 
 
 async def _resoudre_par_message_id(s: AsyncSession, p: PieceJointe, boites: list):
     """Le `Message-ID` lu dans les octets de l'encapsulé, confronté à ce que le lecteur possède."""
-    from ..magasin import Magasin
+    from ..store import Store
     try:
-        m = Magasin(settings.read("ATOMBOX_STORE", "./magasin"))
+        m = Store(settings.read("ATOMBOX_STORE", "./magasin"))
         if not m.existe(p.blob_ref): return None
         interne = email.message_from_bytes(m.lire(p.blob_ref), policy=email.policy.SMTP)
         mid = (interne["Message-ID"] or "").strip()
@@ -566,8 +566,8 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
             # L'UID S'OBTIENT AVANT DE BOUGER. `attribuer` exécute une requête, et SQLAlchemy vide
             # alors les modifications en attente : écrire `dossier_id` d'abord ferait partir la
             # nouvelle boîte avec l'ANCIEN uid, qui heurte l'unicité si elle l'utilise déjà.
-            from ..uid_servi import attribuer_async as attribuer_uid
-            uid = await attribuer_uid(s, cible.dossier_id)
+            from ..served_uid import assign_async as assign_uid
+            uid = await assign_uid(s, cible.dossier_id)
             r.dossier_id, r.uid_servi = cible.dossier_id, uid
             n += 1
         elif k == "suppr" and v:
@@ -623,33 +623,33 @@ def _nom_de_fichier(sujet) -> str:
     return (propre or "message transfere")[:80]
 
 
-async def _source_a_transferer(s: AsyncSession, compte: Compte, corps: dict, magasin):
+async def _source_a_transferer(s: AsyncSession, compte: Compte, corps: dict, store):
     """Le message transféré, LU DANS LE MAGASIN — jamais reconstruit depuis ce que l'écran affiche.
 
     Et lu dans la PORTÉE du compte (D036) : transférer se fait sur ce qu'on a le droit de lire,
     la référence venant du client. Rend (comm_id, octets) ou (None, None)."""
     ref = corps.get("reference")
-    if not ref or magasin is None: return None, None
+    if not ref or store is None: return None, None
     try: src_id = uuid.UUID(str(ref))
     except (ValueError, AttributeError, TypeError): return None, None
     boites = [b.boite_id for b in await boites_du_compte(s, compte)]
     if not await s.scalar(select(Rattachement.comm_id).where(Rattachement.comm_id == src_id, _portee(boites)).limit(1)):
         log.warning("transfert refuse : %s hors de la portee de %s", src_id, compte.login)
         return None, None
-    if not magasin.existe(str(src_id)): return src_id, None      # purgé : le transfert part sans lui (Q030)
-    return src_id, magasin.lire(str(src_id))
+    if not store.existe(str(src_id)): return src_id, None      # purgé : le transfert part sans lui (Q030)
+    return src_id, store.lire(str(src_id))
 
 
-async def _poser_pieces(s: AsyncSession, comm_id, pieces, magasin, quand) -> None:
+async def _poser_pieces(s: AsyncSession, comm_id, pieces, store, quand) -> None:
     """Les pièces d'un message écrit ici entrent en base comme celles d'un message reçu — même
     déduplication par empreinte (D024). Sans ça, un transfert s'envoyait avec son encapsulé dans
     les octets mais se relisait sans rien : la pièce existait et l'écran ne la voyait pas."""
-    from ..magasin import empreinte as empreinte_de
+    from ..store import empreinte as empreinte_de
     for l in await s.scalars(select(CommPieceJointe).where(CommPieceJointe.comm_id == comm_id)):
         await s.delete(l)
     await s.flush()
     for p in pieces:
-        if magasin is not None: ref, info = magasin.deposer(p.octets)
+        if store is not None: ref, info = store.deposer(p.octets)
         else: ref, info = empreinte_de(p.octets), {"taille_octets": len(p.octets), "taille_stockee": len(p.octets), "compression": "aucune"}
         b = await s.get(Blob, ref)
         if b: b.nb_references += 1
@@ -769,7 +769,7 @@ async def _poser_participants(s: AsyncSession, comm_id, participants) -> None:
         s.add(Participant(comm_id=comm_id, role=role, adresse_id=(await _adresse(s, adr)).adresse_id, nom_affiche=nom, ordre=ordre))
 
 
-async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: dict, magasin=None, envoi: bool = False) -> dict | None:
+async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: dict, store=None, envoi: bool = False) -> dict | None:
     """Un brouillon réenregistré GARDE son identité (D089 : un brouillon est un message marqué).
     Le webmail supprimait puis recréait : le message changeait d'identifiant à chaque frappe
     enregistrée, et l'onglet ouvert pointait sur un mort.
@@ -792,18 +792,18 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
         return None                       # on ne réécrit QUE des brouillons : un message est un fait (D029)
     boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
     maintenant = datetime.now(timezone.utc)
-    src_id, source = await _source_a_transferer(s, compte, corps, magasin)
+    src_id, source = await _source_a_transferer(s, compte, corps, store)
     octets = _composer(compte, adresse, corps, comm_id, maintenant, None, source)
     from ..ingestion.analyse import analyser
     a = analyser(octets)
-    if magasin is not None: magasin.ecrire(str(comm_id), octets, remplacer=True)
+    if store is not None: store.ecrire(str(comm_id), octets, remplacer=True)
     c.sujet, c.sujet_normalise = a.sujet, a.sujet_normalise
     c.snippet, c.corps_texte, c.taille = a.snippet, a.corps_texte or None, len(octets)
     c.nb_pieces_jointes = len(a.pieces)
     e = await s.get(CommEmail, comm_id)
     if e is not None: e.message_id, e.headers = a.message_id, a.headers
     await _poser_participants(s, comm_id, a.participants)
-    await _poser_pieces(s, comm_id, a.pieces, magasin, maintenant)
+    await _poser_pieces(s, comm_id, a.pieces, store, maintenant)
     await _poser_provenance(s, comm_id, src_id, maintenant)
     if envoi:
         # La date d'un message parti est celle du DÉPART, pas celle de la première ébauche : sinon
@@ -812,8 +812,8 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
         cible = next((d for d in ds.values() if dossier_id_court(d) == "sent"), None)
         # un déplacement donne un UID NEUF, pris au dossier d'arrivée (sémantique IMAP) — et il
         # s'obtient AVANT de bouger, sinon l'autoflush de la requête envoie l'ancien couple
-        from ..uid_servi import attribuer_async as attribuer_uid
-        uid = await attribuer_uid(s, cible.dossier_id) if cible else None
+        from ..served_uid import assign_async as assign_uid
+        uid = await assign_uid(s, cible.dossier_id) if cible else None
         r.dossier_id, r.uid_servi = (cible.dossier_id if cible else None), uid
         r.dossier_origine_id = None
         # On remet dans la file en effaçant l'ÉTAT, jamais les dates : « il a été traité le 3 »
@@ -849,7 +849,7 @@ async def _adresse(s: AsyncSession, complete: str):
     s.add(a); await s.flush()
     return a
 
-async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_client: str | None = None) -> dict | None:
+async def creer(s: AsyncSession, compte: Compte, corps: dict, store=None, ip_client: str | None = None) -> dict | None:
     """POST /messages : un message écrit ici — brouillon (composition présente) ou envoyé.
     V0 : le message est en base et au magasin ; l'émission SMTP (F109) prend le relais par un événement."""
     boites = await boites_du_compte(s, compte)
@@ -860,16 +860,16 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_c
     brouillon = bool(corps.get("composition"))
     cible = next((d for d in ds.values() if dossier_id_court(d) == ("drafts" if brouillon else "sent")), None)
     comm_id = uuid7(); maintenant = datetime.now(timezone.utc)
-    src_id, source = await _source_a_transferer(s, compte, corps, magasin)
+    src_id, source = await _source_a_transferer(s, compte, corps, store)
     octets = _composer(compte, adresses[boite.boite_id], corps, comm_id, maintenant, ip_client, source)
     from ..ingestion.analyse import analyser
     from ..ingestion.identite import empreinte_identite
     a = analyser(octets)
-    from ..magasin import empreinte as empreinte_de
+    from ..store import empreinte as empreinte_de
     from ..schema.modeles import Blob
-    if magasin is not None:
-        magasin.ecrire(str(comm_id), octets)
-        brut, info = magasin.deposer(octets)
+    if store is not None:
+        store.ecrire(str(comm_id), octets)
+        brut, info = store.deposer(octets)
     else:
         brut, info = empreinte_de(octets), {"taille_octets": len(octets), "taille_stockee": len(octets), "compression": "aucune"}
     b = await s.get(Blob, brut)
@@ -880,17 +880,17 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, magasin=None, ip_c
              taille=len(octets), nb_pieces_jointes=len(a.pieces), est_chiffre=False, est_signe=False, snippet=a.snippet, corps_texte=a.corps_texte or None)
     s.add(c)
     s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, headers=a.headers, blob_ref=brut, empreinte=empreinte_identite(a), structure_mime=a.structure_mime, reponse_possible="oui"))
-    from ..uid_servi import attribuer_async as attribuer_uid
+    from ..served_uid import assign_async as assign_uid
     s.add(Rattachement(comm_id=comm_id, boite_id=boite.boite_id, compte_id=compte.compte_id,
                        status="new", personnel=False, gele=False,
                        dossier_id=cible.dossier_id if cible else None,
-                       uid_servi=await attribuer_uid(s, cible.dossier_id if cible else None)))
+                       uid_servi=await assign_uid(s, cible.dossier_id if cible else None)))
     await s.flush()
     # CE QUE J'ÉCRIS, JE L'AI LU : la ligne de lecture se pose sur MOI (D175), et non plus sur le
     # rattachement. Sans elle, mon propre envoi me reviendrait en gras dans « Envoyés ».
     await s.execute(perso.open_stmt(compte.compte_id, comm_id, boite.boite_id, maintenant))
     await _poser_participants(s, comm_id, a.participants)
-    await _poser_pieces(s, comm_id, a.pieces, magasin, maintenant)
+    await _poser_pieces(s, comm_id, a.pieces, store, maintenant)
     await _poser_provenance(s, comm_id, src_id, maintenant)
     from ..modules import evenements
     if not brouillon:

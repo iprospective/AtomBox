@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..api.routage import Controleur, action
 from ..api.dependances import session_async
 from ..api.securite import compte_courant
-from ..magasin import Magasin
+from ..store import Store
 from ..schema.modeles import Compte
 from ..services import messages as svc
 from ..journal import journal
@@ -15,7 +15,7 @@ from .. import settings
 
 log = journal("api")
 
-def magasin() -> Magasin: return Magasin(settings.read("ATOMBOX_STORE", "./magasin"))
+def store() -> Store: return Store(settings.read("ATOMBOX_STORE", "./magasin"))
 
 def _uuid(id_: str):
     try: return uuid.UUID(id_)
@@ -34,7 +34,7 @@ class MessagesControleur(Controleur):
 
     @action("GET", "/{id}")
     async def detail(self, id: str, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
-        m = await svc.detail(s, compte, _uuid(id), magasin())
+        m = await svc.detail(s, compte, _uuid(id), store())
         if not m: raise HTTPException(404, "message inconnu")
         return m
 
@@ -42,7 +42,7 @@ class MessagesControleur(Controleur):
     async def piece_jointe(self, id: str, pj: str, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
         """Les octets d'une pièce (F136). `inline` pour ce qu'un navigateur sait afficher sans danger,
         `attachment` pour tout le reste — et jamais le type déclaré par le message (D032)."""
-        p = await svc.piece_jointe(s, compte, _uuid(id), _uuid(pj), magasin())
+        p = await svc.piece_jointe(s, compte, _uuid(id), _uuid(pj), store())
         if not p: raise HTTPException(404, "pièce jointe inconnue")
         entetes = {"Content-Disposition": '%s; filename="%s"' % (p["disposition"], p["nom"]),
                    "X-Content-Type-Options": "nosniff"}       # le navigateur ne redevine pas le type
@@ -62,7 +62,7 @@ class MessagesControleur(Controleur):
     @action("POST", "/{id}/envoyer")
     async def envoyer(self, id: str, request: Request, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
         """Envoyer un BROUILLON : c'est le même message qui part (D089, RM3246)."""
-        m = await svc.remplacer_brouillon(s, compte, _uuid(id), await request.json() or {}, magasin(), envoi=True)
+        m = await svc.remplacer_brouillon(s, compte, _uuid(id), await request.json() or {}, store(), envoi=True)
         if m is None: raise HTTPException(404, "aucun brouillon à ce nom")
         return {"ok": True, "message": m}
 
@@ -95,14 +95,14 @@ class MessagesControleur(Controleur):
 
     @action("PUT", "/{id}")
     async def reenregistrer(self, id: str, request: Request, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
-        m = await svc.remplacer_brouillon(s, compte, _uuid(id), await request.json() or {}, magasin())
+        m = await svc.remplacer_brouillon(s, compte, _uuid(id), await request.json() or {}, store())
         if m is None: raise HTTPException(404, "aucun brouillon à ce nom")
         return {"ok": True, "modifies": 1, "message": m}
 
     @action("POST", "")
     async def creer(self, request: Request, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
         corps = await request.json()
-        m = await svc.creer(s, compte, corps or {}, magasin(), ip_client=(request.client.host if request.client else None))
+        m = await svc.creer(s, compte, corps or {}, store(), ip_client=(request.client.host if request.client else None))
         if m is None: raise HTTPException(400, "aucune boîte pour ce compte")
         log.info("message %s créé par %s (%s)", m["id"], compte.login, "brouillon" if (corps or {}).get("composition") else "à envoyer")
         return {"ok": True, "crees": 1, "message": m}

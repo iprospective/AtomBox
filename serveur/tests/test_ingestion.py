@@ -1,7 +1,7 @@
 """F001 + F002 dans une base jetable, par l'ORM : déduplication, rattachements, pièces, fil. Sans DATABASE_URL : sauté."""
 import os, re, uuid, pytest
 from sqlalchemy import select, func
-from atombox.magasin import Magasin
+from atombox.store import Store
 from atombox.uuid7 import uuid7
 
 F = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -21,7 +21,7 @@ def base():
     s = session(u)
     yield s
     s.close()
-    import atombox.db as db; db.moteur(u).dispose(); db._sync.clear()   # sinon la base est « in use » à la destruction
+    import atombox.db as db; db.engine(u).dispose(); db._sync.clear()   # sinon la base est « in use » à la destruction
     admin.execute("select pg_terminate_backend(pid) from pg_stat_activity where datname=%s and pid<>pg_backend_pid()", (nom,))
     admin.execute('DROP DATABASE "%s"' % nom); admin.close()
 
@@ -39,7 +39,7 @@ def boites(base):
 def test_ingestion_complete(base, boites, tmp_path):
     from atombox.ingestion.ingestion import ingerer
     from atombox.schema.modeles import Comm, Rattachement, PieceJointe, CommPieceJointe
-    m = Magasin(str(tmp_path))
+    m = Store(str(tmp_path))
     r1 = ingerer(base, m, boites[0], lire("simple.eml"), uid=12, uid_validity=1)
     assert r1["nouveau"] and r1["nature"] == "humain"
     assert m.existe(str(r1["comm_id"])), "le message brut est au magasin sous l'UUID de la comm (D145)"

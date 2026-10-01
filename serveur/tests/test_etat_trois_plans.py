@@ -29,7 +29,7 @@ def monde(tmp_path):
     from atombox.db import session as ouvrir
     from atombox.api.securite import hacher_mot_de_passe
     from atombox.ingestion.ingestion import adresse as adresse_de
-    from atombox.magasin import Magasin
+    from atombox.store import Store
     from atombox.schema.modeles import Acces, Boite, Comm, Compte, Dossier, Rattachement
     from atombox.schema.seeds import seed_builtins
     from atombox.services.mailbox import ensure_mailboxes
@@ -53,7 +53,7 @@ def monde(tmp_path):
     os.environ["DATABASE_URL"] = u
     os.environ["ATOMBOX_STORE"] = str(tmp_path / "magasin")
     for k in coupees: os.environ.pop(k, None)
-    s = ouvrir(u); Magasin(os.environ["ATOMBOX_STORE"])
+    s = ouvrir(u); Store(os.environ["ATOMBOX_STORE"])
     a = adresse_de(s, "contact@exemple.fr")
     boite = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(boite)
     compte = Compte(compte_id=uuid7(), login="mathieu", nom="Mathieu", actif=True,
@@ -90,7 +90,7 @@ def monde(tmp_path):
             if v is None: os.environ.pop(k, None)
             else: os.environ[k] = v
         import asyncio
-        db.moteur(u).dispose(); db._sync.clear()
+        db.engine(u).dispose(); db._sync.clear()
         for m in list(db._async.values()):
             try: asyncio.run(m.dispose())
             except Exception: pass
@@ -186,9 +186,9 @@ def test_traite_puis_archive_se_relit(monde):
 async def _journal(comm_id):
     """on lit par le MÊME chemin que la future route : `trace.lire`, pas un SELECT écrit ici —
     un test qui recompose la requête ne prouve pas que le lecteur du produit fonctionne"""
-    from atombox.db import fabrique_async
+    from atombox.db import async_session_factory
     from atombox.services import trace
-    async with fabrique_async()() as s:
+    async with async_session_factory()() as s:
         return await trace.history(s, comm_id)
 
 

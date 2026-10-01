@@ -29,7 +29,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from atombox.magasin.magasin import Magasin, empreinte   # noqa: E402
+from atombox.store.store import Store, empreinte   # noqa: E402
 from atombox.uuid7 import uuid7                          # noqa: E402
 
 # chapitre 15 : médiane 7 532 o, moyenne 86 ko — une log-normale calée sur ces deux nombres
@@ -69,7 +69,7 @@ def pct(v, n):
 
 def mesurer(nb: int, racine: str, graine: int = 42) -> dict:
     rnd = random.Random(graine)
-    mag = Magasin(racine)
+    mag = Store(racine)
     res = {"messages": nb, "mesure_le": time.strftime("%Y-%m-%dT%H:%M:%S")}
 
     # --- 1. répartition : ce que `ab/cd` fait d'un UUID v7 -------------------

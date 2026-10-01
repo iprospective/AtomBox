@@ -17,7 +17,7 @@ def test_le_parcours_complet(monde):  # noqa: F811
     from fastapi.testclient import TestClient
     from atombox.api.app import creer_app
     from atombox.api.securite import verifier_mot_de_passe
-    from atombox.db import fabrique_async
+    from atombox.db import async_session_factory
     from atombox.schema.modeles import Compte, Domaine, Reinitialisation
     from atombox.services import reinitialisation as reinit
     import atombox.db as db
@@ -27,7 +27,7 @@ def test_le_parcours_complet(monde):  # noqa: F811
     envoyes = []
 
     async def parcours():
-        async with fabrique_async()() as a:
+        async with async_session_factory()() as a:
             # 1. sans adresse de secours : rien ne part, et rien ne le dit
             await reinit.demander(a, "mathieu", "https://exemple.fr", envoyer=lambda o, d: envoyes.append((o, d)))
             assert not envoyes, "sans adresse de secours, aucun lien n'est envoyé (seul un gestionnaire peut réinitialiser)"

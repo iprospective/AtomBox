@@ -9,13 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..api.routage import Controleur, action
 from ..api.dependances import session_async
 from ..api.securite import compte_courant
-from ..filtres.moteur import ACTIONS, CHAMPS, OPERATEURS
+from ..filtres.engine import ACTIONS, CHAMPS, OPERATEURS
 from ..journal import journal
 from ..schema.modeles import Compte, Filtre
 from ..services.messages import boites_du_compte, iso
 from ..uuid7 import uuid7
 
-log = journal("filtres")
+log = journal("filters")
 
 def _serialiser(f: Filtre) -> dict:
     return {"id": str(f.filtre_id), "nom": f.nom, "ordre": f.ordre, "actif": f.actif,

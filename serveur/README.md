@@ -5,7 +5,7 @@ Python 3.12, `asyncio`, PostgreSQL ≥ 14 (**D154**). Découpé par fonctionnali
 | Dossier | F… | Rôle |
 |---|---|---|
 | `atombox/schema/` | F114 | le schéma **engendré** depuis le dictionnaire (`outils/gen-schema.py`) et ses migrations (Alembic) |
-| `atombox/magasin/` | F002 | le magasin d'octets `ab/cd/<id>`, zstd (D145) |
+| `atombox/store/` | F002 | le magasin d'octets `ab/cd/<id>`, zstd (D145) |
 | `atombox/ingestion/` | F001, F113 | le démon IMAP : IDLE, PEEK, reprise par UID ; synchronisation des états |
 | `atombox/filtres/` | F016 | le moteur de filtres |
 | `atombox/api/` | — | le routage (routes = contrôleurs + actions), la sécurité, l'application FastAPI, le contrat Pydantic engendré |
@@ -101,7 +101,7 @@ Processus : `uvicorn atombox.api.app:app` (N travailleurs), `python -m atombox.i
 
 ## F001, F002 — l'ingestion et le magasin
 
-`atombox/magasin/` : `ab/cd/<id>`, zstd conditionnel, jamais réécrit. `atombox/ingestion/` :
+`atombox/store/` : `ab/cd/<id>`, zstd conditionnel, jamais réécrit. `atombox/ingestion/` :
 `analyse.py` (le MIME par `email`), `identite.py` (D064), `ingestion.py` (une transaction par
 message, déduplication, rattachements, pièces, fil), `imap.py` (PEEK, reprise par UID, IDLE),
 `demon.py` (une tâche par boîte). Tests sans base : analyse, identité, magasin, migrations ;

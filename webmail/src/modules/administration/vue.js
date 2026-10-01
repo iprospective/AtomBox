@@ -210,7 +210,7 @@
 
     <div class="box"><h4>Journal</h4>
       <div class="frow">
-        <select id="j-domaine">${["atombox", "erreurs", "auth", "api", "imap", "ingestion", "magasin", "filtres", "apps", "schema", "demon", "etat"]
+        <select id="j-domaine">${["atombox", "erreurs", "auth", "api", "imap", "ingestion", "store", "filters", "apps", "schema", "daemon", "status"]
           .map(d => `<option${d === (ABX.Views.Admin._jd || "atombox") ? " selected" : ""}>${d}</option>`).join("")}</select>
         <select id="j-niveau">${["DEBUG", "INFO", "WARNING", "ERROR"]
           .map(n => `<option${n === (ABX.Views.Admin._jn || "INFO") ? " selected" : ""}>${n}</option>`).join("")}</select>

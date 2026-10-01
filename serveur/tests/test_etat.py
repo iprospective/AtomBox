@@ -8,7 +8,7 @@ from atombox.api.securite import compte_courant
 class FauxCompte: login = "test"; actif = True
 
 def test_journal_par_l_api(tmp_path):
-    d = str(tmp_path / "logs"); J.configurer(dossier_logs=d, niveau="debug", console=False, forcer=True)
+    d = str(tmp_path / "logs"); J.configure(log_directory=d, level="debug", console=False, force=True)
     try:
         J.journal("imap").debug("EXAMINE INBOX"); J.journal("imap").warning("IDLE refusé"); J.journal("auth").warning("connexion refusée pour 'x'")
         for lg in ("atombox", "atombox.imap", "atombox.auth"):
@@ -28,4 +28,4 @@ def test_journal_par_l_api(tmp_path):
         c2 = TestClient(creer_app(), raise_server_exceptions=False)
         assert c2.get("/api/v1/etat/journal").status_code in (401, 500), "sans jeton, pas de journal"
     finally:
-        J.configurer(forcer=True)
+        J.configure(force=True)

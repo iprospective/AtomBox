@@ -138,7 +138,7 @@ def monde(tmp_path_factory):
     from atombox.schema.modeles import Acces, Boite, Compte, Dossier
     from atombox.ingestion.ingestion import adresse, ingerer
     from atombox.api.securite import hacher_mot_de_passe
-    from atombox.magasin import Magasin
+    from atombox.store import Store
     from atombox.uuid7 import uuid7
     nom = "atombox_test_" + uuid.uuid4().hex[:8]
     admin = psycopg.connect(url, autocommit=True); admin.execute('CREATE DATABASE "%s"' % nom)
@@ -155,7 +155,7 @@ def monde(tmp_path_factory):
     avant = {k: os.environ.get(k) for k in ["DATABASE_URL", "ATOMBOX_STORE"] + coupees}
     for k in coupees: os.environ.pop(k, None)
     os.environ["DATABASE_URL"] = u; os.environ["ATOMBOX_STORE"] = str(tmp_path_factory.mktemp("magasin"))
-    s = ouvrir(u); m = Magasin(os.environ["ATOMBOX_STORE"])
+    s = ouvrir(u); m = Store(os.environ["ATOMBOX_STORE"])
     a = adresse(s, "contact@exemple.fr")
     boite = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(boite)
     compte = Compte(compte_id=uuid7(), login="mathieu", nom="Mathieu", actif=True, cree_le=datetime.now(timezone.utc), mot_de_passe_empreinte=hacher_mot_de_passe("secret")); s.add(compte)
@@ -175,7 +175,7 @@ def monde(tmp_path_factory):
         if v is None: os.environ.pop(k, None)
         else: os.environ[k] = v
     import atombox.db as db, asyncio
-    db.moteur(u).dispose(); db._sync.clear()
+    db.engine(u).dispose(); db._sync.clear()
     for m in list(db._async.values()):
         try: asyncio.run(m.dispose())
         except Exception: pass

@@ -133,13 +133,13 @@ async def move(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier
 
     `cible` IMPOSE la boîte d'arrivée : un `MOVE` IMAP nomme sa destination, et déduire celle-ci de
     l'état enverrait le message dans l'INBOX alors que le client a dit « Devis 2026 »."""
-    from ..uid_servi import attribuer_async
+    from ..served_uid import assign_async
     maintenant = datetime.now(timezone.utc)
     courant = await s.get(Dossier, r.dossier_id) if r.dossier_id else None
     if cible is None:
         cible = await s.scalar(_target_query(r.boite_id, valeur, r.dossier_origine_id).limit(1))
     # L'UID D'ABORD : toutes les requêtes ont lieu AVANT la première mutation (cf. `_apply_move`).
-    uid = await attribuer_async(s, cible.dossier_id) if cible is not None else None
+    uid = await assign_async(s, cible.dossier_id) if cible is not None else None
     # ET CEINTURE EN PLUS DES BRETELLES. L'ordre suffit en principe ; `no_autoflush` garantit que
     # même une requête ajoutée ici par distraction ne pourra pas faire partir un état à moitié
     # appliqué — `dossier_id` neuf avec l'ancien `uid_servi` heurte l'unicité, et le client voit
@@ -153,13 +153,13 @@ async def move(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier
 
 def move_sync(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier | None = None) -> str | None:
     """IMAP et démon (session synchrone) — le même geste, la même trace"""
-    from ..uid_servi import attribuer
+    from ..served_uid import assign
     maintenant = datetime.now(timezone.utc)
     courant = s.get(Dossier, r.dossier_id) if r.dossier_id else None
     if cible is None:
         cible = s.scalar(_target_query(r.boite_id, valeur, r.dossier_origine_id).limit(1))
     # L'UID D'ABORD, puis `no_autoflush` : voir `deplacer` — même raison, même garantie.
-    uid = attribuer(s, cible.dossier_id) if cible is not None else None
+    uid = assign(s, cible.dossier_id) if cible is not None else None
     with s.no_autoflush:
         avant = _apply_move(r, valeur, cible, compte_id, maintenant, courant, uid)
     trace.record(s, compte_id, JOURNAL_ACTIONS.get(valeur or "", "refiled"), "rattachement", r.comm_id,

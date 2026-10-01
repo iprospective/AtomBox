@@ -81,6 +81,13 @@ CONVERTIS = (
     "atombox/services/personal_state.py",
     "atombox/services/trace.py",
     "atombox/schema/seeds.py",
+    # étage 2 — l'infrastructure : ce que tout le reste importe, donc ce qu'on convertit d'abord
+    "atombox/journal.py",
+    "atombox/db.py",
+    "atombox/served_uid.py",
+    "atombox/store/store.py",
+    "atombox/settings.py",
+    "atombox/uuid7.py",
 )
 
 # Un dictionnaire, comme celui des réglages : des MOTS, pas une grammaire. Une heuristique sur les
@@ -89,7 +96,11 @@ MOTS_FR = ("deplacer", "poser", "retirer", "ouvrir", "toucher", "etat", "etats",
            "boite", "compte", "drapeau", "drapeaux", "marqueur", "marqueurs", "semer", "semences",
            "assurer", "tracer", "lire", "courant", "cible", "avant", "apres", "sortie", "sorties",
            "requete", "preparer", "verifier", "annuler", "releveur", "servi", "nom", "valeur",
-           "maintenant", "modifiables", "corbeille", "integres", "travail", "court")
+           "maintenant", "modifiables", "corbeille", "integres", "travail", "court",
+           # étage 2 — les mots retirés de l'infrastructure
+           "magasin", "moteur", "fabrique", "niveau", "niveaux", "configurer", "attribuer",
+           "domaines", "fichier", "verrou", "defaut", "forcer", "rendu", "normaliser", "racine",
+           "magie", "seuil")   # pas "gain" : le mot est le même dans les deux langues
 
 
 def test_les_fichiers_convertis_restent_en_anglais():

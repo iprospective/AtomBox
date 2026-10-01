@@ -22,19 +22,19 @@ import hashlib, os, tempfile
 import zstandard
 from ..journal import journal
 
-log = journal("magasin")
+log = journal("store")
 
-MAGIE_ZSTD = b"\x28\xb5\x2f\xfd"
-SEUIL_GAIN = 0.10          # en dessous de 10 % gagnés, on garde les octets tels quels (D069)
+ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+GAIN_THRESHOLD = 0.10          # en dessous de 10 % gagnés, on garde les octets tels quels (D069)
 
 def empreinte(octets: bytes) -> str:
     """l'identité d'un contenu : SHA-256 en hexadécimal — c'est aussi son nom de fichier"""
     return hashlib.sha256(octets).hexdigest()
 
-class Magasin:
-    def __init__(self, racine: str, niveau_zstd: int = 9):
+class Store:
+    def __init__(self, racine: str, zstd_level: int = 9):
         self.racine = os.path.abspath(racine)
-        self._c = zstandard.ZstdCompressor(level=niveau_zstd)
+        self._c = zstandard.ZstdCompressor(level=zstd_level)
         self._d = zstandard.ZstdDecompressor()
         os.makedirs(self.racine, exist_ok=True)
 
@@ -59,7 +59,7 @@ class Magasin:
             return { "compression": self._compression_de(chemin), "taille_octets": len(octets),
                      "taille_stockee": os.path.getsize(chemin), "nouveau": False }
         zst = self._c.compress(octets)
-        garder_zstd = compresser if compresser is not None else (len(zst) <= len(octets) * (1 - SEUIL_GAIN))
+        garder_zstd = compresser if compresser is not None else (len(zst) <= len(octets) * (1 - GAIN_THRESHOLD))
         contenu = zst if garder_zstd else octets
         os.makedirs(os.path.dirname(chemin), exist_ok=True)
         # atomique : un fichier temporaire dans le même répertoire, puis un rename
@@ -80,9 +80,9 @@ class Magasin:
 
     def lire(self, identifiant) -> bytes:
         with open(self.chemin(identifiant), "rb") as f: contenu = f.read()
-        if contenu[:4] == MAGIE_ZSTD:
+        if contenu[:4] == ZSTD_MAGIC:
             return self._d.decompress(contenu, max_output_size=1 << 31)
         return contenu
 
     def _compression_de(self, chemin) -> str:
-        with open(chemin, "rb") as f: return "zstd" if f.read(4) == MAGIE_ZSTD else "aucune"
+        with open(chemin, "rb") as f: return "zstd" if f.read(4) == ZSTD_MAGIC else "aucune"

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ..uuid7 import uuid7
-from ..magasin import Magasin
+from ..store import Store
 from ..schema.modeles import Adresse, Blob, Comm, CommEmail, CommPieceJointe, Domaine, Dossier, Participant, PieceJointe, Rattachement
 from .analyse import analyser
 from .identite import empreinte_identite
@@ -52,8 +52,8 @@ def adresse(s: Session, complete: str) -> Adresse:
     s.add(a); s.flush()
     return a
 
-def blob(s: Session, magasin: Magasin, octets: bytes) -> Blob:
-    e, info = magasin.deposer(octets)
+def blob(s: Session, store: Store, octets: bytes) -> Blob:
+    e, info = store.deposer(octets)
     b = s.get(Blob, e)
     if b: b.nb_references += 1; return b
     b = Blob(empreinte=e, taille_octets=info["taille_octets"], taille_stockee=info["taille_stockee"], compression=info["compression"],
@@ -61,7 +61,7 @@ def blob(s: Session, magasin: Magasin, octets: bytes) -> Blob:
     s.add(b); s.flush()
     return b
 
-def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, uid_validity=None, dossier_id=None,
+def ingerer(s: Session, store: Store, boite_id, octets: bytes, *, uid=None, uid_validity=None, dossier_id=None,
             date_recue: datetime | None = None, sens: str = "in", dossier_alias: str | None = None) -> dict:
     a = analyser(octets)
     ctx = accroches.emettre("message.avant_ingestion", analyse=a, boite_id=boite_id, octets=octets, tags=[])
@@ -80,8 +80,8 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
         if refs:
             parent = s.scalar(select(Comm).join(CommEmail, CommEmail.comm_id == Comm.comm_id).where(CommEmail.message_id.in_(refs)).limit(1))
             if parent and parent.thread_id: thread_id = parent.thread_id
-        magasin.ecrire(str(comm_id), octets)               # le message brut, sous l'UUID de la comm (D145)
-        brut = blob(s, magasin, octets)                    # et son blob, pour la reconstruction à l'octet (D025)
+        store.ecrire(str(comm_id), octets)               # le message brut, sous l'UUID de la comm (D145)
+        brut = blob(s, store, octets)                    # et son blob, pour la reconstruction à l'octet (D025)
         s.add(Comm(comm_id=comm_id, type="email", date_recue=date_recue or a.date_declaree or datetime.now(timezone.utc),
                    date_declaree=a.date_declaree, date_ingestion=datetime.now(timezone.utc), sens=sens, sujet=a.sujet,
                    sujet_normalise=a.sujet_normalise, thread_id=thread_id, nature=a.nature, from_adresse=a.from_adresse,
@@ -94,7 +94,7 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
         for role, nom, adr, ordre in a.participants:
             s.add(Participant(comm_id=comm_id, role=role, adresse_id=adresse(s, adr).adresse_id, nom_affiche=nom, ordre=ordre))
         for p in a.pieces:
-            b = blob(s, magasin, p.octets)
+            b = blob(s, store, p.octets)
             pj = s.scalar(select(PieceJointe).where(PieceJointe.blob_ref == b.empreinte, PieceJointe.type_detecte == p.type_detecte))
             if pj: pj.nb_references += 1
             else:
@@ -120,8 +120,8 @@ def ingerer(s: Session, magasin: Magasin, boite_id, octets: bytes, *, uid=None, 
             d2 = s.scalar(select(Dossier).where(Dossier.boite_id == boite_id, Dossier.alias_imap == regles["dossier"]))
             if d2 is not None: cible = d2.dossier_id
             else: log.warning("règle « %s » : dossier %r inconnu dans cette boîte", ", ".join(regles["regles"]), regles["dossier"])
-        from ..uid_servi import attribuer as attribuer_uid
-        s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, uid_servi=attribuer_uid(s, cible),
+        from ..served_uid import assign as assign_uid
+        s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, uid_servi=assign_uid(s, cible),
                            status=p.get("statut", "new"), personnel=False, gele=False,
                            dossier_id=cible, uid_imap=uid))
         # CE QU'UNE RÈGLE POSE COMME ÉTAT PERSONNEL (lu, drapeau) VA SUR UNE PERSONNE, pas sur le

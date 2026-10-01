@@ -31,7 +31,7 @@ log = journal("imap")
 # plutôt qu'à la création du dossier : les dossiers naissent à quatre endroits (amorçage, API,
 # découverte IMAP, harnais de test), et un défaut posé à trois d'entre eux est un défaut qui manque.
 # Le seul moment où l'UIDVALIDITY compte vraiment est celui où l'on sert quelque chose.
-def _requete(dossier_id):
+def _statement(dossier_id):
     return (update(Dossier).where(Dossier.dossier_id == dossier_id)
             .values(uid_servi_suivant=func.coalesce(Dossier.uid_servi_suivant, 1) + 1,
                     uid_validity_servie=func.coalesce(Dossier.uid_validity_servie,
@@ -39,19 +39,19 @@ def _requete(dossier_id):
             .returning(Dossier.uid_servi_suivant))
 
 
-def attribuer(session, dossier_id) -> int | None:
+def assign(session, dossier_id) -> int | None:
     """version synchrone — l'ingestion (F001)"""
     if dossier_id is None: return None
-    return _rendu(session.scalar(_requete(dossier_id)), dossier_id)
+    return _uid_from_next(session.scalar(_statement(dossier_id)), dossier_id)
 
 
-async def attribuer_async(session, dossier_id) -> int | None:
+async def assign_async(session, dossier_id) -> int | None:
     """version asynchrone — l'API"""
     if dossier_id is None: return None
-    return _rendu(await session.scalar(_requete(dossier_id)), dossier_id)
+    return _uid_from_next(await session.scalar(_statement(dossier_id)), dossier_id)
 
 
-def _rendu(suivant, dossier_id):
+def _uid_from_next(suivant, dossier_id):
     if suivant is None:
         log.warning("UID demandé pour un dossier inconnu (%s) — le message ne sera pas servi en IMAP", dossier_id)
         return None

@@ -10,13 +10,13 @@ import os
 from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ..journal import dossier as dossier_journaux
+from ..journal import directory as dossier_journaux
 from ..schema.modeles import Adresse, Blob, Boite, Comm, Dossier, Evenement, Filtre, PieceJointe, Rattachement
 from ..journal import journal
 from .messages import boites_du_compte, iso
 from .. import settings
 
-log = journal("etat")
+log = journal("status")
 
 async def etat(s: AsyncSession, compte) -> dict:
     maintenant = datetime.now(timezone.utc)

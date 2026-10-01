@@ -53,9 +53,9 @@ class BoiteAuxLettres:
 class MessageServi:
     """un message, vu d'un client : ses drapeaux, sa taille, et ses octets à la demande"""
 
-    def __init__(self, uid, comm, rattachement, magasin, blob_ref, message_id=None, etat=None):
+    def __init__(self, uid, comm, rattachement, store, blob_ref, message_id=None, etat=None):
         self.uid, self._c, self._r = uid, comm, rattachement
-        self._magasin, self._blob, self._message_id = magasin, blob_ref, message_id
+        self._magasin, self._blob, self._message_id = store, blob_ref, message_id
         self.taille = comm.taille or 0
         self.date_interne = email.utils.format_datetime(comm.date_recue).replace(",", "")[:26] \
             if comm.date_recue else "01-Jan-1970 00:00:00 +0000"
@@ -130,8 +130,8 @@ class Vue:
     et mélanger une session asynchrone partagée avec des connexions de longue durée est le meilleur
     moyen de bloquer tout le monde derrière un client qui télécharge un gros message."""
 
-    def __init__(self, session, magasin):
-        self.s, self.magasin = session, magasin
+    def __init__(self, session, store):
+        self.s, self.store = session, store
         self.compte = None     # posé à l'authentification : les drapeaux servis sont les SIENS
 
     # ── qui es-tu ───────────────────────────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ class Vue:
         if c is None: return None
         from ..services.personal_state import state_sync
         etat = state_sync(self.s, self.compte.compte_id if self.compte else None, r.comm_id, r.boite_id)
-        return MessageServi(uid, c, r, self.magasin, e.blob_ref if e else None,
+        return MessageServi(uid, c, r, self.store, e.blob_ref if e else None,
                             message_id=e.message_id if e else None, etat=etat)
 
     def contient(self, boite, uid: int, champ: str, aiguille: str) -> bool:

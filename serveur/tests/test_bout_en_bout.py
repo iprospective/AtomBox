@@ -98,7 +98,7 @@ def chaine(tmp_path_factory):
     u = re.sub(r"/[^/?]*(\?|$)", "/" + nom + r"\1", url, count=1)
     with psycopg.connect(u) as cnx:
         cnx.execute((RACINE / "atombox" / "schema" / "schema.sql").read_text(encoding="utf-8")); cnx.commit()
-    magasin, logs = tmp_path_factory.mktemp("magasin"), tmp_path_factory.mktemp("journaux")
+    store, logs = tmp_path_factory.mktemp("magasin"), tmp_path_factory.mktemp("journaux")
 
     # le monde : un compte, une boîte, ses dossiers — ce qu'un administrateur pose avant la première relève
     s = ouvrir(u)
@@ -114,7 +114,7 @@ def chaine(tmp_path_factory):
 
     imap, relais = FauxImap(), FauxRelais(); imap.start(); relais.start()
     # JAMAIS le vrai relais ni le vrai IMAP : tout est forcé sur les doublures, quoi que dise l'environnement
-    env = dict(os.environ, DATABASE_URL=u, ATOMBOX_STORE=str(magasin), ATOMBOX_LOGS=str(logs),
+    env = dict(os.environ, DATABASE_URL=u, ATOMBOX_STORE=str(store), ATOMBOX_LOGS=str(logs),
                ATOMBOX_IMAP_HOST="127.0.0.1", ATOMBOX_IMAP_PORT=str(imap.port), ATOMBOX_IMAP_TLS="aucun",
                ATOMBOX_IMAP_MASTER="", ATOMBOX_IMAP_PASSWORD="x",
                ATOMBOX_SMTP_HOST="127.0.0.1", ATOMBOX_SMTP_PORT=str(relais.port), ATOMBOX_SMTP_TLS="aucun",
@@ -131,7 +131,7 @@ def chaine(tmp_path_factory):
              for n, mod in (("ingestion", "atombox.ingestion.demon"), ("taches", "atombox.taches"))}
 
     avant = {k: os.environ.get(k) for k in ("DATABASE_URL", "ATOMBOX_STORE", "ATOMBOX_LOGS")}
-    os.environ.update(DATABASE_URL=u, ATOMBOX_STORE=str(magasin), ATOMBOX_LOGS=str(logs))
+    os.environ.update(DATABASE_URL=u, ATOMBOX_STORE=str(store), ATOMBOX_LOGS=str(logs))
     import atombox.db as db
     db._async.clear(); db._sync.clear()
     from fastapi.testclient import TestClient
@@ -159,7 +159,7 @@ def chaine(tmp_path_factory):
             if v is None: os.environ.pop(k, None)
             else: os.environ[k] = v
         import asyncio
-        db.moteur(u).dispose(); db._sync.clear()
+        db.engine(u).dispose(); db._sync.clear()
         for m in list(db._async.values()):
             try: asyncio.run(m.dispose())
             except Exception: pass

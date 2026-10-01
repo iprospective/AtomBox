@@ -3,7 +3,7 @@ règle muette visible (D075 § 1 — celle du chapitre 14, un `allof` là où il
 import os, re as _re, uuid as _uuid
 from datetime import datetime, timedelta, timezone
 import pytest
-from atombox.filtres.moteur import ACTIONS, CHAMPS, OPERATEURS, appliquer, evaluer
+from atombox.filtres.engine import ACTIONS, CHAMPS, OPERATEURS, appliquer, evaluer
 from atombox.ingestion.analyse import analyser
 
 F = os.path.join(os.path.dirname(__file__), "fixtures")

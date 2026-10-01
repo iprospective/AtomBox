@@ -1,7 +1,7 @@
 """LE JOURNAL (D152, mise en œuvre) — des fichiers par DOMAINE et par SÉVÉRITÉ, dans logs/.
 
     logs/atombox.log     tout, au niveau réglé
-    logs/<domaine>.log   un fichier par domaine : auth, api, imap, ingestion, magasin, filtres, apps, schema, demon, etat
+    logs/<domaine>.log   un fichier par domaine : auth, api, imap, ingestion, store, filters, apps, schema, daemon, status
     logs/erreurs.log     WARNING et plus, tous domaines — ce qu'on lit à 3 h du matin
 
 Quatre niveaux : DEBUG (le détail d'un protocole), INFO (ce qui s'est passé), WARNING (ce qui a
@@ -20,61 +20,61 @@ Usage : `from ..journal import journal ; log = journal("imap") ; log.info("…")
 from __future__ import annotations
 import logging, logging.handlers, os, sys, threading
 
-DOMAINES = ("auth", "api", "imap", "ingestion", "magasin", "filtres", "apps", "schema", "demon", "etat")
-FORMAT = "%(asctime)s %(levelname)-7s %(domaine)-9s %(message)s"
-_verrou = threading.Lock(); _configure = False; _dossier = None
+DOMAINS = ("auth", "api", "imap", "ingestion", "store", "filters", "apps", "schema", "daemon", "status")
+FORMAT = "%(asctime)s %(levelname)-7s %(domain)-9s %(message)s"
+_lock = threading.Lock(); _configured = False; _directory = None
 
-class _Domaine(logging.Filter):
+class _Domain(logging.Filter):
     def filter(self, r):
-        r.domaine = r.name.split(".", 1)[1] if r.name.startswith("atombox.") else r.name
+        r.domain = r.name.split(".", 1)[1] if r.name.startswith("atombox.") else r.name
         return True
 
-def dossier() -> str:
-    global _dossier
-    if _dossier: return _dossier
+def directory() -> str:
+    global _directory
+    if _directory: return _directory
     d = os.environ.get("ATOMBOX_LOGS")
     if not d:
-        ici = os.path.dirname(os.path.abspath(__file__))
-        d = os.path.join(ici, "..", "..", "logs")            # <dépôt>/logs
-    _dossier = os.path.abspath(d)
-    os.makedirs(_dossier, exist_ok=True)
-    return _dossier
+        here = os.path.dirname(os.path.abspath(__file__))
+        d = os.path.join(here, "..", "..", "logs")            # <dépôt>/logs
+    _directory = os.path.abspath(d)
+    os.makedirs(_directory, exist_ok=True)
+    return _directory
 
-def _niveau(nom: str, defaut: int) -> int:
-    return getattr(logging, nom.upper(), defaut) if isinstance(nom, str) else defaut
+def _level(name: str, default: int) -> int:
+    return getattr(logging, name.upper(), default) if isinstance(name, str) else default
 
-def _fichier(chemin: str, niveau: int) -> logging.Handler:
-    h = logging.handlers.TimedRotatingFileHandler(chemin, when="midnight", backupCount=14, encoding="utf-8", utc=False)
-    h.setLevel(niveau); h.setFormatter(logging.Formatter(FORMAT)); h.addFilter(_Domaine())
+def _file_handler(path: str, level: int) -> logging.Handler:
+    h = logging.handlers.TimedRotatingFileHandler(path, when="midnight", backupCount=14, encoding="utf-8", utc=False)
+    h.setLevel(level); h.setFormatter(logging.Formatter(FORMAT)); h.addFilter(_Domain())
     return h
 
-def configurer(dossier_logs: str | None = None, niveau: str | None = None, niveaux: str | None = None, console: bool | None = None, forcer: bool = False):
+def configure(log_directory: str | None = None, level: str | None = None, levels: str | None = None, console: bool | None = None, force: bool = False):
     """appelée une fois par processus — par journal() à la première demande, ou explicitement par les tests"""
-    global _configure, _dossier
-    with _verrou:
-        if _configure and not forcer: return
-        if dossier_logs: _dossier = None; os.environ["ATOMBOX_LOGS"] = dossier_logs
-        d = dossier()
+    global _configured, _directory
+    with _lock:
+        if _configured and not force: return
+        if log_directory: _directory = None; os.environ["ATOMBOX_LOGS"] = log_directory
+        d = directory()
         base = logging.getLogger("atombox")
         for h in list(base.handlers): base.removeHandler(h); h.close()
-        defaut = _niveau(niveau or os.environ.get("ATOMBOX_LOG_LEVEL", "info"), logging.INFO)
+        default = _level(level or os.environ.get("ATOMBOX_LOG_LEVEL", "info"), logging.INFO)
         base.setLevel(logging.DEBUG); base.propagate = False
-        base.addHandler(_fichier(os.path.join(d, "atombox.log"), defaut))
-        base.addHandler(_fichier(os.path.join(d, "erreurs.log"), logging.WARNING))
+        base.addHandler(_file_handler(os.path.join(d, "atombox.log"), default))
+        base.addHandler(_file_handler(os.path.join(d, "erreurs.log"), logging.WARNING))
         if console if console is not None else os.environ.get("ATOMBOX_LOG_CONSOLE") == "1":
-            c = logging.StreamHandler(sys.stderr); c.setLevel(defaut); c.setFormatter(logging.Formatter(FORMAT)); c.addFilter(_Domaine()); base.addHandler(c)
-        par_domaine = {}
-        for morceau in (niveaux or os.environ.get("ATOMBOX_LOG_LEVELS", "")).split(","):
-            if "=" in morceau: k, v = morceau.split("=", 1); par_domaine[k.strip()] = _niveau(v.strip(), defaut)
-        for dom in DOMAINES:
+            c = logging.StreamHandler(sys.stderr); c.setLevel(default); c.setFormatter(logging.Formatter(FORMAT)); c.addFilter(_Domain()); base.addHandler(c)
+        by_domain = {}
+        for chunk in (levels or os.environ.get("ATOMBOX_LOG_LEVELS", "")).split(","):
+            if "=" in chunk: k, v = chunk.split("=", 1); by_domain[k.strip()] = _level(v.strip(), default)
+        for dom in DOMAINS:
             lg = logging.getLogger("atombox." + dom)
             for h in list(lg.handlers): lg.removeHandler(h); h.close()
-            lg.setLevel(par_domaine.get(dom, defaut))
-            lg.addHandler(_fichier(os.path.join(d, dom + ".log"), logging.DEBUG))
-        _configure = True
+            lg.setLevel(by_domain.get(dom, default))
+            lg.addHandler(_file_handler(os.path.join(d, dom + ".log"), logging.DEBUG))
+        _configured = True
 
-def journal(domaine: str) -> logging.Logger:
+def journal(domain: str) -> logging.Logger:
     """le logger d'un domaine — configure le journal à la première demande"""
-    if domaine not in DOMAINES: raise ValueError("domaine de journal inconnu : %s (connus : %s)" % (domaine, ", ".join(DOMAINES)))
-    if not _configure: configurer()
-    return logging.getLogger("atombox." + domaine)
+    if domain not in DOMAINS: raise ValueError("domaine de journal inconnu : %s (connus : %s)" % (domain, ", ".join(DOMAINS)))
+    if not _configured: configure()
+    return logging.getLogger("atombox." + domain)

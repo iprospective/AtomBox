@@ -1,37 +1,37 @@
 """F002 — le magasin d'octets : ab/cd/<id>, jamais réécrit, zstd conditionnel, lecture transparente."""
 import os, uuid, pytest
-from atombox.magasin import Magasin, empreinte
+from atombox.store import Store, empreinte
 from atombox.uuid7 import uuid7
 
 @pytest.fixture
-def magasin(tmp_path): return Magasin(str(tmp_path / "magasin"))
+def store(tmp_path): return Store(str(tmp_path / "magasin"))
 
-def test_chemin_ab_cd(magasin):
+def test_chemin_ab_cd(store):
     e = "abcdef0123456789" * 4
-    assert magasin.chemin(e).endswith(os.path.join("ab", "cd", e))
+    assert store.chemin(e).endswith(os.path.join("ab", "cd", e))
     u = str(uuid7())
-    assert magasin.chemin(u).endswith(os.path.join(u[:2], u[2:4], u))
-    with pytest.raises(ValueError): magasin.chemin("../evasion")
+    assert store.chemin(u).endswith(os.path.join(u[:2], u[2:4], u))
+    with pytest.raises(ValueError): store.chemin("../evasion")
 
-def test_deposer_lit_et_dedoublonne(magasin):
+def test_deposer_lit_et_dedoublonne(store):
     octets = b"facture " * 1000
-    e, info = magasin.deposer(octets)
+    e, info = store.deposer(octets)
     assert e == empreinte(octets) and info["nouveau"] and info["compression"] == "zstd" and info["taille_stockee"] < len(octets)
-    assert magasin.lire(e) == octets
-    e2, info2 = magasin.deposer(octets)
+    assert store.lire(e) == octets
+    e2, info2 = store.deposer(octets)
     assert e2 == e and not info2["nouveau"], "le même contenu n'est pas réécrit"
 
-def test_compression_conditionnelle(magasin):
+def test_compression_conditionnelle(store):
     aleatoire = os.urandom(4096)
-    e, info = magasin.deposer(aleatoire)
+    e, info = store.deposer(aleatoire)
     assert info["compression"] == "aucune" and info["taille_stockee"] == 4096, "ne pas compresser ce qui ne gagne rien (D069)"
-    assert magasin.lire(e) == aleatoire
+    assert store.lire(e) == aleatoire
 
-def test_message_brut_sous_uuid(magasin):
+def test_message_brut_sous_uuid(store):
     u = uuid7(); brut = b"From: a@b\r\n\r\nbonjour\r\n" * 50
-    info = magasin.ecrire(str(u), brut)
-    assert info["nouveau"] and magasin.existe(str(u)) and magasin.lire(str(u)) == brut
-    assert not magasin.ecrire(str(u), b"autre chose")["nouveau"] and magasin.lire(str(u)) == brut, "jamais réécrit"
+    info = store.ecrire(str(u), brut)
+    assert info["nouveau"] and store.existe(str(u)) and store.lire(str(u)) == brut
+    assert not store.ecrire(str(u), b"autre chose")["nouveau"] and store.lire(str(u)) == brut, "jamais réécrit"
 
 def test_uuid7_croissant_et_versionne():
     a, b = uuid7(), uuid7()
@@ -43,8 +43,8 @@ def test_ab_cd_decoupe_le_temps_pas_l_espace(tmp_path):
     """D145b — la propriété mesurée au chapitre 20, figée ici : un code qui changerait
     l'adressage sans y penser casserait ce test, et relirait la décision."""
     from atombox.uuid7 import uuid7
-    from atombox.magasin.magasin import Magasin, empreinte
-    m = Magasin(str(tmp_path))
+    from atombox.store.store import Store, empreinte
+    m = Store(str(tmp_path))
 
     ids = [str(uuid7()) for _ in range(500)]
     feuilles = {i[:4] for i in ids}

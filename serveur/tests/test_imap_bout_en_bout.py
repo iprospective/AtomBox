@@ -33,7 +33,7 @@ def serveur_imap(tmp_path_factory):
     if not url: pytest.skip("DATABASE_URL absent")
     import psycopg, re as _re
     from atombox.db import session as ouvrir
-    from atombox.magasin import Magasin
+    from atombox.store import Store
     from atombox.api.securite import hacher_mot_de_passe
     from atombox.ingestion.ingestion import adresse, ingerer
     from atombox.schema.modeles import Acces, Boite, Compte, Dossier
@@ -45,7 +45,7 @@ def serveur_imap(tmp_path_factory):
     ici = os.path.dirname(os.path.abspath(__file__))
     with psycopg.connect(u) as c:
         c.execute(open(os.path.join(ici, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read()); c.commit()
-    magasin = Magasin(str(tmp_path_factory.mktemp("magasin")))
+    store = Store(str(tmp_path_factory.mktemp("magasin")))
     s = ouvrir(u)
     a = adresse(s, "contact@exemple.fr")
     boite = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(boite)
@@ -64,7 +64,7 @@ def serveur_imap(tmp_path_factory):
     seed_builtins(s); ensure_mailboxes(s, boite.boite_id)
     s.commit()
     for i in range(3):
-        ingerer(s, magasin, boite.boite_id, MESSAGE.replace(b"<c4412@", b"<c%d@" % i), dossier_id=inbox.dossier_id)
+        ingerer(s, store, boite.boite_id, MESSAGE.replace(b"<c4412@", b"<c%d@" % i), dossier_id=inbox.dossier_id)
 
     port = _port_libre()
     pret = threading.Event()
@@ -73,7 +73,7 @@ def serveur_imap(tmp_path_factory):
     def tourner():
         async def demarrer():
             from atombox.imap.serveur import Ecouteur
-            e = Ecouteur(lambda: ouvrir(u), magasin)
+            e = Ecouteur(lambda: ouvrir(u), store)
             srv = await asyncio.start_server(e.client, "127.0.0.1", port)
             boucle["serveur"] = srv
             pret.set()
@@ -85,10 +85,10 @@ def serveur_imap(tmp_path_factory):
 
     fil = threading.Thread(target=tourner, daemon=True); fil.start()
     assert pret.wait(10), "le serveur IMAP n'a pas démarré"
-    yield {"port": port, "magasin": magasin, "session": s}
+    yield {"port": port, "magasin": store, "session": s}
     s.close()
     import atombox.db as db, asyncio as aio
-    db.moteur(u).dispose(); db._sync.clear()
+    db.engine(u).dispose(); db._sync.clear()
     for m in list(db._async.values()):
         try: aio.run(m.dispose())
         except Exception: pass
