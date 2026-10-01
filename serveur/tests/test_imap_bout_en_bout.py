@@ -32,39 +32,39 @@ def serveur_imap(tmp_path_factory):
     url = os.environ.get("DATABASE_URL")
     if not url: pytest.skip("DATABASE_URL absent")
     import psycopg, re as _re
-    from atombox.db import session as ouvrir
+    from atombox.db import session as open_mailbox
     from atombox.store import Store
     from atombox.api.securite import hacher_mot_de_passe
     from atombox.ingestion.ingestion import adresse, ingerer
     from atombox.schema.modeles import Acces, Boite, Compte, Dossier
     from atombox.uuid7 import uuid7
 
-    nom = "atombox_imap_" + uuid.uuid4().hex[:8]
-    admin = psycopg.connect(url, autocommit=True); admin.execute('CREATE DATABASE "%s"' % nom)
-    u = _re.sub(r"/[^/?]*(\?|$)", "/" + nom + r"\1", url, count=1)
+    name = "atombox_imap_" + uuid.uuid4().hex[:8]
+    admin = psycopg.connect(url, autocommit=True); admin.execute('CREATE DATABASE "%s"' % name)
+    u = _re.sub(r"/[^/?]*(\?|$)", "/" + name + r"\1", url, count=1)
     ici = os.path.dirname(os.path.abspath(__file__))
     with psycopg.connect(u) as c:
         c.execute(open(os.path.join(ici, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read()); c.commit()
     store = Store(str(tmp_path_factory.mktemp("magasin")))
-    s = ouvrir(u)
+    s = open_mailbox(u)
     a = adresse(s, "contact@exemple.fr")
-    boite = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(boite)
+    mailbox = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(mailbox)
     compte = Compte(compte_id=uuid7(), login="mathieu", nom="Mathieu", actif=True,
                     cree_le=datetime.now(timezone.utc), mot_de_passe_empreinte=hacher_mot_de_passe("secret")); s.add(compte)
-    s.add(Acces(compte_id=compte.compte_id, boite_id=boite.boite_id, role="membre",
+    s.add(Acces(compte_id=compte.compte_id, boite_id=mailbox.boite_id, role="membre",
                 debut=datetime.now(timezone.utc), accorde_par=compte.compte_id))
-    inbox = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom="INBOX", alias_imap="INBOX", protege=True); s.add(inbox)
+    inbox = Dossier(dossier_id=uuid7(), boite_id=mailbox.boite_id, nom="INBOX", alias_imap="INBOX", protege=True); s.add(inbox)
     for alias in ("Sent", "Trash"):
-        s.add(Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom=alias, alias_imap=alias, protege=True))
+        s.add(Dossier(dossier_id=uuid7(), boite_id=mailbox.boite_id, nom=alias, alias_imap=alias, protege=True))
     s.flush()
     # LES CINQ BOÎTES AUX LETTRES (D183) : `schema.sql` est un DDL, il n'apporte aucune donnée, et
     # sans « Archive » un MOVE vers elle répond TRYCREATE — exactement le geste qui « ne fait rien ».
     from atombox.schema.seeds import seed_builtins
     from atombox.services.mailbox import ensure_mailboxes
-    seed_builtins(s); ensure_mailboxes(s, boite.boite_id)
+    seed_builtins(s); ensure_mailboxes(s, mailbox.boite_id)
     s.commit()
     for i in range(3):
-        ingerer(s, store, boite.boite_id, MESSAGE.replace(b"<c4412@", b"<c%d@" % i), dossier_id=inbox.dossier_id)
+        ingerer(s, store, mailbox.boite_id, MESSAGE.replace(b"<c4412@", b"<c%d@" % i), dossier_id=inbox.dossier_id)
 
     port = _port_libre()
     pret = threading.Event()
@@ -72,8 +72,8 @@ def serveur_imap(tmp_path_factory):
 
     def tourner():
         async def demarrer():
-            from atombox.imap.serveur import Ecouteur
-            e = Ecouteur(lambda: ouvrir(u), store)
+            from atombox.imap.serveur import Listener
+            e = Listener(lambda: open_mailbox(u), store)
             srv = await asyncio.start_server(e.client, "127.0.0.1", port)
             boucle["serveur"] = srv
             pret.set()
@@ -93,8 +93,8 @@ def serveur_imap(tmp_path_factory):
         try: aio.run(m.dispose())
         except Exception: pass
     db._async.clear()
-    admin.execute("select pg_terminate_backend(pid) from pg_stat_activity where datname=%s and pid<>pg_backend_pid()", (nom,))
-    admin.execute('DROP DATABASE "%s"' % nom); admin.close()
+    admin.execute("select pg_terminate_backend(pid) from pg_stat_activity where datname=%s and pid<>pg_backend_pid()", (name,))
+    admin.execute('DROP DATABASE "%s"' % name); admin.close()
 
 
 def _port_libre():
@@ -114,9 +114,9 @@ def test_un_vrai_client_se_connecte_liste_et_lit(serveur_imap):
             c.login("mathieu", "PAS LE BON")
         assert c.login("mathieu", "secret")[0] == "OK"
 
-        code, boites = c.list()
+        code, mailboxes = c.list()
         assert code == "OK"
-        noms = " ".join(b.decode() for b in boites)
+        noms = " ".join(b.decode() for b in mailboxes)
         assert '"INBOX"' in noms, noms
         assert '"Trash"' in noms, "les autres dossiers sont là aussi"
 
@@ -129,13 +129,13 @@ def test_un_vrai_client_se_connecte_liste_et_lit(serveur_imap):
         assert code == "OK" and len(liste) == 3, uids
 
         code, data = c.uid("FETCH", liste[0], "(BODY.PEEK[])")
-        brut = data[0][1]
-        attendu = serveur_imap["magasin"].lire(_blob(serveur_imap["session"], int(liste[0])))
-        assert brut == attendu, "l'octet servi est CELUI DU MAGASIN, pas une reconstruction (D025, RM3213)"
+        raw = data[0][1]
+        expected = serveur_imap["magasin"].lire(_blob(serveur_imap["session"], int(liste[0])))
+        assert raw == expected, "l'octet servi est CELUI DU MAGASIN, pas une reconstruction (D025, RM3213)"
 
         code, data = c.uid("FETCH", liste[0], "(FLAGS RFC822.SIZE ENVELOPE)")
         rendu = data[0].decode() if isinstance(data[0], bytes) else " ".join(map(str, data[0]))
-        assert "RFC822.SIZE %d" % len(attendu) in rendu, rendu
+        assert "RFC822.SIZE %d" % len(expected) in rendu, rendu
         assert "Commande 4412" in rendu, "l'enveloppe porte le sujet"
     finally:
         c.logout()
@@ -158,9 +158,9 @@ def test_l_octet_servi_est_celui_du_magasin_MEME_avec_des_accents(serveur_imap):
         uid = c.uid("SEARCH", None, "ALL")[1][0].split()[0]
         code, data = c.uid("FETCH", uid, "(BODY.PEEK[])")
         servi = data[0][1]
-        attendu = serveur_imap["magasin"].lire(_blob(serveur_imap["session"], int(uid)))
+        expected = serveur_imap["magasin"].lire(_blob(serveur_imap["session"], int(uid)))
         assert b"D\xc3\xa9veloppement" in servi, "l'accent est double-encodé : %r" % servi[-60:]
-        assert servi == attendu, "l'octet servi n'est pas celui du magasin"
+        assert servi == expected, "l'octet servi n'est pas celui du magasin"
         entete = data[0][0].decode("latin-1")
         annonce = int(entete[entete.rindex("{") + 1:entete.rindex("}")])
         assert annonce == len(servi), \
@@ -255,8 +255,8 @@ def test_deplacer_vers_archive_change_l_etat_et_le_message_y_reste(serveur_imap)
             or True, "COPYUID est annoncé en réponse non étiquetée (RFC 6851)"
 
         # 1. l'état, en base
-        etat, dossier, uid = _etat(s, comm_id=cid)
-        assert etat == "archived", "un MOVE vers Archive ÉCRIT l'état : c'est toute la demande"
+        state, dossier, uid = _etat(s, comm_id=cid)
+        assert state == "archived", "un MOVE vers Archive ÉCRIT l'état : c'est toute la demande"
         assert dossier == "Archive", "…et le contenant suit (D183)"
         # L'UID VIENT DU COMPTEUR D'ARCHIVE, et pas du message : c'est ça qu'il faut vérifier, et
         # non « il a changé » — les deux compteurs peuvent coïncider, et le test passerait à côté.
@@ -314,8 +314,8 @@ def test_supprimer_met_a_la_corbeille_et_ne_detruit_rien(serveur_imap):
         c.select("INBOX")
         uid = _etat(s, comm_id=cible)[2]
         assert c.uid("STORE", str(uid), "+FLAGS", "(\\Deleted)")[0] == "OK"
-        etat, dossier, _ = _etat(s, comm_id=cible)
-        assert etat == "deleted" and dossier == "Trash", "supprimer, c'est mettre à la corbeille"
+        state, dossier, _ = _etat(s, comm_id=cible)
+        assert state == "deleted" and dossier == "Trash", "supprimer, c'est mettre à la corbeille"
         assert c.expunge()[0] == "OK"
         s.expire_all()
         assert s.scalar(__import__("sqlalchemy").select(__import__("sqlalchemy").func.count()).select_from(Rattachement)) == total_avant, \
@@ -341,9 +341,9 @@ def test_retirer_seen_ne_detruit_pas_l_ouverture(serveur_imap):
         uid = _etat(s, comm_id=cid)[2]
         assert c.uid("STORE", str(uid), "+FLAGS", "(\\Seen)")[0] == "OK"
         s.expire_all()
-        etat = s.scalar(select(ReadState).where(ReadState.comm_id == cid))
-        assert etat is not None and etat.opened_at is not None
-        ouvert_le = etat.opened_at
+        state = s.scalar(select(ReadState).where(ReadState.comm_id == cid))
+        assert state is not None and state.opened_at is not None
+        ouvert_le = state.opened_at
 
         assert c.uid("STORE", str(uid), "-FLAGS", "(\\Seen)")[0] == "OK"
         s.expire_all()

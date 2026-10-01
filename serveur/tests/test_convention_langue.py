@@ -88,6 +88,11 @@ CONVERTIS = (
     "atombox/store/store.py",
     "atombox/settings.py",
     "atombox/uuid7.py",
+    # étage 2b — la couche IMAP, de bout en bout : le protocole, la vue, la session, l'écouteur
+    "atombox/imap/protocol.py",
+    "atombox/imap/view.py",
+    "atombox/imap/session.py",
+    "atombox/imap/serveur.py",   # le FICHIER garde son nom : une unité systemd le nomme (étage 2bis)
 )
 
 # Un dictionnaire, comme celui des réglages : des MOTS, pas une grammaire. Une heuristique sur les
@@ -100,7 +105,16 @@ MOTS_FR = ("deplacer", "poser", "retirer", "ouvrir", "toucher", "etat", "etats",
            # étage 2 — les mots retirés de l'infrastructure
            "magasin", "moteur", "fabrique", "niveau", "niveaux", "configurer", "attribuer",
            "domaines", "fichier", "verrou", "defaut", "forcer", "rendu", "normaliser", "racine",
-           "magie", "seuil")   # pas "gain" : le mot est le même dans les deux langues
+           "magie", "seuil",   # pas "gain" : le mot est le même dans les deux langues
+           # étage 2b — les mots retirés de la couche IMAP
+           "litteral", "decouper", "citer", "crochets", "capacites", "selectionne", "selectionner",
+           "authentifie", "chercher", "correspond", "rafraichir", "relever", "servie", "accueil",
+           "criteres", "demandes", "seule", "methode", "motif", "silencieux", "vises", "trouves",
+           "rendus", "frais", "anciens", "nouveaux", "presents", "permanents", "connus", "inconnus",
+           "mdp", "texte", "vue", "ajouter", "contient", "aiguille", "champ", "champs", "couples",
+           "attributs", "enveloppe", "octets", "brut", "tete", "annule", "ecouteur", "limite",
+           "contexte", "envoyer", "ecrivain", "lecteur", "donnees", "hote", "places", "vivantes",
+           "reponses", "attendu", "serveur", "principal")
 
 
 def test_les_fichiers_convertis_restent_en_anglais():

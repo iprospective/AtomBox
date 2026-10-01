@@ -22,66 +22,66 @@ import os
 import ssl
 from ..journal import journal
 from .session import Session
-from .vue import Vue
+from .view import View
 from .. import settings
 
 log = journal("imap")
 
-LIMITE_LIGNE = 64 * 1024        # une commande IMAP raisonnable ; au-delà, on coupe la connexion
+LINE_LIMIT = 64 * 1024        # une commande IMAP raisonnable ; au-delà, on coupe la connexion
 
 
-class Ecouteur:
-    def __init__(self, fabrique_session_bd, store, maximum: int | None = None):
-        self.fabrique, self.store = fabrique_session_bd, store
-        self.places = asyncio.Semaphore(maximum or int(settings.read("ATOMBOX_IMAPD_MAX", "20")))
-        self.vivantes = 0
+class Listener:
+    def __init__(self, db_session_factory, store, maximum: int | None = None):
+        self.factory, self.store = db_session_factory, store
+        self.slots = asyncio.Semaphore(maximum or int(settings.read("ATOMBOX_IMAPD_MAX", "20")))
+        self.live = 0
 
-    async def client(self, lecteur: asyncio.StreamReader, ecrivain: asyncio.StreamWriter):
-        pair = ecrivain.get_extra_info("peername")
-        if self.places.locked():
+    async def client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        peer = writer.get_extra_info("peername")
+        if self.slots.locked():
             # REFUSER FRANCHEMENT VAUT MIEUX QU'ACCEPTER ET RAMER : un client qui reçoit BYE
             # réessaie plus tard ; un client accepté puis ignoré reste pendu, et l'utilisateur
             # conclut que le serveur est mort.
-            ecrivain.write(b"* BYE trop de connexions, reessayez\r\n")
-            await ecrivain.drain(); ecrivain.close()
-            log.warning("connexion refusee (%s) : plafond atteint", pair)
+            writer.write(b"* BYE trop de connexions, reessayez\r\n")
+            await writer.drain(); writer.close()
+            log.warning("connexion refusee (%s) : plafond atteint", peer)
             return
-        async with self.places:
-            self.vivantes += 1
-            bd = self.fabrique()
-            session = Session(Vue(bd, self.store), self.store)
-            log.info("connexion IMAP de %s (%d vivante(s))", pair, self.vivantes)
+        async with self.slots:
+            self.live += 1
+            db = self.factory()
+            session = Session(View(db, self.store), self.store)
+            log.info("connexion IMAP de %s (%d vivante(s))", peer, self.live)
             try:
-                await self._envoyer(ecrivain, session.accueil())
-                attendu = 0
-                while not session.fini:
-                    if attendu:
-                        donnees = await lecteur.readexactly(attendu)
-                        attendu = 0
-                        await lecteur.readline()                 # le CRLF qui suit le littéral
-                        reponses = session.ligne(donnees.decode("utf-8", "replace"))
+                await self._send(writer, session.greeting())
+                expected = 0
+                while not session.done:
+                    if expected:
+                        data = await reader.readexactly(expected)
+                        expected = 0
+                        await reader.readline()                 # le CRLF qui suit le littéral
+                        responses = session.line(data.decode("utf-8", "replace"))
                     else:
-                        ligne = await lecteur.readline()
-                        if not ligne: break
-                        if len(ligne) > LIMITE_LIGNE:
-                            await self._envoyer(ecrivain, ["* BYE ligne trop longue"]); break
-                        reponses = session.ligne(ligne.decode("utf-8", "replace").rstrip("\r\n"))
-                    if reponses and reponses[0].startswith("+ "):
-                        attendu = session.attente_litteral[1] if session.attente_litteral else 0
-                    await self._envoyer(ecrivain, reponses)
+                        line = await reader.readline()
+                        if not line: break
+                        if len(line) > LINE_LIMIT:
+                            await self._send(writer, ["* BYE ligne trop longue"]); break
+                        responses = session.line(line.decode("utf-8", "replace").rstrip("\r\n"))
+                    if responses and responses[0].startswith("+ "):
+                        expected = session.awaiting_literal[1] if session.awaiting_literal else 0
+                    await self._send(writer, responses)
             except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
-                log.info("client %s parti", pair)
+                log.info("client %s parti", peer)
             except Exception:
-                log.exception("session IMAP de %s en echec", pair)
+                log.exception("session IMAP de %s en echec", peer)
             finally:
-                self.vivantes -= 1
-                try: bd.close()
+                self.live -= 1
+                try: db.close()
                 except Exception: pass
                 try:
-                    ecrivain.close(); await ecrivain.wait_closed()
+                    writer.close(); await writer.wait_closed()
                 except Exception: pass
 
-    async def _envoyer(self, ecrivain, lignes):
+    async def _send(self, writer, lines):
         """Les lignes sont encodées en LATIN-1, et ce n'est pas un choix de langue.
 
         IMAP transporte des OCTETS. Les corps de messages arrivent bruts du magasin, et on les
@@ -98,33 +98,33 @@ class Ecouteur:
 
         Le texte du protocole est de l'ASCII, donc indifférent au choix. Les quelques mots français
         des réponses tiennent dans le latin-1 ; `replace` couvre le reste sans fausser le compte."""
-        for l in lignes:
-            ecrivain.write(l.encode("latin-1", "replace") + b"\r\n")
-        await ecrivain.drain()
+        for l in lines:
+            writer.write(l.encode("latin-1", "replace") + b"\r\n")
+        await writer.drain()
 
 
-def contexte_tls():
-    cert, cle = settings.read("ATOMBOX_IMAPD_CERT"), settings.read("ATOMBOX_IMAPD_KEY")
-    if not (cert and cle): return None
+def tls_context():
+    cert, key = settings.read("ATOMBOX_IMAPD_CERT"), settings.read("ATOMBOX_IMAPD_KEY")
+    if not (cert and key): return None
     ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-    ctx.load_cert_chain(cert, cle)
+    ctx.load_cert_chain(cert, key)
     return ctx
 
 
-async def principal():
-    from ..db import session as ouvrir
+async def main():
+    from ..db import session as open_db
     from ..store import Store
     url = os.environ["DATABASE_URL"]
     store = Store(settings.read("ATOMBOX_STORE", "./magasin"))
-    ecouteur = Ecouteur(lambda: ouvrir(url), store)
-    hote = settings.read("ATOMBOX_IMAPD_LISTEN", "127.0.0.1")
+    listener = Listener(lambda: open_db(url), store)
+    host = settings.read("ATOMBOX_IMAPD_LISTEN", "127.0.0.1")
     port = int(settings.read("ATOMBOX_IMAPD_PORT", "1143"))
-    tls = contexte_tls()
-    serveur = await asyncio.start_server(ecouteur.client, hote, port, ssl=tls)
-    log.info("IMAP en LECTURE SEULE sur %s:%d%s", hote, port, " (TLS)" if tls else " (clair)")
-    async with serveur:
-        await serveur.serve_forever()
+    tls = tls_context()
+    server = await asyncio.start_server(listener.client, host, port, ssl=tls)
+    log.info("IMAP en LECTURE SEULE sur %s:%d%s", host, port, " (TLS)" if tls else " (clair)")
+    async with server:
+        await server.serve_forever()
 
 
 if __name__ == "__main__":
-    asyncio.run(principal())
+    asyncio.run(main())
