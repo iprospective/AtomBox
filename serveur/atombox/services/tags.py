@@ -89,8 +89,8 @@ async def poser(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur: 
         return None
     axe = await _axe(s, axe_nom)
     tag = await _tag(s, axe, valeur)
-    existe = await s.scalar(select(CommTag).where(CommTag.comm_id == comm_id, CommTag.tag_id == tag.tag_id))
-    if existe is None:
+    exists = await s.scalar(select(CommTag).where(CommTag.comm_id == comm_id, CommTag.tag_id == tag.tag_id))
+    if exists is None:
         # clé (comm_id, tag_id) : le même tag ne se pose pas deux fois, la base le garantit
         s.add(CommTag(comm_id=comm_id, tag_id=tag.tag_id, source=source,
                       pose_le=datetime.now(timezone.utc)))

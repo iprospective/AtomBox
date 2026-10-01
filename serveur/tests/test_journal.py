@@ -9,7 +9,7 @@ def logs(tmp_path, monkeypatch):
     yield d
     J.configure(force=True)
 
-def lire(d, nom):
+def read(d, nom):
     p = os.path.join(d, nom); return open(p, encoding="utf-8").read() if os.path.exists(p) else ""
 
 def test_fichiers_par_domaine_et_par_severite(logs):
@@ -17,12 +17,12 @@ def test_fichiers_par_domaine_et_par_severite(logs):
     J.journal("auth").info("session ouverte"); J.journal("auth").warning("connexion refusée pour 'x'")
     J.journal("ingestion").error("NON INGÉRÉ")
     for h in logging.getLogger("atombox").handlers + logging.getLogger("atombox.imap").handlers: h.flush()
-    assert "EXAMINE INBOX" in lire(logs, "imap.log"), "imap est réglé en debug : le protocole s'y lit"
-    assert "EXAMINE INBOX" not in lire(logs, "atombox.log"), "le fichier global reste au niveau par défaut (info)"
-    assert "session ouverte" not in lire(logs, "auth.log") and "connexion refusée" in lire(logs, "auth.log"), "auth est réglé en warning"
-    assert "connexion refusée" in lire(logs, "erreurs.log") and "NON INGÉRÉ" in lire(logs, "erreurs.log"), "erreurs.log : WARNING et plus, tous domaines"
-    assert "connecté" not in lire(logs, "erreurs.log")
-    assert re.search(r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(,\d+)? ERROR   ingestion NON INGÉRÉ", lire(logs, "ingestion.log"), re.M)
+    assert "EXAMINE INBOX" in read(logs, "imap.log"), "imap est réglé en debug : le protocole s'y lit"
+    assert "EXAMINE INBOX" not in read(logs, "atombox.log"), "le fichier global reste au niveau par défaut (info)"
+    assert "session ouverte" not in read(logs, "auth.log") and "connexion refusée" in read(logs, "auth.log"), "auth est réglé en warning"
+    assert "connexion refusée" in read(logs, "erreurs.log") and "NON INGÉRÉ" in read(logs, "erreurs.log"), "erreurs.log : WARNING et plus, tous domaines"
+    assert "connecté" not in read(logs, "erreurs.log")
+    assert re.search(r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(,\d+)? ERROR   ingestion NON INGÉRÉ", read(logs, "ingestion.log"), re.M)
 
 def test_domaine_inconnu_refuse():
     with pytest.raises(ValueError): J.journal("nimporte")

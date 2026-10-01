@@ -102,7 +102,7 @@ class ServedMessage:
                 max(1, (self._c.corps_texte or "").count("\n") + 1)]
 
     def section_bytes(self, section: str):
-        raw = self._store.lire(self._blob) if self._blob else None
+        raw = self._store.read(self._blob) if self._blob else None
         if raw is None: return None
         s = (section or "").upper()
         if s in ("", "TEXT") and s != "TEXT": return raw

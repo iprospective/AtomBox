@@ -38,12 +38,12 @@ def test_module_tiers_routes_propres_et_contrat():
     chargement.charger()
 
 def test_accroches_enrichissent_et_ignorent():
-    from atombox.ingestion.analyse import analyser
+    from atombox.ingestion.analyse import analyze
     chargement.charger(supplementaires=[ModuleTest(), ModuleCasse()], tiers=False)
-    a = analyser(b"From: a@b.fr\r\nSubject: bonjour\r\n\r\ncorps\r\n")
+    a = analyze(b"From: a@b.fr\r\nSubject: bonjour\r\n\r\ncorps\r\n")
     ctx = accroches.emettre("message.avant_ingestion", analyse=a, boite_id=None, octets=b"", tags=[])
     assert ctx["tags"] == [{"axe": "test", "val": "vu"}] and not ctx.get("ignorer")
-    ctx = accroches.emettre("message.avant_ingestion", analyse=analyser(b"Subject: poison\r\n\r\n"), boite_id=None, octets=b"", tags=[])
+    ctx = accroches.emettre("message.avant_ingestion", analyse=analyze(b"Subject: poison\r\n\r\n"), boite_id=None, octets=b"", tags=[])
     assert ctx["ignorer"] and ctx["raison"] == "poison"
     ModuleTest.vus.clear()
     accroches.emettre("message.ingere", comm_id="c1", nouveau=True, analyse=a, boite_id=None, tags=[])

@@ -18,7 +18,7 @@ def tls_imap() -> bool:
     return (settings.read("ATOMBOX_IMAP_TLS") or "ssl").strip().lower() != "aucun"
 
 
-class Releve:
+class Poller:
     def __init__(self, hote: str, port: int = 993, tls: bool = True, delai: int = 60):
         self.hote, self.port, self.tls, self.delai = hote, port, tls, delai
         self.cnx: imaplib.IMAP4 | None = None
@@ -68,7 +68,7 @@ class Releve:
         if typ != "OK" or not data or not data[0]: return []
         return [u for u in map(int, data[0].split()) if u >= depuis_uid]
 
-    def lire(self, uid: int) -> tuple[bytes, datetime | None, list[str]]:
+    def read(self, uid: int) -> tuple[bytes, datetime | None, list[str]]:
         """le message brut, sans poser \\Seen : BODY.PEEK[] ; avec sa date interne et ses drapeaux"""
         typ, data = self.cnx.uid("fetch", str(uid), "(BODY.PEEK[] INTERNALDATE FLAGS)")
         if typ != "OK" or not data or data[0] is None:

@@ -7,17 +7,17 @@ from ..journal import journal
 log = journal("imap")
 _local = threading.local()
 
-def descendante() -> bool:
+def down_sync() -> bool:
     """vrai quand le processus applique un changement VENU d'IMAP : on ne le renvoie pas"""
-    return getattr(_local, "descendante", False)
+    return getattr(_local, "down_sync", False)
 
 @contextlib.contextmanager
-def en_descendante():
-    avant = descendante(); _local.descendante = True
+def in_down_sync():
+    avant = down_sync(); _local.down_sync = True
     try: yield
-    finally: _local.descendante = avant
+    finally: _local.down_sync = avant
 
-def drapeaux_voulus(ratt, etat=None) -> tuple[list[str], list[str]]:
+def wanted_flags(ratt, etat=None) -> tuple[list[str], list[str]]:
     """(à poser, à retirer) — la traduction de l'état AtomBox vers les FLAGS IMAP.
 
     `etat` est la ligne read_state du membre qui relève (D175) : les drapeaux sont PERSONNELS depuis
@@ -32,12 +32,12 @@ def drapeaux_voulus(ratt, etat=None) -> tuple[list[str], list[str]]:
     (poser if (etat and etat.flagged) else retirer).append("\\Flagged")
     return poser, retirer
 
-def etat_imap(flags: list[str]) -> dict:
+def imap_state(flags: list[str]) -> dict:
     """la traduction inverse : ce que les FLAGS disent de l'état"""
     return {"lu": "\\Seen" in flags, "drapeau": "\\Flagged" in flags,
             "supprime": "\\Deleted" in flags}
 
-def appliquer_descendante(s, ratt, flags: list[str]) -> list[str]:
+def apply_down_sync(s, ratt, flags: list[str]) -> list[str]:
     """Met l'état PERSONNEL du membre qui relève au diapason des FLAGS du fournisseur.
 
     CE N'EST PLUS UNE SOURCE DE VÉRITÉ, c'est une COMPATIBILITÉ (D175 § 3). Deux conséquences qu'il
@@ -52,13 +52,13 @@ def appliquer_descendante(s, ratt, flags: list[str]) -> list[str]:
     Rend la liste des champs modifiés — vide si rien ne bouge, ce qui est le cas courant et doit
     rester silencieux."""
     from ..services import personal_state as perso
-    e = etat_imap(flags); change = []
+    e = imap_state(flags); change = []
     compte_id = perso.polling_account(s, ratt.boite_id)
     if compte_id is None:
         log.debug("boîte %s : pas de relève unique, les drapeaux du fournisseur ne sont imputés à personne", ratt.boite_id)
         return change
     etat = perso.state_sync(s, compte_id, ratt.comm_id, ratt.boite_id)
-    with en_descendante():
+    with in_down_sync():
         if e["lu"] and not (etat and etat.opened_at):
             s.execute(perso.open_stmt(compte_id, ratt.comm_id, ratt.boite_id)); change.append("lu")
         elif not e["lu"] and etat and etat.opened_at:

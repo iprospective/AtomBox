@@ -28,14 +28,14 @@ def test_serialisation_porte_le_contrat():
 
 def _transfert_de(brut: bytes):
     import email.policy
-    from atombox.ingestion.analyse import analyser
+    from atombox.ingestion.analyse import analyze
 
     class FauxCompte:
         nom, login = "Mathieu", "mathieu"
     octets = svc._composer(FauxCompte(), "contact@exemple.fr",
                            {"destinataires": ["jean@x.fr"], "sujet": "Tr: essai", "corps": "voir dessous"},
                            uuid.uuid4(), datetime.now(timezone.utc), None, brut)
-    return octets, analyser(octets)
+    return octets, analyze(octets)
 
 
 def test_l_encapsule_porte_l_octet_exact_du_magasin():
@@ -70,11 +70,11 @@ def test_une_adresse_est_parsee_avant_d_entrer_en_base():
     """RM3214 — « Florian HENRY <florian.henry@scopen.fr> » est entré TEL QUEL en base, avec le nom
     dans la partie locale. smtplib parsait à la remise, donc le courrier partait : seul le suivi
     d'envoi et le carnet gardaient un fantôme."""
-    from atombox.ingestion.ingestion import normaliser_adresse
-    assert normaliser_adresse("Florian HENRY <florian.henry@scopen.fr>") == "florian.henry@scopen.fr"
-    assert normaliser_adresse("  jean@x.fr  ") == "jean@x.fr"
-    assert normaliser_adresse('"Nom, Prénom" <a@b.fr>') == "a@b.fr"
-    assert normaliser_adresse("n'importe quoi") == "", "sans @, il n'y a pas d'adresse"
+    from atombox.ingestion.ingestion import normalize_address
+    assert normalize_address("Florian HENRY <florian.henry@scopen.fr>") == "florian.henry@scopen.fr"
+    assert normalize_address("  jean@x.fr  ") == "jean@x.fr"
+    assert normalize_address('"Nom, Prénom" <a@b.fr>') == "a@b.fr"
+    assert normalize_address("n'importe quoi") == "", "sans @, il n'y a pas d'adresse"
 
 
 def test_quand_accepte_ms_et_iso():
@@ -96,7 +96,7 @@ def test_transfert_encapsule_le_source_et_ne_marque_pas_le_message():
     une relation en base. Un marqueur dans le message partirait chez le destinataire, ne
     s'indexerait pas, et rendrait le message non reconstructible à l'octet (D025)."""
     import email, email.policy
-    from atombox.ingestion.analyse import analyser
+    from atombox.ingestion.analyse import analyze
 
     class FauxCompte:
         nom, login = "Mathieu", "mathieu"
@@ -112,7 +112,7 @@ def test_transfert_encapsule_le_source_et_ne_marque_pas_le_message():
                            {"destinataires": ["jean@x.fr"], "sujet": "Tr: Devis 2026 / travaux",
                             "corps": "tu peux regarder ?", "reference": "peu-importe"},
                            uuid.uuid4(), datetime.now(timezone.utc), None, brut)
-    a = analyser(octets)
+    a = analyze(octets)
     assert a.corps_texte.strip() == "tu peux regarder ?", "l'index ne voit que le commentaire (D163)"
     assert len(a.pieces) == 1 and a.pieces[0].type_declare == "message/rfc822", a.structure_mime
     assert a.pieces[0].nom_declare.endswith(".eml"), "la pièce porte le sujet du message transmis"
@@ -127,7 +127,7 @@ def test_transfert_encapsule_le_source_et_ne_marque_pas_le_message():
 
 # ---- avec une base : le parcours complet du webmail ----------------------------------------
 F = os.path.join(os.path.dirname(__file__), "fixtures")
-def lire(n): return open(os.path.join(F, n), "rb").read()
+def read(n): return open(os.path.join(F, n), "rb").read()
 
 @pytest.fixture(scope="module")
 def monde(tmp_path_factory):
@@ -136,7 +136,7 @@ def monde(tmp_path_factory):
     import psycopg
     from atombox.db import session as ouvrir
     from atombox.schema.modeles import Acces, Boite, Compte, Dossier
-    from atombox.ingestion.ingestion import adresse, ingerer
+    from atombox.ingestion.ingestion import adresse, ingest
     from atombox.api.securite import hacher_mot_de_passe
     from atombox.store import Store
     from atombox.uuid7 import uuid7
@@ -168,7 +168,7 @@ def monde(tmp_path_factory):
     seed_builtins(s)                      # schema.sql est un DDL : il n'apporte aucune donnée
     ensure_mailboxes(s, boite.boite_id)    # …et sans les boîtes d'état, « archiver » n'a nulle part où aller
     s.commit()
-    ids = [ingerer(s, m, boite.boite_id, lire(f), dossier_id=inbox.dossier_id)["comm_id"] for f in ("simple.eml", "reponse.eml", "pieces.eml", "liste.eml")]
+    ids = [ingest(s, m, boite.boite_id, read(f), dossier_id=inbox.dossier_id)["comm_id"] for f in ("simple.eml", "reponse.eml", "pieces.eml", "liste.eml")]
     yield {"session": s, "ids": ids, "url": u}
     s.close()
     for k, v in avant.items():   # ne jamais laisser l'environnement pointer sur une base détruite

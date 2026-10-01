@@ -4,10 +4,10 @@ import os, re as _re, uuid as _uuid
 from datetime import datetime, timedelta, timezone
 import pytest
 from atombox.filtres.engine import ACTIONS, CHAMPS, OPERATEURS, appliquer, evaluer
-from atombox.ingestion.analyse import analyser
+from atombox.ingestion.analyse import analyze
 
 F = os.path.join(os.path.dirname(__file__), "fixtures")
-def lire(n): return open(os.path.join(F, n), "rb").read()
+def read(n): return open(os.path.join(F, n), "rb").read()
 
 class Regle:
     """une règle en mémoire — le moteur ne demande qu'une chose : des attributs"""
@@ -19,7 +19,7 @@ class Regle:
 def crit(champ, op, val, mode="et"): return {"mode": mode, "criteres": [{"champ": champ, "operateur": op, "valeur": val}]}
 
 def test_les_operateurs():
-    a = analyser(lire("simple.eml"))
+    a = analyze(read("simple.eml"))
     assert evaluer(crit("from", "contient", "tessier"), a)
     assert evaluer(crit("from", "finit_par", ".example"), a)
     assert not evaluer(crit("from", "est", "autre@x.fr"), a)
@@ -27,25 +27,25 @@ def test_les_operateurs():
     assert evaluer(crit("sujet", "correspond_a", r"commande \d+"), a)
     assert evaluer(crit("destinataire", "contient", "contact@exemple.fr"), a)
     assert evaluer(crit("taille", "superieur_a", 10), a) and not evaluer(crit("taille", "superieur_a", 10 ** 9), a)
-    assert evaluer(crit("pieces", "superieur_a", 0), analyser(lire("pieces.eml")))
-    assert evaluer(crit("liste", "existe", None), analyser(lire("liste.eml")))
+    assert evaluer(crit("pieces", "superieur_a", 0), analyze(read("pieces.eml")))
+    assert evaluer(crit("liste", "existe", None), analyze(read("liste.eml")))
     assert not evaluer(crit("liste", "existe", None), a), "un message humain n'a pas de List-Id"
 
 def test_et_ou():
-    a = analyser(lire("simple.eml"))
+    a = analyze(read("simple.eml"))
     deux = lambda mode: {"mode": mode, "criteres": [{"champ": "from", "operateur": "contient", "valeur": "tessier"},
                                                     {"champ": "sujet", "operateur": "contient", "valeur": "introuvable"}]}
     assert not evaluer(deux("et"), a) and evaluer(deux("ou"), a)
 
 def test_un_critere_incomprehensible_est_faux():
     """une règle qu'on ne comprend pas ne doit pas attraper du courrier"""
-    a = analyser(lire("simple.eml"))
+    a = analyze(read("simple.eml"))
     assert not evaluer(crit("champ_inconnu", "contient", "x"), a)
     assert not evaluer(crit("from", "operateur_inconnu", "x"), a)
     assert not evaluer({"criteres": []}, a), "un prédicat vide n'attrape rien"
 
 def test_ordre_et_arret():
-    a = analyser(lire("liste.eml"))
+    a = analyze(read("liste.eml"))
     r1 = Regle("classer les listes", crit("liste", "existe", None), {"type": "classer", "dossier": "Lettres"}, 1)
     r2 = Regle("tout marquer lu", crit("from", "contient", "@"), {"type": "marquer_lu"}, 2)
     r = appliquer(None, [r1, r2], a)
@@ -55,7 +55,7 @@ def test_ordre_et_arret():
     assert r["regles"] == ["classer et stop"], "« arrêter » interrompt la chaîne, comme le stop de Sieve"
 
 def test_les_actions():
-    a = analyser(lire("simple.eml"))
+    a = analyze(read("simple.eml"))
     tout = lambda t, **k: appliquer(None, [Regle("r", crit("from", "contient", "tessier"), {"type": t, **k})], a)
     assert tout("corbeille")["dossier"] == "Trash"
     assert tout("indesirable")["dossier"] == "Junk"
@@ -66,7 +66,7 @@ def test_les_actions():
 
 def test_le_compteur_rend_une_regle_muette_visible():
     """D075 § 1 : le chapitre 14 a trouvé une règle jamais déclenchée depuis des années"""
-    a = analyser(lire("simple.eml"))
+    a = analyze(read("simple.eml"))
     active = Regle("attrape", crit("from", "contient", "tessier"), {"type": "drapeau"}, 1)
     muette = Regle("jamais", crit("from", "contient", "personne-de-ce-nom"), {"type": "drapeau"}, 2)
     appliquer(None, [active, muette], a); appliquer(None, [active, muette], a)
@@ -75,7 +75,7 @@ def test_le_compteur_rend_une_regle_muette_visible():
 
 def test_la_fenetre_de_dates():
     """une absence est une règle à fenêtre (D113)"""
-    a = analyser(lire("simple.eml"))
+    a = analyze(read("simple.eml"))
     hier = datetime.now(timezone.utc) - timedelta(days=1); demain = datetime.now(timezone.utc) + timedelta(days=1)
     passee = Regle("finie", crit("from", "contient", "@"), {"type": "drapeau"}, 1, debut=hier - timedelta(days=2), fin=hier)
     active = Regle("en cours", crit("from", "contient", "@"), {"type": "drapeau"}, 2, debut=hier, fin=demain)

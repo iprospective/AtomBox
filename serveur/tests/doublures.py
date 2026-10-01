@@ -34,7 +34,7 @@ class FauxImap(threading.Thread):
         self.arret = False
 
     # ---- ce que le TEST fait sur la boîte -------------------------------------------------------
-    def deposer(self, octets: bytes, dossier: str = "INBOX", drapeaux=(), date: str = "18-Sep-2026 10:00:00 +0200") -> int:
+    def put(self, octets: bytes, dossier: str = "INBOX", drapeaux=(), date: str = "18-Sep-2026 10:00:00 +0200") -> int:
         """un message arrive, comme si le MTA venait de le livrer ; réveille les IDLE"""
         with self.verrou:
             b = self.boites[dossier]
@@ -74,8 +74,8 @@ class FauxImap(threading.Thread):
 
     def _session(self, c: socket.socket):
         f = c.makefile("rwb", buffering=0)
-        ecrire = lambda s: f.write((s + "\r\n").encode() if isinstance(s, str) else s)
-        ecrire("* OK [CAPABILITY IMAP4rev1 IDLE MOVE UIDPLUS] faux IMAP prêt")
+        write = lambda s: f.write((s + "\r\n").encode() if isinstance(s, str) else s)
+        write("* OK [CAPABILITY IMAP4rev1 IDLE MOVE UIDPLUS] faux IMAP prêt")
         courant = None
         # ce que la SESSION a déjà appris : un serveur réel signale tout changement survenu depuis,
         # dès la commande suivante — IDLE comprise (RFC 3501 § 5.2). Partir de l'état à l'entrée en
@@ -86,7 +86,7 @@ class FauxImap(threading.Thread):
                 litteral = None
                 lit = re.search(rb"\{(\d+)\+?\}\r?\n$", brut)
                 if lit:                          # un littéral : « + » puis exactement n octets (RFC 3501 § 4.3)
-                    ecrire("+ prêt")
+                    write("+ prêt")
                     litteral = f.read(int(lit.group(1))); f.readline()
                     brut = brut[:lit.start()] + b"\r\n"
                 ligne = brut.decode("utf-8", "replace").rstrip("\r\n")
@@ -97,37 +97,37 @@ class FauxImap(threading.Thread):
                 with self.verrou: self.journal.append(reste)
                 if cmd == "UID":
                     sous, _, args = args.partition(" ")
-                    courant = self._uid(ecrire, tag, sous.upper(), args, courant); continue
-                if cmd == "CAPABILITY": ecrire("* CAPABILITY IMAP4rev1 IDLE MOVE UIDPLUS"); ecrire(tag + " OK fait")
-                elif cmd == "LOGIN": ecrire(tag + " OK connecté")
+                    courant = self._uid(write, tag, sous.upper(), args, courant); continue
+                if cmd == "CAPABILITY": write("* CAPABILITY IMAP4rev1 IDLE MOVE UIDPLUS"); write(tag + " OK fait")
+                elif cmd == "LOGIN": write(tag + " OK connecté")
                 elif cmd == "LIST":
-                    for d in self.boites: ecrire('* LIST (\\HasNoChildren) "%s" "%s"' % (self.SEP, d))
-                    ecrire(tag + " OK fait")
+                    for d in self.boites: write('* LIST (\\HasNoChildren) "%s" "%s"' % (self.SEP, d))
+                    write(tag + " OK fait")
                 elif cmd in ("SELECT", "EXAMINE"):
                     nom = self._nom(args)
-                    if nom not in self.boites: ecrire(tag + " NO dossier inconnu"); continue
+                    if nom not in self.boites: write(tag + " NO dossier inconnu"); continue
                     courant = nom
                     with self.verrou:
                         b = self.boites[nom]
                         annonce.update(n=len(b["messages"]), ch=len(self.changes))
-                        ecrire("* %d EXISTS" % len(b["messages"]))
-                        ecrire("* OK [UIDVALIDITY %d] ok" % b["validity"])
-                        ecrire("* OK [UIDNEXT %d] ok" % b["suivant"])
-                    ecrire(tag + " OK [%s] ok" % ("READ-WRITE" if cmd == "SELECT" else "READ-ONLY"))
-                elif cmd == "IDLE": self._idle(c, f, ecrire, tag, courant, annonce)
+                        write("* %d EXISTS" % len(b["messages"]))
+                        write("* OK [UIDVALIDITY %d] ok" % b["validity"])
+                        write("* OK [UIDNEXT %d] ok" % b["suivant"])
+                    write(tag + " OK [%s] ok" % ("READ-WRITE" if cmd == "SELECT" else "READ-ONLY"))
+                elif cmd == "IDLE": self._idle(c, f, write, tag, courant, annonce)
                 elif cmd == "APPEND":
                     m = re.match(r'\s*("([^"]*)"|\S+)\s*(\(([^)]*)\))?', args)
                     nom = (m.group(2) if m.group(2) is not None else m.group(1)).strip('"')
-                    if nom not in self.boites or litteral is None: ecrire(tag + " NO [TRYCREATE] dossier inconnu"); continue
+                    if nom not in self.boites or litteral is None: write(tag + " NO [TRYCREATE] dossier inconnu"); continue
                     flags = set((m.group(4) or "").split())
                     with self.verrou:
                         b = self.boites[nom]; uid = b["suivant"]; b["suivant"] += 1
                         b["messages"].append({"uid": uid, "octets": litteral, "flags": flags, "date": "19-Sep-2026 10:00:00 +0200"})
                         self.verrou.notify_all()
-                    ecrire(tag + " OK [APPENDUID %d %d] APPEND terminé" % (b["validity"], uid))
-                elif cmd == "LOGOUT": ecrire("* BYE"); ecrire(tag + " OK fait"); break
-                elif cmd in ("NOOP", "CHECK", "CLOSE", "EXPUNGE", "SUBSCRIBE", "UNSUBSCRIBE", "CREATE"): ecrire(tag + " OK fait")
-                else: ecrire(tag + " BAD commande inconnue du faux IMAP : " + cmd)
+                    write(tag + " OK [APPENDUID %d %d] APPEND terminé" % (b["validity"], uid))
+                elif cmd == "LOGOUT": write("* BYE"); write(tag + " OK fait"); break
+                elif cmd in ("NOOP", "CHECK", "CLOSE", "EXPUNGE", "SUBSCRIBE", "UNSUBSCRIBE", "CREATE"): write(tag + " OK fait")
+                else: write(tag + " BAD commande inconnue du faux IMAP : " + cmd)
         except (OSError, ValueError):
             pass
         finally:
@@ -153,8 +153,8 @@ class FauxImap(threading.Thread):
                 out.update(u for u in tous if u == (plus_grand if morceau == "*" else int(morceau)))
         return sorted(out)
 
-    def _uid(self, ecrire, tag, sous, args, courant):
-        if courant is None: ecrire(tag + " NO aucun dossier sélectionné"); return courant
+    def _uid(self, write, tag, sous, args, courant):
+        if courant is None: write(tag + " NO aucun dossier sélectionné"); return courant
         with self.verrou:
             msgs = self.boites[courant]["messages"]
             seq = {m["uid"]: i + 1 for i, m in enumerate(msgs)}
@@ -163,11 +163,11 @@ class FauxImap(threading.Thread):
                 cle, val = h.group(1).lower().encode(), h.group(2).encode()
                 trouves = [m["uid"] for m in msgs
                            if any(l.lower().startswith(cle + b":") and val in l for l in m["octets"].split(b"\r\n\r\n")[0].split(b"\r\n"))]
-                ecrire("* SEARCH" + "".join(" %d" % u for u in trouves)); ecrire(tag + " OK fait")
+                write("* SEARCH" + "".join(" %d" % u for u in trouves)); write(tag + " OK fait")
             elif sous == "SEARCH":
                 m = re.search(r"UID\s+(\S+)", args)
-                ecrire("* SEARCH" + "".join(" %d" % u for u in self._uids(m.group(1) if m else "1:*", msgs)))
-                ecrire(tag + " OK fait")
+                write("* SEARCH" + "".join(" %d" % u for u in self._uids(m.group(1) if m else "1:*", msgs)))
+                write(tag + " OK fait")
             elif sous == "FETCH":
                 ensemble, _, quoi = args.partition(" ")
                 for u in self._uids(ensemble, msgs):
@@ -176,10 +176,10 @@ class FauxImap(threading.Thread):
                     if "BODY" in quoi.upper():
                         tete = '* %d FETCH (UID %d INTERNALDATE "%s" FLAGS (%s) BODY[] {%d}\r\n' % (
                             seq[u], u, m["date"], flags, len(m["octets"]))
-                        ecrire(tete.encode() + m["octets"] + b")\r\n")
+                        write(tete.encode() + m["octets"] + b")\r\n")
                     else:
-                        ecrire("* %d FETCH (UID %d FLAGS (%s))" % (seq[u], u, flags))
-                ecrire(tag + " OK fait")
+                        write("* %d FETCH (UID %d FLAGS (%s))" % (seq[u], u, flags))
+                write(tag + " OK fait")
             elif sous == "STORE":
                 ensemble, mode, liste = args.split(" ", 2)
                 flags = set(liste.strip("()").split())
@@ -190,29 +190,29 @@ class FauxImap(threading.Thread):
                     else: m["flags"] = set(flags)
                     self.changes.append((courant, u))
                     if not mode.upper().endswith(".SILENT"):
-                        ecrire("* %d FETCH (UID %d FLAGS (%s))" % (seq[u], u, " ".join(sorted(m["flags"]))))
+                        write("* %d FETCH (UID %d FLAGS (%s))" % (seq[u], u, " ".join(sorted(m["flags"]))))
                 self.verrou.notify_all()
-                ecrire(tag + " OK fait")
+                write(tag + " OK fait")
             elif sous == "MOVE":
                 ensemble, _, vers = args.partition(" ")
                 vers = self._nom(vers); cible = self.boites.get(vers)
-                if cible is None: ecrire(tag + " NO dossier inconnu"); return courant
+                if cible is None: write(tag + " NO dossier inconnu"); return courant
                 for u in self._uids(ensemble, msgs):
                     m = next(x for x in msgs if x["uid"] == u)
                     neuf = cible["suivant"]; cible["suivant"] += 1
                     cible["messages"].append(dict(m, uid=neuf, flags=set(m["flags"])))
                     msgs.remove(m)
-                    ecrire("* OK [COPYUID %d %d %d] déplacé" % (cible["validity"], u, neuf))
+                    write("* OK [COPYUID %d %d %d] déplacé" % (cible["validity"], u, neuf))
                 self.verrou.notify_all()
-                ecrire(tag + " OK fait")
+                write(tag + " OK fait")
             else:
-                ecrire(tag + " BAD UID " + sous + " inconnu du faux IMAP")
+                write(tag + " BAD UID " + sous + " inconnu du faux IMAP")
         return courant
 
-    def _idle(self, c, f, ecrire, tag, courant, annonce):
+    def _idle(self, c, f, write, tag, courant, annonce):
         """RFC 2177 : on signale tout changement depuis ce que la session sait déjà, puis on attend
         un changement du dossier sélectionné, ou DONE"""
-        ecrire("+ idling")
+        write("+ idling")
         vu, vu_ch = annonce["n"], annonce["ch"]
         while not self.arret:
             with self.verrou:
@@ -223,15 +223,15 @@ class FauxImap(threading.Thread):
                 fetch = [(i + 1, m) for d, u in neufs if d == courant
                          for i, m in enumerate(msgs) if m["uid"] == u]
             if n != vu:
-                ecrire("* %d EXISTS" % n); vu = n; annonce["n"] = n
+                write("* %d EXISTS" % n); vu = n; annonce["n"] = n
             annonce["ch"] = vu_ch
             for seq, m in fetch:        # un autre client a changé un drapeau : Dovecot le dit pendant IDLE
-                ecrire("* %d FETCH (UID %d FLAGS (%s))" % (seq, m["uid"], " ".join(sorted(m["flags"]))))
+                write("* %d FETCH (UID %d FLAGS (%s))" % (seq, m["uid"], " ".join(sorted(m["flags"]))))
             prets, _, _ = select.select([c], [], [], 0)
             if prets:
                 ligne = f.readline()
                 if not ligne or ligne.strip().upper() == b"DONE": break
-        ecrire(tag + " OK IDLE terminé")
+        write(tag + " OK IDLE terminé")
 
 
 class FauxRelais(threading.Thread):

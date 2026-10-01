@@ -7,11 +7,11 @@ file réessaie (D161), et IMAP finira par recevoir l'état."""
 from __future__ import annotations
 import os, uuid
 from sqlalchemy import select
-from ..ingestion.imap import Releve, tls_imap
+from ..ingestion.imap import Poller, tls_imap
 from ..journal import journal
 from ..modules import Module, evenement
 from ..schema.modeles import Adresse, Boite, CommEmail, Dossier, Rattachement
-from .sync import drapeaux_voulus
+from .sync import wanted_flags
 from .. import settings
 
 log = journal("imap")
@@ -21,7 +21,7 @@ def config_imap() -> dict:
             "master": (settings.read("ATOMBOX_IMAP_MASTER") or "").strip(),
             "mot_de_passe": settings.read("ATOMBOX_IMAP_PASSWORD")}
 
-def login_de(adresse: str, master: str) -> str:
+def login_of(adresse: str, master: str) -> str:
     """« boîte*master » avec un compte master (chapitre 06) ; l'adresse seule sinon"""
     return adresse if not master or master.lower() == adresse.lower() else "%s*%s" % (adresse, master)
 
@@ -45,14 +45,14 @@ class ModuleSync(Module):
         cible = s.get(Dossier, r.dossier_id)
         if source is None or cible is None:
             log.warning("%s : dossier IMAP inconnu — rien à pousser", comm_id); return
-        releve = Releve(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_de(adresse, cfg["master"]), cfg["mot_de_passe"])
+        releve = Poller(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_of(adresse, cfg["master"]), cfg["mot_de_passe"])
         try:
             releve.selectionner(source.alias_imap or source.nom, ecriture=True)
             # Les drapeaux qu'on POUSSE sont ceux du membre qui relève (D175 § 3) : le
             # fournisseur n'a qu'un jeu de drapeaux, et c'est le sien qui le représente.
             from ..services import personal_state as perso
             releveur = perso.polling_account(s, boite_id)
-            poser, retirer = drapeaux_voulus(r, perso.state_sync(s, releveur, r.comm_id, r.boite_id))
+            poser, retirer = wanted_flags(r, perso.state_sync(s, releveur, r.comm_id, r.boite_id))
             releve.poser_drapeaux(r.uid_imap, poser, retirer)
             if cible.dossier_id != source.dossier_id:
                 neuf = releve.deplacer(r.uid_imap, cible.alias_imap or cible.nom)
@@ -83,10 +83,10 @@ class ModuleSync(Module):
         if dossier is None or not (dossier.alias_imap or dossier.nom):
             log.warning("%s : dossier des envoyés inconnu — rien à copier", comm_id); return
         from ..store import Store
-        octets = Store(settings.read("ATOMBOX_STORE", "./magasin")).lire(str(comm_id))
+        octets = Store(settings.read("ATOMBOX_STORE", "./magasin")).read(str(comm_id))
         e = s.get(CommEmail, comm_id)
         boite = s.get(Boite, boite_id); adresse = s.get(Adresse, boite.adresse_id).adresse_complete
-        releve = Releve(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_de(adresse, cfg["master"]), cfg["mot_de_passe"])
+        releve = Poller(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_of(adresse, cfg["master"]), cfg["mot_de_passe"])
         try:
             alias = dossier.alias_imap or dossier.nom
             releve.selectionner(alias, ecriture=True)

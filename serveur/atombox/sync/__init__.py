@@ -13,4 +13,4 @@ voir dans AtomBox, et réciproquement. Deux sens, deux mécanismes :
 La BOUCLE est le piège de tout miroir : appliquer un changement venu d'IMAP ne doit pas le
 renvoyer à IMAP. Un jeton de contexte (`descendante()`) le dit à l'émetteur, qui se tait.
 """
-from .sync import descendante, en_descendante, etat_imap, appliquer_descendante, drapeaux_voulus
+from .sync import down_sync, in_down_sync, imap_state, apply_down_sync, wanted_flags

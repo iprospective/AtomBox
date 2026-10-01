@@ -44,13 +44,13 @@ def test_l_ip_ne_sort_que_sur_reglage_explicite(monkeypatch):
 
 def test_le_message_reste_analysable(monkeypatch):
     """le Received ajouté ne casse ni le parsing ni l'identité (D064)"""
-    from atombox.ingestion.analyse import analyser
-    from atombox.ingestion.identite import empreinte_identite
+    from atombox.ingestion.analyse import analyze
+    from atombox.ingestion.identite import identity_fingerprint
     m, brut = fabriquer(monkeypatch=monkeypatch)
-    a = analyser(brut.encode())
+    a = analyze(brut.encode())
     assert a.from_adresse == "contact@exemple.fr" and a.sujet == "Test" and a.corps_texte.strip() == "corps"
     m2, brut2 = fabriquer(ip="203.0.113.9", tracer="1", monkeypatch=monkeypatch)
-    assert empreinte_identite(analyser(brut.encode())) == empreinte_identite(analyser(brut2.encode())), \
+    assert identity_fingerprint(analyze(brut.encode())) == identity_fingerprint(analyze(brut2.encode())), \
         "le Received est du transport : il ne change pas l'identité du message (D064)"
 
 def test_l_hote_est_configurable(monkeypatch):

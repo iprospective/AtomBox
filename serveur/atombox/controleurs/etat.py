@@ -34,12 +34,12 @@ class EtatControleur(Controleur):
         if domaine not in DOMAINS + ("atombox", "erreurs"): raise HTTPException(404, "journal inconnu")
         niveau = niveau.upper()
         if niveau not in NIVEAUX: raise HTTPException(400, "niveau inconnu")
-        chemin = os.path.join(directory(), domaine + ".log")
-        if not os.path.exists(chemin): return {"domaine": domaine, "lignes": [], "fichier": chemin}
+        path = os.path.join(directory(), domaine + ".log")
+        if not os.path.exists(path): return {"domaine": domaine, "lignes": [], "fichier": path}
         seuil = NIVEAUX.index(niveau)
         motif = re.compile(r"^\S+ \S+ (\w+)\s+(\S+)\s+(.*)$")
         out = []
-        with open(chemin, encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             for l in _queue(f, lignes * 4):
                 m = motif.match(l.rstrip("\n"))
                 if not m: continue
@@ -47,7 +47,7 @@ class EtatControleur(Controleur):
                 if filtre and filtre.lower() not in l.lower(): continue
                 out.append({"quand": l[:23].strip(), "niveau": m.group(1), "domaine": m.group(2), "message": m.group(3)})
         log.debug("journal %s lu par %s (%d lignes)", domaine, compte.login, len(out))
-        return {"domaine": domaine, "niveau": niveau, "lignes": out[-lignes:], "fichier": chemin}
+        return {"domaine": domaine, "niveau": niveau, "lignes": out[-lignes:], "fichier": path}
 
 def _queue(f, n: int):
     """les n dernières lignes, sans lire tout un fichier d'un an"""

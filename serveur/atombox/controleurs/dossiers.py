@@ -32,7 +32,7 @@ class ParametresControleur(Controleur):
     prefixe = "/parametres"
 
     @action("GET", "")
-    async def lire(self, compte: Compte = Depends(compte_courant)):
+    async def read(self, compte: Compte = Depends(compte_courant)):
         return svc.parametres(compte)
 
     @action("PUT", "")

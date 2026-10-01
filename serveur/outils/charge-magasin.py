@@ -95,7 +95,7 @@ def mesurer(nb: int, racine: str, graine: int = 42) -> dict:
     t0 = time.monotonic()
     stocke = comprimes = 0
     for i, c in zip(ids, corpus):
-        info = mag.ecrire(i, c)
+        info = mag.write(i, c)
         stocke += info["taille_stockee"]
         comprimes += 1 if info["compression"] == "zstd" else 0
     duree = time.monotonic() - t0
@@ -111,18 +111,18 @@ def mesurer(nb: int, racine: str, graine: int = 42) -> dict:
     echantillon = rnd.sample(ids, min(2000, nb))
     t0 = time.monotonic()
     for i in echantillon:
-        mag.lire(i)
+        mag.read(i)
     d = time.monotonic() - t0
     res["lecture"] = {"lectures": len(echantillon), "duree_s": round(d, 2),
                       "par_s": round(len(echantillon) / d, 1), "ms_par_lecture": round(1000 * d / len(echantillon), 3)}
     pire = max(feuilles, key=feuilles.get)
-    chemin = os.path.join(racine, *pire.split("/"))
+    path = os.path.join(racine, *pire.split("/"))
     t0 = time.monotonic()
-    entrees = sum(1 for _ in os.scandir(chemin))
+    entrees = sum(1 for _ in os.scandir(path))
     res["parcours_repertoire"] = {"repertoire": pire, "entrees": entrees,
                                   "duree_ms": round(1000 * (time.monotonic() - t0), 1)}
     t0 = time.monotonic()
-    for e in os.scandir(chemin):
+    for e in os.scandir(path):
         e.stat()
     res["parcours_repertoire"]["stat_ms"] = round(1000 * (time.monotonic() - t0), 1)
 

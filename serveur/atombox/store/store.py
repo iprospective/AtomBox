@@ -27,62 +27,62 @@ log = journal("store")
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 GAIN_THRESHOLD = 0.10          # en dessous de 10 % gagnés, on garde les octets tels quels (D069)
 
-def empreinte(octets: bytes) -> str:
+def empreinte(data: bytes) -> str:
     """l'identité d'un contenu : SHA-256 en hexadécimal — c'est aussi son nom de fichier"""
-    return hashlib.sha256(octets).hexdigest()
+    return hashlib.sha256(data).hexdigest()
 
 class Store:
-    def __init__(self, racine: str, zstd_level: int = 9):
-        self.racine = os.path.abspath(racine)
+    def __init__(self, root: str, zstd_level: int = 9):
+        self.root = os.path.abspath(root)
         self._c = zstandard.ZstdCompressor(level=zstd_level)
         self._d = zstandard.ZstdDecompressor()
-        os.makedirs(self.racine, exist_ok=True)
+        os.makedirs(self.root, exist_ok=True)
 
-    def chemin(self, identifiant) -> str:
+    def path(self, identifiant) -> str:
         i = str(identifiant).lower()
         if len(i) < 8 or not all(c in "0123456789abcdef-" for c in i):
             raise ValueError("identifiant invalide pour le magasin : %r" % identifiant)
-        return os.path.join(self.racine, i[:2], i[2:4], i)
+        return os.path.join(self.root, i[:2], i[2:4], i)
 
-    def existe(self, identifiant) -> bool:
-        return os.path.exists(self.chemin(identifiant))
+    def exists(self, identifiant) -> bool:
+        return os.path.exists(self.path(identifiant))
 
-    def ecrire(self, identifiant, octets: bytes, compresser: bool | None = None, remplacer: bool = False) -> dict:
+    def write(self, identifiant, data: bytes, compress: bool | None = None, replace: bool = False) -> dict:
         """Écrit si absent ; rend {compression, taille_octets, taille_stockee, nouveau}.
         compresser=None : conditionnel (D069) ; True/False : forcé.
 
         `remplacer` n'existe que pour un BROUILLON, qui n'est pas encore un fait : tant qu'il
         n'est pas parti, son contenu bouge. Un message reçu ou envoyé, lui, ne se réécrit jamais
         (D025), et un blob est adressé par son empreinte — le remplacer n'aurait aucun sens."""
-        chemin = self.chemin(identifiant)
-        if os.path.exists(chemin) and not remplacer:
-            return { "compression": self._compression_de(chemin), "taille_octets": len(octets),
-                     "taille_stockee": os.path.getsize(chemin), "nouveau": False }
-        zst = self._c.compress(octets)
-        garder_zstd = compresser if compresser is not None else (len(zst) <= len(octets) * (1 - GAIN_THRESHOLD))
-        contenu = zst if garder_zstd else octets
-        os.makedirs(os.path.dirname(chemin), exist_ok=True)
+        path = self.path(identifiant)
+        if os.path.exists(path) and not replace:
+            return { "compression": self._compression_of(path), "taille_octets": len(data),
+                     "taille_stockee": os.path.getsize(path), "nouveau": False }
+        zst = self._c.compress(data)
+        garder_zstd = compress if compress is not None else (len(zst) <= len(data) * (1 - GAIN_THRESHOLD))
+        contenu = zst if garder_zstd else data
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         # atomique : un fichier temporaire dans le même répertoire, puis un rename
-        fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=os.path.dirname(chemin))
+        fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=os.path.dirname(path))
         try:
             with os.fdopen(fd, "wb") as f: f.write(contenu); f.flush(); os.fsync(f.fileno())
-            os.replace(tmp, chemin)
+            os.replace(tmp, path)
         finally:
             if os.path.exists(tmp): os.unlink(tmp)
-        log.debug("écrit %s : %d → %d octets (%s)", identifiant, len(octets), len(contenu), "zstd" if garder_zstd else "aucune")
-        return { "compression": "zstd" if garder_zstd else "aucune", "taille_octets": len(octets),
+        log.debug("écrit %s : %d → %d octets (%s)", identifiant, len(data), len(contenu), "zstd" if garder_zstd else "aucune")
+        return { "compression": "zstd" if garder_zstd else "aucune", "taille_octets": len(data),
                  "taille_stockee": len(contenu), "nouveau": True }
 
-    def deposer(self, octets: bytes) -> tuple[str, dict]:
+    def put(self, data: bytes) -> tuple[str, dict]:
         """un blob adressé par son contenu (D010, D011) : l'empreinte est le nom"""
-        e = empreinte(octets)
-        return e, self.ecrire(e, octets)
+        e = empreinte(data)
+        return e, self.write(e, data)
 
-    def lire(self, identifiant) -> bytes:
-        with open(self.chemin(identifiant), "rb") as f: contenu = f.read()
+    def read(self, identifiant) -> bytes:
+        with open(self.path(identifiant), "rb") as f: contenu = f.read()
         if contenu[:4] == ZSTD_MAGIC:
             return self._d.decompress(contenu, max_output_size=1 << 31)
         return contenu
 
-    def _compression_de(self, chemin) -> str:
-        with open(chemin, "rb") as f: return "zstd" if f.read(4) == ZSTD_MAGIC else "aucune"
+    def _compression_of(self, path) -> str:
+        with open(path, "rb") as f: return "zstd" if f.read(4) == ZSTD_MAGIC else "aucune"

@@ -10,7 +10,7 @@ from ..modules import Module, evenement
 from ..modules import evenements
 from ..schema.modeles import Adresse, Boite, Comm, Envoi, EnvoiDestinataire, Identite, Participant
 from ..uuid7 import uuid7
-from ..ingestion.ingestion import adresse as adresse_de, normaliser_adresse
+from ..ingestion.ingestion import adresse as adresse_de, normalize_address
 from .smtp import remettre
 from .. import settings
 
@@ -31,7 +31,7 @@ def destinataires_de(s, comm_id, repli: list[str]) -> list[str]:
                        .where(Participant.comm_id == comm_id, Participant.role.in_(("to", "cc", "bcc")))
                        .order_by(Participant.ordre)).scalars().all()
     vus, out = set(), []
-    for a in list(lignes) + [normaliser_adresse(d) for d in (repli or [])]:
+    for a in list(lignes) + [normalize_address(d) for d in (repli or [])]:
         if a and a not in vus: vus.add(a); out.append(a)
     return out
 
@@ -53,7 +53,7 @@ class ModuleEmission(Module):
             identite = Identite(identite_id=uuid7(), boite_id=boite_id, nom_affiche=comm.from_nom or expediteur, adresse_id=boite.adresse_id, au_nom_de=False, par_defaut=True)
             s.add(identite); s.flush()
         store = Store(settings.read("ATOMBOX_STORE", "./magasin"))
-        octets = store.lire(str(comm_id))
+        octets = store.read(str(comm_id))
         envoi = s.scalar(select(Envoi).where(Envoi.comm_id == comm_id))
         if envoi is None:
             envoi = Envoi(envoi_id=uuid7(), comm_id=comm_id, identite_id=identite.identite_id, retour_enveloppe=expediteur)

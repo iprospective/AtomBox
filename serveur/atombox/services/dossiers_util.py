@@ -19,11 +19,11 @@ def _imap_dispo() -> bool: return bool(settings.read("ATOMBOX_IMAP_HOST"))
 
 async def _imap(s: AsyncSession, boite: Boite):
     """une relève ouverte sur la boîte, ou None si l'IMAP n'est pas configuré"""
-    from ..ingestion.imap import Releve, tls_imap
-    from ..sync.module import config_imap, login_de
+    from ..ingestion.imap import Poller, tls_imap
+    from ..sync.module import config_imap, login_of
     if not _imap_dispo(): return None
     cfg = config_imap(); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
-    return Releve(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_de(adresse, cfg["master"]), cfg["mot_de_passe"])
+    return Poller(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_of(adresse, cfg["master"]), cfg["mot_de_passe"])
 
 def serialiser_dossier(d: Dossier) -> dict:
     return {"id": str(d.dossier_id), "nom": d.nom, "alias_imap": d.alias_imap,

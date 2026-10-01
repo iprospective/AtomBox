@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 @dataclass
-class Piece:
+class Part:
     ordre: int
     nom_declare: str | None
     type_declare: str | None
@@ -37,7 +37,7 @@ class Analyse:
     participants: list[tuple[str, str | None, str, int]]   # (role, nom, adresse, ordre)
     corps_texte: str
     snippet: str | None
-    pieces: list[Piece]
+    pieces: list[Part]
     structure_mime: dict
     headers: str
     est_chiffre: bool
@@ -49,11 +49,11 @@ class Analyse:
     precedence: str | None = None
     parties: list[bytes] = field(default_factory=list)   # les charges décodées, dans l'ordre — pour D064
 
-MAGIES = [(b"%PDF", "application/pdf"), (b"\x89PNG", "image/png"), (b"\xff\xd8\xff", "image/jpeg"),
+MAGICS = [(b"%PDF", "application/pdf"), (b"\x89PNG", "image/png"), (b"\xff\xd8\xff", "image/jpeg"),
           (b"GIF8", "image/gif"), (b"PK\x03\x04", "application/zip"), (b"\x1f\x8b", "application/gzip"),
           (b"\x28\xb5\x2f\xfd", "application/zstd"), (b"Rar!", "application/vnd.rar"), (b"%!PS", "application/postscript")]
 
-def parties_brutes(octets: bytes, frontiere: str) -> list[bytes]:
+def raw_parts(octets: bytes, frontiere: str) -> list[bytes]:
     """Le CORPS BRUT de chaque partie de premier niveau d'un multipart, tel qu'il est sur le fil.
 
     Le parseur de la bibliothèque ne garde pas les octets d'une sous-partie : il la lit, puis la
@@ -82,7 +82,7 @@ def parties_brutes(octets: bytes, frontiere: str) -> list[bytes]:
 
 def type_detecte(octets: bytes, declare: str | None) -> str:
     """détecté sur les octets (D032) ; à défaut le type déclaré ; à défaut octets quelconques"""
-    for magie, t in MAGIES:
+    for magie, t in MAGICS:
         if octets.startswith(magie): return t
     if declare and declare.lower() not in ("application/octet-stream", ""): return declare.lower()
     try:
@@ -90,11 +90,11 @@ def type_detecte(octets: bytes, declare: str | None) -> str:
     except UnicodeDecodeError:
         return "application/octet-stream"
 
-def _adresse(nom_adr) -> tuple[str | None, str]:
+def _address(nom_adr) -> tuple[str | None, str]:
     nom, adr = nom_adr
     return (nom.strip() or None), adr.strip().lower()
 
-def normaliser_sujet(s: str | None) -> str | None:
+def normalize_subject(s: str | None) -> str | None:
     if not s: return None
     t = re.sub(r"^\s*((re|fw|fwd|tr|aw|sv)\s*:\s*)+", "", s, flags=re.I)
     t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode()
@@ -106,7 +106,7 @@ def _snippet(texte: str, n: int = 200) -> str | None:
     t = re.sub(r"\s+", " ", " ".join(lignes)).strip()
     return t[:n] or None
 
-def nature_de(msg, from_adresse: str, auto_submitted: str | None, precedence: str | None) -> str:
+def nature_of(msg, from_adresse: str, auto_submitted: str | None, precedence: str | None) -> str:
     """D130 : humain / liste / notification / service — figée à l'ingestion"""
     ct = (msg.get_content_type() or "").lower()
     local = from_adresse.split("@")[0]
@@ -118,15 +118,15 @@ def nature_de(msg, from_adresse: str, auto_submitted: str | None, precedence: st
         return "notification"
     return "humain"
 
-def analyser(octets: bytes, date_recue: datetime | None = None) -> Analyse:
+def analyze(octets: bytes, date_recue: datetime | None = None) -> Analyse:
     msg = email.message_from_bytes(octets, policy=email.policy.default)
     headers = octets.split(b"\r\n\r\n", 1)[0] if b"\r\n\r\n" in octets else octets.split(b"\n\n", 1)[0]
     de = email.utils.getaddresses([msg["From"] or ""]) or [("", "")]
-    from_nom, from_adresse = _adresse(de[0])
+    from_nom, from_adresse = _address(de[0])
     participants, ordre = [], 0
     for role, entete in (("from", "From"), ("sender", "Sender"), ("reply_to", "Reply-To"), ("to", "To"), ("cc", "Cc"), ("bcc", "Bcc")):
         for na in email.utils.getaddresses(msg.get_all(entete, [])):
-            nom, adr = _adresse(na)
+            nom, adr = _address(na)
             if adr: participants.append((role, nom, adr, ordre)); ordre += 1
     refs = [r for r in re.split(r"\s+", (msg["References"] or "").strip()) if r]
     pieces, parties, est_chiffre, est_signe, corps = [], [], False, False, ""
@@ -157,7 +157,7 @@ def analyser(octets: bytes, date_recue: datetime | None = None) -> Analyse:
     bruts = {}
     if msg.is_multipart() and msg.get_boundary():
         try:
-            for p, brut in zip(msg.iter_parts(), parties_brutes(octets, msg.get_boundary())):
+            for p, brut in zip(msg.iter_parts(), raw_parts(octets, msg.get_boundary())):
                 bruts[id(p)] = brut
         except Exception:
             bruts = {}
@@ -197,10 +197,10 @@ def analyser(octets: bytes, date_recue: datetime | None = None) -> Analyse:
         if est_pj and part is not corps_part and ct != "text/plain" or (est_pj and part.get_filename()):
             n += 1
             params = {k: v for k, v in part.get_params(header="content-type") or [] if k.lower() != part.get_content_type()}
-            pieces.append(Piece(n, part.get_filename(), ct, type_detecte(charge, ct), (part.get("Content-Transfer-Encoding") or None),
+            pieces.append(Part(n, part.get_filename(), ct, type_detecte(charge, ct), (part.get("Content-Transfer-Encoding") or None),
                                 (part.get_content_disposition() or None), (part.get("Content-ID") or None), params, charge))
     auto = msg["Auto-Submitted"]; prec = msg["Precedence"]
-    nature = nature_de(msg, from_adresse, auto, prec)
+    nature = nature_of(msg, from_adresse, auto, prec)
     reponse = "avertir" if nature in ("notification", "service") or re.match(r"^(no-?reply|ne-?pas-?repondre|donotreply)", from_adresse.split("@")[0]) else "oui"
     try: date_declaree = email.utils.parsedate_to_datetime(msg["Date"]) if msg["Date"] else None
     except Exception: date_declaree = None
@@ -210,7 +210,7 @@ def analyser(octets: bytes, date_recue: datetime | None = None) -> Analyse:
         message_id=(msg["Message-ID"] or "").strip() or None, in_reply_to=(msg["In-Reply-To"] or "").strip() or None,
         references=refs, return_path=(msg["Return-Path"] or "").strip() or None,
         list_id=(msg["List-Id"] or "").strip() or None, list_unsubscribe=(msg["List-Unsubscribe"] or "").strip() or None,
-        sujet=sujet, sujet_normalise=normaliser_sujet(sujet), date_declaree=date_declaree,
+        sujet=sujet, sujet_normalise=normalize_subject(sujet), date_declaree=date_declaree,
         from_adresse=from_adresse or "inconnu@invalide", from_nom=from_nom, participants=participants,
         corps_texte=corps, snippet=_snippet(corps), pieces=pieces, structure_mime=structure(msg),
         headers=headers.decode("utf-8", "replace"), est_chiffre=est_chiffre, est_signe=est_signe,

@@ -13,7 +13,7 @@ log = journal("api")
 
 class ArborescenceControleur(Controleur):
     @action("GET", "/arborescence")
-    async def lire(self, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
+    async def read(self, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
         arbo = await svc.compteurs(s, compte)
         log.debug("arborescence de %s : %d dossier(s) comptés", compte.login, len(arbo["compteurs"]))
         return arbo

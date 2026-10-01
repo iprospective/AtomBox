@@ -13,7 +13,7 @@ log = journal("api")
 
 class ReferentielsControleur(Controleur):
     @action("GET", "/referentiels")
-    async def lire(self, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
+    async def read(self, compte: Compte = Depends(compte_courant), s: AsyncSession = Depends(session_async)):
         ref = await svc.referentiels(s, compte)
         log.debug("référentiels de %s : %d boîte(s), %d dossier(s)", compte.login, len(ref["moi"]["boites"]), len(ref["util"]))
         return ref

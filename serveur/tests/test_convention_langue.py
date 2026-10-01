@@ -93,6 +93,9 @@ CONVERTIS = (
     "atombox/imap/view.py",
     "atombox/imap/session.py",
     "atombox/imap/serveur.py",   # le FICHIER garde son nom : une unité systemd le nomme (étage 2bis)
+    # étage 2c — l'ingestion et la synchronisation : les définitions, pas les locales
+    "atombox/sync/sync.py",
+    "atombox/ingestion/identite.py",
 )
 
 # Un dictionnaire, comme celui des réglages : des MOTS, pas une grammaire. Une heuristique sur les
@@ -114,17 +117,27 @@ MOTS_FR = ("deplacer", "poser", "retirer", "ouvrir", "toucher", "etat", "etats",
            "mdp", "texte", "vue", "ajouter", "contient", "aiguille", "champ", "champs", "couples",
            "attributs", "enveloppe", "octets", "brut", "tete", "annule", "ecouteur", "limite",
            "contexte", "envoyer", "ecrivain", "lecteur", "donnees", "hote", "places", "vivantes",
-           "reponses", "attendu", "serveur", "principal")
+           "reponses", "attendu", "serveur", "principal",
+           # étage 2c — les mots retirés de l'ingestion, de la synchronisation et du magasin
+           "entetes", "valeurs", "releve", "ingerer", "descendante", "voulus", "analyser",
+           "normaliser", "deposer", "existe", "chemin", "compresser", "remplacer", "ecrire",
+           "surveiller", "resynchroniser", "suivant")
 
 
 def test_les_fichiers_convertis_restent_en_anglais():
     """Chaque identifiant DÉFINI dans un fichier converti est en anglais — le mot français y est
-    une régression, pas un choix de style."""
+    une régression, pas un choix de style.
+
+    LES MÉTHODES COMPTENT. La première version de ce test ancrait son motif en colonne 0 : elle ne
+    voyait donc que les fonctions et les classes de premier niveau, et pas une seule méthode. Des
+    fichiers entiers de contrôleurs — dont tout le travail EST dans des méthodes — passaient au
+    vert sans que rien n'ait été converti. Un garde-fou qui ne regarde pas où ça se passe rassure,
+    ce qui est pire que de ne pas exister."""
     fautifs = {}
     for rel in CONVERTIS:
         f = RACINE / rel
         assert f.exists(), "fichier converti introuvable : %s (déplacé ? retirer de CONVERTIS)" % rel
-        for nom in re.findall(r"^(?:async )?(?:def|class)\s+(\w+)|^([A-Z][A-Z0-9_]{2,})\s*=",
+        for nom in re.findall(r"^\s*(?:async )?(?:def|class)\s+(\w+)|^([A-Z][A-Z0-9_]{2,})\s*=",
                               f.read_text(encoding="utf-8"), re.M):
             nom = nom[0] or nom[1]
             morceaux = {m for m in nom.lower().split("_") if m}
@@ -132,3 +145,39 @@ def test_les_fichiers_convertis_restent_en_anglais():
             if trouves: fautifs.setdefault(rel, []).append("%s (%s)" % (nom, ", ".join(sorted(trouves))))
     assert not fautifs, "identifiants français dans des fichiers convertis :\n" + "\n".join(
         "  %s : %s" % (f, ", ".join(n)) for f, n in sorted(fautifs.items()))
+
+
+# `getattr(obj, "nom")` nomme un attribut par une CHAÎNE. Un renommage d'identifiants ne la voit
+# pas — c'est précisément ce qu'on lui demande, pour que les commentaires et les chemins par défaut
+# ne bougent pas. Mais quand la chaîne EST un nom d'attribut, elle doit suivre, et rien ne le dit.
+#
+# Les trois formes, parce que la plus dangereuse des trois n'était PAS un `getattr` : la garde
+# d'authentification du serveur IMAP lisait `method.__dict__.get("_authentifie")`. Un motif qui ne
+# cherche que `getattr` aurait laissé passer exactement celui qui comptait.
+ATTRIBUT_PAR_CHAINE = re.compile(
+    r"\b(?:get|set|has)attr\s*\(\s*[^,()]+,\s*[\"'](\w+)[\"']"      # getattr(o, "x")
+    r"|__dict__\s*\.\s*get\s*\(\s*[\"'](\w+)[\"']"                  # o.__dict__.get("x")
+    r"|__dict__\s*\[\s*[\"'](\w+)[\"']")                            # o.__dict__["x"]
+
+
+def test_aucun_attribut_nomme_par_une_chaine_francaise():
+    """Trois fois dans la même passe, un attribut nommé par une chaîne est resté en arrière.
+
+    Le pire des trois était muet : `method.__dict__.get("_authentifie")` cherchait l'ancien nom
+    tandis que le décorateur posait le nouveau, et le serveur IMAP répondait à SELECT **sans
+    authentification**. Les deux autres faisaient taire un compteur de test et la garde anti-boucle
+    de la synchronisation — un test au rouge dans un cas, rien du tout dans l'autre.
+
+    Ce que ces trois-là ont en commun n'est pas le hasard : un identifiant écrit dans une chaîne
+    échappe à l'outil, donc il faut un test qui regarde les chaînes."""
+    fautifs = {}
+    for rel in CONVERTIS:
+        f = RACINE / rel
+        for groupes in ATTRIBUT_PAR_CHAINE.findall(f.read_text(encoding="utf-8")):
+            attr = next(g for g in groupes if g)
+            trouves = {m for m in attr.lower().split("_") if m} & set(MOTS_FR)
+            if trouves:
+                fautifs.setdefault(rel, []).append("%s (%s)" % (attr, ", ".join(sorted(trouves))))
+    assert not fautifs, ("un attribut est nommé par une chaîne restée en français — l'outil de "
+                         "renommage ne touche pas aux chaînes :\n" + "\n".join(
+                             "  %s : %s" % (f, ", ".join(n)) for f, n in sorted(fautifs.items())))

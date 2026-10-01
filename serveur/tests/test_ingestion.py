@@ -5,7 +5,7 @@ from atombox.store import Store
 from atombox.uuid7 import uuid7
 
 F = os.path.join(os.path.dirname(__file__), "fixtures")
-def lire(n): return open(os.path.join(F, n), "rb").read()
+def read(n): return open(os.path.join(F, n), "rb").read()
 
 @pytest.fixture(scope="module")
 def base():
@@ -37,21 +37,21 @@ def boites(base):
     base.commit(); return out
 
 def test_ingestion_complete(base, boites, tmp_path):
-    from atombox.ingestion.ingestion import ingerer
+    from atombox.ingestion.ingestion import ingest
     from atombox.schema.modeles import Comm, Rattachement, PieceJointe, CommPieceJointe
     m = Store(str(tmp_path))
-    r1 = ingerer(base, m, boites[0], lire("simple.eml"), uid=12, uid_validity=1)
+    r1 = ingest(base, m, boites[0], read("simple.eml"), uid=12, uid_validity=1)
     assert r1["nouveau"] and r1["nature"] == "humain"
-    assert m.existe(str(r1["comm_id"])), "le message brut est au magasin sous l'UUID de la comm (D145)"
-    r2 = ingerer(base, m, boites[1], lire("simple-relivre.eml"), uid=3, uid_validity=1)
+    assert m.exists(str(r1["comm_id"])), "le message brut est au magasin sous l'UUID de la comm (D145)"
+    r2 = ingest(base, m, boites[1], read("simple-relivre.eml"), uid=3, uid_validity=1)
     assert not r2["nouveau"] and r2["comm_id"] == r1["comm_id"], "la seconde livraison ne fait qu'un rattachement (D010)"
     assert base.scalar(select(func.count()).select_from(Rattachement).where(Rattachement.comm_id == r1["comm_id"])) == 2
     assert base.scalar(select(func.count()).select_from(Comm)) == 1
-    r3 = ingerer(base, m, boites[0], lire("reponse.eml"))
+    r3 = ingest(base, m, boites[0], read("reponse.eml"))
     assert base.get(Comm, r3["comm_id"]).thread_id == r1["comm_id"], "la réponse rejoint le fil (D055)"
-    r4 = ingerer(base, m, boites[0], lire("pieces.eml"))
+    r4 = ingest(base, m, boites[0], read("pieces.eml"))
     assert r4["pieces"] == 3
     assert base.scalar(select(func.count()).select_from(PieceJointe)) == 2, "deux fichiers identiques → une pièce jointe (D011)"
     assert base.scalar(select(PieceJointe).where(PieceJointe.type_detecte == "application/pdf")).nb_references == 2
     assert base.scalar(select(func.count()).select_from(CommPieceJointe).where(CommPieceJointe.comm_id == r4["comm_id"])) == 3
-    assert base.get(Comm, ingerer(base, m, boites[0], lire("liste.eml"))["comm_id"]).nature == "liste"
+    assert base.get(Comm, ingest(base, m, boites[0], read("liste.eml"))["comm_id"]).nature == "liste"

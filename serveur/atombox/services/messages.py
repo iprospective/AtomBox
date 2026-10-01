@@ -388,10 +388,10 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, store=None) -> dict |
     pjs = (await s.execute(select(CommPieceJointe, PieceJointe).join(PieceJointe, PieceJointe.piece_jointe_id == CommPieceJointe.piece_jointe_id)
                            .where(CommPieceJointe.comm_id == comm_id).order_by(CommPieceJointe.ordre))).all()
     corps = ""
-    if store is not None and store.existe(str(comm_id)):
+    if store is not None and store.exists(str(comm_id)):
         try:
-            from ..ingestion.analyse import analyser
-            corps = analyser(store.lire(str(comm_id))).corps_texte
+            from ..ingestion.analyse import analyze
+            corps = analyze(store.read(str(comm_id))).corps_texte
         except Exception as ex: log.warning("corps de %s illisible : %s", comm_id, ex)
     from .tags import tags_de
     provenance = await _provenance_de(s, comm_id)
@@ -421,8 +421,8 @@ async def piece_jointe(s: AsyncSession, compte: Compte, comm_id, pj_id, store=No
                                                         CommPieceJointe.piece_jointe_id == pj_id).limit(1))
     if ligne is None: return None
     p = await s.get(PieceJointe, pj_id)
-    if p is None or store is None or not store.existe(p.blob_ref): return None
-    return {"octets": store.lire(p.blob_ref), "type": p.type_detecte or "application/octet-stream",
+    if p is None or store is None or not store.exists(p.blob_ref): return None
+    return {"octets": store.read(p.blob_ref), "type": p.type_detecte or "application/octet-stream",
             "nom": _nom_de_fichier(ligne.nom_declare or ("piece-%d" % ligne.ordre)),
             "disposition": ligne.disposition or "attachment"}
 
@@ -455,8 +455,8 @@ async def _resoudre_par_message_id(s: AsyncSession, p: PieceJointe, boites: list
     from ..store import Store
     try:
         m = Store(settings.read("ATOMBOX_STORE", "./magasin"))
-        if not m.existe(p.blob_ref): return None
-        interne = email.message_from_bytes(m.lire(p.blob_ref), policy=email.policy.SMTP)
+        if not m.exists(p.blob_ref): return None
+        interne = email.message_from_bytes(m.read(p.blob_ref), policy=email.policy.SMTP)
         mid = (interne["Message-ID"] or "").strip()
     except Exception as ex:
         log.debug("encapsulé illisible %s : %s", p.piece_jointe_id, ex); return None
@@ -578,7 +578,7 @@ async def patcher(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict
     # requête — un serveur IMAP lent ou absent ne doit pas faire échouer un clic (D161).
     # L'émission se fait ICI, au point de passage unique de l'API, et non dans un déclencheur ORM :
     # insérer une ligne pendant le flush d'une autre est un piège (D158, D161).
-    if n and not sync.descendante() and any(k in (patch or {}) for k in ("lu", "drapeau", "dossier", "suppr")):
+    if n and not sync.down_sync() and any(k in (patch or {}) for k in ("lu", "drapeau", "dossier", "suppr")):
         from ..modules import evenements
         await evenements.emettre_async(s, "rattachement.change",
                                        {"comm_id": str(comm_id), "boite_id": str(r.boite_id),
@@ -636,8 +636,8 @@ async def _source_a_transferer(s: AsyncSession, compte: Compte, corps: dict, sto
     if not await s.scalar(select(Rattachement.comm_id).where(Rattachement.comm_id == src_id, _portee(boites)).limit(1)):
         log.warning("transfert refuse : %s hors de la portee de %s", src_id, compte.login)
         return None, None
-    if not store.existe(str(src_id)): return src_id, None      # purgé : le transfert part sans lui (Q030)
-    return src_id, store.lire(str(src_id))
+    if not store.exists(str(src_id)): return src_id, None      # purgé : le transfert part sans lui (Q030)
+    return src_id, store.read(str(src_id))
 
 
 async def _poser_pieces(s: AsyncSession, comm_id, pieces, store, quand) -> None:
@@ -649,7 +649,7 @@ async def _poser_pieces(s: AsyncSession, comm_id, pieces, store, quand) -> None:
         await s.delete(l)
     await s.flush()
     for p in pieces:
-        if store is not None: ref, info = store.deposer(p.octets)
+        if store is not None: ref, info = store.put(p.octets)
         else: ref, info = empreinte_de(p.octets), {"taille_octets": len(p.octets), "taille_stockee": len(p.octets), "compression": "aucune"}
         b = await s.get(Blob, ref)
         if b: b.nb_references += 1
@@ -766,7 +766,7 @@ async def _poser_participants(s: AsyncSession, comm_id, participants) -> None:
         await s.delete(p)
     await s.flush()
     for role, nom, adr, ordre in participants:
-        s.add(Participant(comm_id=comm_id, role=role, adresse_id=(await _adresse(s, adr)).adresse_id, nom_affiche=nom, ordre=ordre))
+        s.add(Participant(comm_id=comm_id, role=role, adresse_id=(await _address(s, adr)).adresse_id, nom_affiche=nom, ordre=ordre))
 
 
 async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: dict, store=None, envoi: bool = False) -> dict | None:
@@ -794,9 +794,9 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
     maintenant = datetime.now(timezone.utc)
     src_id, source = await _source_a_transferer(s, compte, corps, store)
     octets = _composer(compte, adresse, corps, comm_id, maintenant, None, source)
-    from ..ingestion.analyse import analyser
-    a = analyser(octets)
-    if store is not None: store.ecrire(str(comm_id), octets, remplacer=True)
+    from ..ingestion.analyse import analyze
+    a = analyze(octets)
+    if store is not None: store.write(str(comm_id), octets, replace=True)
     c.sujet, c.sujet_normalise = a.sujet, a.sujet_normalise
     c.snippet, c.corps_texte, c.taille = a.snippet, a.corps_texte or None, len(octets)
     c.nb_pieces_jointes = len(a.pieces)
@@ -831,13 +831,13 @@ async def remplacer_brouillon(s: AsyncSession, compte: Compte, comm_id, corps: d
     return serialiser(r, c, ds, adresse, extra={"destinataires": corps.get("destinataires") or [], "corps": corps.get("corps") or "",
                                                 "composition": corps.get("composition"), "reference": str(src_id) if src_id else None})
 
-async def _adresse(s: AsyncSession, complete: str):
+async def _address(s: AsyncSession, complete: str):
     """l'adresse, créée au besoin — version asynchrone de celle de l'ingestion.
 
     Elle NORMALISE : une adresse saisie porte souvent son nom d'affichage (D126)."""
     from ..schema.modeles import Domaine
-    from ..ingestion.ingestion import normaliser_adresse
-    complete = normaliser_adresse(complete) or (complete or "").strip().strip("<>")
+    from ..ingestion.ingestion import normalize_address
+    complete = normalize_address(complete) or (complete or "").strip().strip("<>")
     a = await s.scalar(select(Adresse).where(Adresse.adresse_complete == complete))
     if a: return a
     local, _, dom = complete.partition("@")
@@ -862,14 +862,14 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, store=None, ip_cli
     comm_id = uuid7(); maintenant = datetime.now(timezone.utc)
     src_id, source = await _source_a_transferer(s, compte, corps, store)
     octets = _composer(compte, adresses[boite.boite_id], corps, comm_id, maintenant, ip_client, source)
-    from ..ingestion.analyse import analyser
-    from ..ingestion.identite import empreinte_identite
-    a = analyser(octets)
+    from ..ingestion.analyse import analyze
+    from ..ingestion.identite import identity_fingerprint
+    a = analyze(octets)
     from ..store import empreinte as empreinte_de
     from ..schema.modeles import Blob
     if store is not None:
-        store.ecrire(str(comm_id), octets)
-        brut, info = store.deposer(octets)
+        store.write(str(comm_id), octets)
+        brut, info = store.put(octets)
     else:
         brut, info = empreinte_de(octets), {"taille_octets": len(octets), "taille_stockee": len(octets), "compression": "aucune"}
     b = await s.get(Blob, brut)
@@ -879,7 +879,7 @@ async def creer(s: AsyncSession, compte: Compte, corps: dict, store=None, ip_cli
              sujet_normalise=a.sujet_normalise, thread_id=comm_id, nature="humain", from_adresse=adresses[boite.boite_id], from_nom=compte.nom,
              taille=len(octets), nb_pieces_jointes=len(a.pieces), est_chiffre=False, est_signe=False, snippet=a.snippet, corps_texte=a.corps_texte or None)
     s.add(c)
-    s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, headers=a.headers, blob_ref=brut, empreinte=empreinte_identite(a), structure_mime=a.structure_mime, reponse_possible="oui"))
+    s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, headers=a.headers, blob_ref=brut, empreinte=identity_fingerprint(a), structure_mime=a.structure_mime, reponse_possible="oui"))
     from ..served_uid import assign_async as assign_uid
     s.add(Rattachement(comm_id=comm_id, boite_id=boite.boite_id, compte_id=compte.compte_id,
                        status="new", personnel=False, gele=False,

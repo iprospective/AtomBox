@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from ..uuid7 import uuid7
 from ..store import Store
 from ..schema.modeles import Adresse, Blob, Comm, CommEmail, CommPieceJointe, Domaine, Dossier, Participant, PieceJointe, Rattachement
-from .analyse import analyser
-from .identite import empreinte_identite
+from .analyse import analyze
+from .identite import identity_fingerprint
 from ..journal import journal
 from ..modules.accroches import accroches
 from ..modules import evenements
@@ -30,7 +30,7 @@ def domaine(s: Session, nom: str) -> Domaine:
     s.add(d); s.flush()
     return d
 
-def normaliser_adresse(brut: str) -> str:
+def normalize_address(brut: str) -> str:
     """« Florian HENRY <florian.henry@scopen.fr> » → « florian.henry@scopen.fr ».
 
     Une adresse vient TOUJOURS de l'extérieur — d'un en-tête reçu ou d'un champ de saisie — donc
@@ -44,7 +44,7 @@ def normaliser_adresse(brut: str) -> str:
 
 
 def adresse(s: Session, complete: str) -> Adresse:
-    complete = normaliser_adresse(complete) or (complete or "").strip().strip("<>")
+    complete = normalize_address(complete) or (complete or "").strip().strip("<>")
     a = s.scalar(select(Adresse).where(Adresse.adresse_complete == complete))
     if a: return a
     local, _, dom = complete.partition("@")
@@ -53,7 +53,7 @@ def adresse(s: Session, complete: str) -> Adresse:
     return a
 
 def blob(s: Session, store: Store, octets: bytes) -> Blob:
-    e, info = store.deposer(octets)
+    e, info = store.put(octets)
     b = s.get(Blob, e)
     if b: b.nb_references += 1; return b
     b = Blob(empreinte=e, taille_octets=info["taille_octets"], taille_stockee=info["taille_stockee"], compression=info["compression"],
@@ -61,13 +61,13 @@ def blob(s: Session, store: Store, octets: bytes) -> Blob:
     s.add(b); s.flush()
     return b
 
-def ingerer(s: Session, store: Store, boite_id, octets: bytes, *, uid=None, uid_validity=None, dossier_id=None,
+def ingest(s: Session, store: Store, boite_id, octets: bytes, *, uid=None, uid_validity=None, dossier_id=None,
             date_recue: datetime | None = None, sens: str = "in", dossier_alias: str | None = None) -> dict:
-    a = analyser(octets)
+    a = analyze(octets)
     ctx = accroches.emettre("message.avant_ingestion", analyse=a, boite_id=boite_id, octets=octets, tags=[])
     if ctx.get("ignorer"):
         log.info("ignoré par un module : %s (%s)", a.message_id, ctx.get("raison", "sans raison")); return {"comm_id": None, "nouveau": False, "ignore": True, "identite": None, "nature": a.nature, "pieces": len(a.pieces)}
-    identite = empreinte_identite(a)
+    identite = identity_fingerprint(a)
     existant = s.scalar(select(CommEmail).where(CommEmail.empreinte == identite))
     if existant:
         comm_id, nouveau = existant.comm_id, False
@@ -80,7 +80,7 @@ def ingerer(s: Session, store: Store, boite_id, octets: bytes, *, uid=None, uid_
         if refs:
             parent = s.scalar(select(Comm).join(CommEmail, CommEmail.comm_id == Comm.comm_id).where(CommEmail.message_id.in_(refs)).limit(1))
             if parent and parent.thread_id: thread_id = parent.thread_id
-        store.ecrire(str(comm_id), octets)               # le message brut, sous l'UUID de la comm (D145)
+        store.write(str(comm_id), octets)               # le message brut, sous l'UUID de la comm (D145)
         brut = blob(s, store, octets)                    # et son blob, pour la reconstruction à l'octet (D025)
         s.add(Comm(comm_id=comm_id, type="email", date_recue=date_recue or a.date_declaree or datetime.now(timezone.utc),
                    date_declaree=a.date_declaree, date_ingestion=datetime.now(timezone.utc), sens=sens, sujet=a.sujet,

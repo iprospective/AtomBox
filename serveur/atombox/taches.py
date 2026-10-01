@@ -24,7 +24,7 @@ def un_tour() -> int:
         for t in taches.dues(): taches.lancer(t)
     return n
 
-async def principal():
+async def main():
     charges = chargement.charger()
     log.info("processus des tâches : %d module(s), %d tâche(s) cadencée(s)", len(charges), len(taches.liste()))
     # l'écoute NOTIFY : une connexion psycopg 3 à part, en autocommit (D161) — pas de SQL ici, un canal
@@ -38,4 +38,4 @@ async def principal():
         await asyncio.to_thread(attendre)
 
 if __name__ == "__main__":
-    asyncio.run(principal())
+    asyncio.run(main())

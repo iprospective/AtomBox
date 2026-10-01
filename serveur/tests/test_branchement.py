@@ -18,6 +18,6 @@ def test_le_webmail_est_servi_par_l_api():
     assert c.get("/api/v1/openapi.json").status_code == 200, "l'API reste sous /api/v1, le webmail sur /"
 
 def test_amorcer_est_idempotent_sans_base():
-    from atombox.amorcer import principal
+    from atombox.amorcer import main
     import pytest
-    with pytest.raises(SystemExit): principal(["--login"])   # argparse : arguments manquants → sortie propre
+    with pytest.raises(SystemExit): main(["--login"])   # argparse : arguments manquants → sortie propre

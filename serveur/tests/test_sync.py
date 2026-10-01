@@ -14,8 +14,8 @@ exactement ce qu'on risquait de perdre :
 import os, re as _re, uuid
 from datetime import datetime, timezone
 import pytest
-from atombox.sync.sync import appliquer_descendante, descendante, drapeaux_voulus, en_descendante, etat_imap
-from atombox.sync.module import login_de
+from atombox.sync.sync import apply_down_sync, down_sync, wanted_flags, in_down_sync, imap_state
+from atombox.sync.module import login_of
 from atombox.schema.modeles import Rattachement
 
 
@@ -31,14 +31,14 @@ from atombox.services.personal_state import PersonalState as EtatFeint
 
 
 def test_traduction_vers_imap():
-    poser, retirer = drapeaux_voulus(ratt(), None)
+    poser, retirer = wanted_flags(ratt(), None)
     assert poser == [] and set(retirer) == {"\\Seen", "\\Flagged"}, \
         "personne n'y a touché : aucune ligne, donc on RETIRE les deux"
-    poser, retirer = drapeaux_voulus(ratt(), EtatFeint(datetime.now(timezone.utc), flagged=True))
+    poser, retirer = wanted_flags(ratt(), EtatFeint(datetime.now(timezone.utc), flagged=True))
     assert set(poser) == {"\\Seen", "\\Flagged"} and retirer == []
     # « à revoir » se PROJETTE en IMAP par le retrait de \\Seen : le message reparaît en gras dans
     # Thunderbird comme dans le webmail, et le fait (opened_at) reste écrit dessous (D175 § 2).
-    poser, retirer = drapeaux_voulus(ratt(), EtatFeint(datetime.now(timezone.utc), a_revoir=True))
+    poser, retirer = wanted_flags(ratt(), EtatFeint(datetime.now(timezone.utc), a_revoir=True))
     assert "\\Seen" in retirer and "\\Seen" not in poser
 
 
@@ -49,37 +49,37 @@ def test_le_drapeau_pousse_est_celui_d_une_personne():
     r = ratt()
     assert not hasattr(r, "lu_le") and not hasattr(r, "drapeau"), \
         "l'état personnel a quitté le rattachement (D175) : il ne doit pas y repousser"
-    poser, _ = drapeaux_voulus(r, EtatFeint(datetime.now(timezone.utc)))
+    poser, _ = wanted_flags(r, EtatFeint(datetime.now(timezone.utc)))
     assert poser == ["\\Seen"], "c'est l'état de la PERSONNE qui décide, et lui seul"
 
 
 def test_on_ne_touche_que_ce_qu_on_traduit():
     """un mot-clé posé par un autre client (\\Answered, $Label1) n'est jamais effacé (D140b)"""
-    poser, retirer = drapeaux_voulus(ratt(), EtatFeint(datetime.now(timezone.utc)))
+    poser, retirer = wanted_flags(ratt(), EtatFeint(datetime.now(timezone.utc)))
     assert all(f in ("\\Seen", "\\Flagged") for f in poser + retirer)
 
 
 def test_traduction_depuis_imap():
-    assert etat_imap(["\\Seen", "$Label1"]) == {"lu": True, "drapeau": False, "supprime": False}
-    assert etat_imap(["\\Flagged", "\\Deleted"]) == {"lu": False, "drapeau": True, "supprime": True}
+    assert imap_state(["\\Seen", "$Label1"]) == {"lu": True, "drapeau": False, "supprime": False}
+    assert imap_state(["\\Flagged", "\\Deleted"]) == {"lu": False, "drapeau": True, "supprime": True}
 
 
 def test_la_garde_anti_boucle():
     """appliquer un changement venu d'IMAP ne doit pas le renvoyer à IMAP"""
-    assert not descendante()
-    with en_descendante():
-        assert descendante()
-    assert not descendante(), "le jeton se referme"
-    with en_descendante():
-        with en_descendante(): pass
-        assert descendante(), "imbrication : le jeton intérieur ne referme pas l'extérieur"
-    assert not descendante()
+    assert not down_sync()
+    with in_down_sync():
+        assert down_sync()
+    assert not down_sync(), "le jeton se referme"
+    with in_down_sync():
+        with in_down_sync(): pass
+        assert down_sync(), "imbrication : le jeton intérieur ne referme pas l'extérieur"
+    assert not down_sync()
 
 
 def test_login_master_ou_adresse():
-    assert login_de("a@b.fr", "master") == "a@b.fr*master"
-    assert login_de("a@b.fr", "") == "a@b.fr", "sans compte master : l'adresse seule"
-    assert login_de("a@b.fr", "a@b.fr") == "a@b.fr", "le master EST la boîte : pas de séparateur"
+    assert login_of("a@b.fr", "master") == "a@b.fr*master"
+    assert login_of("a@b.fr", "") == "a@b.fr", "sans compte master : l'adresse seule"
+    assert login_of("a@b.fr", "a@b.fr") == "a@b.fr", "le master EST la boîte : pas de séparateur"
 
 
 def test_le_module_est_charge_et_abonne():
@@ -146,11 +146,11 @@ def test_la_descendante_impute_au_membre_qui_releve(base):
     from atombox.schema.modeles import ReadState
     s, _ = base
     b, d, r, (m,) = _boite_avec(s, membres=1)
-    assert appliquer_descendante(s, r, ["\\Seen"]) == ["lu"]
+    assert apply_down_sync(s, r, ["\\Seen"]) == ["lu"]
     s.commit()
     etat = s.get(ReadState, (m.compte_id, r.comm_id, r.boite_id))
     assert etat is not None and etat.opened_at is not None, "l'ouverture est portée par la personne"
-    assert appliquer_descendante(s, r, ["\\Seen"]) == [], "rien de neuf : rien à dire (le cas courant)"
+    assert apply_down_sync(s, r, ["\\Seen"]) == [], "rien de neuf : rien à dire (le cas courant)"
 
 
 def test_un_seen_retire_ne_detruit_plus_la_trace(base):
@@ -160,11 +160,11 @@ def test_un_seen_retire_ne_detruit_plus_la_trace(base):
     from atombox.schema.modeles import Marker, MarkerPersonal, ReadState
     s, _ = base
     b, d, r, (m,) = _boite_avec(s, membres=1)
-    appliquer_descendante(s, r, ["\\Seen"]); s.commit()
+    apply_down_sync(s, r, ["\\Seen"]); s.commit()
     ouvert_le = s.get(ReadState, (m.compte_id, r.comm_id, r.boite_id)).opened_at
     assert ouvert_le is not None
 
-    assert appliquer_descendante(s, r, []) == ["à revoir"], "on ne dé-lit pas : on dit « à revoir »"
+    assert apply_down_sync(s, r, []) == ["à revoir"], "on ne dé-lit pas : on dit « à revoir »"
     s.commit()
     assert s.get(ReadState, (m.compte_id, r.comm_id, r.boite_id)).opened_at == ouvert_le, \
         "un FAIT ne s'efface pas, même quand le fournisseur retire son drapeau (D175 § 1)"
@@ -180,7 +180,7 @@ def test_une_boite_a_plusieurs_n_impute_a_personne(base):
     from sqlalchemy import func, select
     s, _ = base
     b, d, r, comptes = _boite_avec(s, membres=3)
-    assert appliquer_descendante(s, r, ["\\Seen"]) == [], "à plusieurs, on ne choisit pas"
+    assert apply_down_sync(s, r, ["\\Seen"]) == [], "à plusieurs, on ne choisit pas"
     s.commit()
     assert s.scalar(select(func.count()).select_from(ReadState)) == 0
 
@@ -192,7 +192,7 @@ def test_la_descendante_n_ecrase_pas_un_etat_en_vol(base):
     Depuis D175 le symptôme a changé de forme : ce n'est plus `lu_le` qui retombait à NULL, c'est
     un « à revoir » qui se posait tout seul. La garde, elle, est la même, et c'est elle qu'on teste."""
     from sqlalchemy import select
-    from atombox.ingestion.demon import synchroniser_descendante
+    from atombox.ingestion.demon import sync_down
     from atombox.modules import evenements
     from atombox.schema.modeles import Evenement, Marker, MarkerPersonal, ReadState
     from atombox.services import personal_state as perso
@@ -206,21 +206,21 @@ def test_la_descendante_n_ecrase_pas_un_etat_en_vol(base):
         def drapeaux(self, uids): return {u: [] for u in uids}      # IMAP ne porte PAS encore \Seen
 
     # sans ordre en vol : IMAP fait foi, et « il faut y retourner » se pose
-    synchroniser_descendante(s, FausseReleve(), b.boite_id, "boite@exemple.fr", d)
+    sync_down(s, FausseReleve(), b.boite_id, "boite@exemple.fr", d)
     s.commit()
     assert s.get(MarkerPersonal, cle) is not None, "sans ordre en attente, IMAP fait foi (D140b)"
 
     s.delete(s.get(MarkerPersonal, cle)); s.commit()
     evenements.emettre(s, "rattachement.change", {"comm_id": str(r.comm_id), "boite_id": str(b.boite_id)})
     s.commit()
-    synchroniser_descendante(s, FausseReleve(), b.boite_id, "boite@exemple.fr", d)
+    sync_down(s, FausseReleve(), b.boite_id, "boite@exemple.fr", d)
     s.commit()
     assert s.get(MarkerPersonal, cle) is None, \
         "un ordre en vol protège l'état local — c'était le bug du 8 septembre"
 
     ev = s.scalar(select(Evenement).where(Evenement.type == "rattachement.change"))
     ev.traite_le = datetime.now(timezone.utc); s.commit()
-    synchroniser_descendante(s, FausseReleve(), b.boite_id, "boite@exemple.fr", d)
+    sync_down(s, FausseReleve(), b.boite_id, "boite@exemple.fr", d)
     s.commit()
     assert s.get(MarkerPersonal, cle) is not None, "une fois l'ordre parti, IMAP redevient la vérité"
     assert s.get(ReadState, (m.compte_id, r.comm_id, r.boite_id)).opened_at is not None, \

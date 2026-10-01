@@ -1,12 +1,12 @@
 """F001 — l'analyse d'un message brut et son identité (D064, D130, D131, D032, D033)."""
 import os, pytest
-from atombox.ingestion import analyser, empreinte_identite
+from atombox.ingestion import analyze, identity_fingerprint
 
 F = os.path.join(os.path.dirname(__file__), "fixtures")
-def lire(n): return open(os.path.join(F, n), "rb").read()
+def read(n): return open(os.path.join(F, n), "rb").read()
 
 def test_simple():
-    a = analyser(lire("simple.eml"))
+    a = analyze(read("simple.eml"))
     assert a.from_adresse == "jean.tessier@tessier-industries.example" and a.from_nom == "Jean Tessier"
     assert a.message_id == "<a1@tessier-industries.example>" and a.sujet.startswith("Re: Commande")
     assert a.sujet_normalise == "commande 4521 — delai".replace("—", "").replace("  ", " ").strip() or a.sujet_normalise.startswith("commande 4521")
@@ -17,7 +17,7 @@ def test_simple():
     assert a.headers.startswith("From:") or "Message-ID" in a.headers
 
 def test_pieces_jointes_detectees_sur_les_octets():
-    a = analyser(lire("pieces.eml"))
+    a = analyze(read("pieces.eml"))
     assert len(a.pieces) == 3
     types = {p.nom_declare: p.type_detecte for p in a.pieces}
     assert types["F-2026-0917.pdf"] == "application/pdf" and types["copie.bin"] == "application/pdf", "détecté sur les octets, pas déclaré (D032)"
@@ -27,19 +27,19 @@ def test_pieces_jointes_detectees_sur_les_octets():
     assert a.snippet.startswith("Veuillez")
 
 def test_liste_et_notification():
-    l = analyser(lire("liste.eml"))
+    l = analyze(read("liste.eml"))
     assert l.nature == "liste" and l.list_id and l.list_unsubscribe
     assert "Nouveautés" in l.snippet and "<b>" not in l.snippet
-    n = analyser(lire("notification.eml"))
+    n = analyze(read("notification.eml"))
     assert n.nature == "notification" and n.reponse_possible == "avertir", "on avertit, on ne refuse pas (D131)"
 
 def test_identite_ignore_le_transport():
-    a, b = analyser(lire("simple.eml")), analyser(lire("simple-relivre.eml"))
-    assert lire("simple.eml") != lire("simple-relivre.eml")
-    assert empreinte_identite(a) == empreinte_identite(b), "deux livraisons, un message (D064, D010)"
-    assert empreinte_identite(a) != empreinte_identite(analyser(lire("reponse.eml")))
+    a, b = analyze(read("simple.eml")), analyze(read("simple-relivre.eml"))
+    assert read("simple.eml") != read("simple-relivre.eml")
+    assert identity_fingerprint(a) == identity_fingerprint(b), "deux livraisons, un message (D064, D010)"
+    assert identity_fingerprint(a) != identity_fingerprint(analyze(read("reponse.eml")))
 
 def test_reponse_reference_le_fil():
-    r = analyser(lire("reponse.eml"))
+    r = analyze(read("reponse.eml"))
     assert r.in_reply_to == "<a1@tessier-industries.example>" and r.references == ["<a1@tessier-industries.example>"]
-    assert r.sujet_normalise == analyser(lire("simple.eml")).sujet_normalise, "RE: et Re: se normalisent pareil"
+    assert r.sujet_normalise == analyze(read("simple.eml")).sujet_normalise, "RE: et Re: se normalisent pareil"

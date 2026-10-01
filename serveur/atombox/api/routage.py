@@ -9,10 +9,10 @@ from fastapi import FastAPI, APIRouter
 
 PREFIXE = "/api/v1"
 
-def action(methode: str, chemin: str, **options):
+def action(methode: str, path: str, **options):
     """déclare une action : @action("GET", "/messages/{id}")"""
     def deco(fn):
-        fn._route = (methode.upper(), chemin, options)
+        fn._route = (methode.upper(), path, options)
         return fn
     return deco
 
@@ -32,10 +32,10 @@ def enregistrer(app: FastAPI, controleurs: list[type[Controleur]]) -> list[tuple
     for cls in controleurs:
         instance = cls()
         for nom, fn in cls.actions():
-            methode, chemin, options = fn._route
-            chemin = cls.prefixe + chemin
-            routeur.add_api_route(chemin, getattr(instance, nom), methods=[methode], name="%s.%s" % (cls.__name__, nom), **options)
-            table.append((methode, chemin, "%s.%s" % (cls.__name__, nom)))
+            methode, path, options = fn._route
+            path = cls.prefixe + path
+            routeur.add_api_route(path, getattr(instance, nom), methods=[methode], name="%s.%s" % (cls.__name__, nom), **options)
+            table.append((methode, path, "%s.%s" % (cls.__name__, nom)))
     app.include_router(routeur)
     return table
 

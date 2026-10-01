@@ -49,7 +49,7 @@ def amorcer(login: str, nom: str, mot_de_passe: str | None, boite_adresse: str, 
              (", %d marqueur(s) intégré(s) posé(s)" % n) if n else "")
     return {"compte_id": compte.compte_id, "boite_id": boite.boite_id}
 
-def principal(argv=None):
+def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     # Les options sont en anglais (D181), SANS alias vers les anciennes — contrairement aux
     # variables d'environnement, qui gardent un repli. Les deux risques n'ont rien à voir : une
@@ -67,4 +67,4 @@ def principal(argv=None):
     print("compte %s, boîte %s" % (r["compte_id"], r["boite_id"]))
 
 if __name__ == "__main__":
-    principal()
+    main()

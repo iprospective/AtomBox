@@ -8,30 +8,30 @@ def store(tmp_path): return Store(str(tmp_path / "magasin"))
 
 def test_chemin_ab_cd(store):
     e = "abcdef0123456789" * 4
-    assert store.chemin(e).endswith(os.path.join("ab", "cd", e))
+    assert store.path(e).endswith(os.path.join("ab", "cd", e))
     u = str(uuid7())
-    assert store.chemin(u).endswith(os.path.join(u[:2], u[2:4], u))
-    with pytest.raises(ValueError): store.chemin("../evasion")
+    assert store.path(u).endswith(os.path.join(u[:2], u[2:4], u))
+    with pytest.raises(ValueError): store.path("../evasion")
 
 def test_deposer_lit_et_dedoublonne(store):
     octets = b"facture " * 1000
-    e, info = store.deposer(octets)
+    e, info = store.put(octets)
     assert e == empreinte(octets) and info["nouveau"] and info["compression"] == "zstd" and info["taille_stockee"] < len(octets)
-    assert store.lire(e) == octets
-    e2, info2 = store.deposer(octets)
+    assert store.read(e) == octets
+    e2, info2 = store.put(octets)
     assert e2 == e and not info2["nouveau"], "le même contenu n'est pas réécrit"
 
 def test_compression_conditionnelle(store):
     aleatoire = os.urandom(4096)
-    e, info = store.deposer(aleatoire)
+    e, info = store.put(aleatoire)
     assert info["compression"] == "aucune" and info["taille_stockee"] == 4096, "ne pas compresser ce qui ne gagne rien (D069)"
-    assert store.lire(e) == aleatoire
+    assert store.read(e) == aleatoire
 
 def test_message_brut_sous_uuid(store):
     u = uuid7(); brut = b"From: a@b\r\n\r\nbonjour\r\n" * 50
-    info = store.ecrire(str(u), brut)
-    assert info["nouveau"] and store.existe(str(u)) and store.lire(str(u)) == brut
-    assert not store.ecrire(str(u), b"autre chose")["nouveau"] and store.lire(str(u)) == brut, "jamais réécrit"
+    info = store.write(str(u), brut)
+    assert info["nouveau"] and store.exists(str(u)) and store.read(str(u)) == brut
+    assert not store.write(str(u), b"autre chose")["nouveau"] and store.read(str(u)) == brut, "jamais réécrit"
 
 def test_uuid7_croissant_et_versionne():
     a, b = uuid7(), uuid7()
@@ -55,4 +55,4 @@ def test_ab_cd_decoupe_le_temps_pas_l_espace(tmp_path):
 
     # et le chemin reste calculable, sans index
     i = ids[0]
-    assert m.chemin(i).endswith("/%s/%s/%s" % (i[:2], i[2:4], i))
+    assert m.path(i).endswith("/%s/%s/%s" % (i[:2], i[2:4], i))

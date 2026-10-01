@@ -29,8 +29,8 @@ def manifest(): return json.load(open(MANIFEST, encoding="utf-8"))
 def dico():
     d = trouver_dict()
     if not d: pytest.skip("dictionnaire introuvable (.mmi-pm/docs/dict)")
-    lire = lambda n: yaml.safe_load(open(os.path.join(d, n + ".yml"), encoding="utf-8"))
-    return {"entites": lire("entites"), "champs": lire("champs"), "relations": lire("relations")}
+    read = lambda n: yaml.safe_load(open(os.path.join(d, n + ".yml"), encoding="utf-8"))
+    return {"entites": read("entites"), "champs": read("champs"), "relations": read("relations")}
 
 def test_le_schema_se_parse(sql):
     pglast = pytest.importorskip("pglast")
