@@ -9,7 +9,7 @@
 #
 # Ce qui NE peut pas être vérifié ici : la fraîcheur des fichiers engendrés (schéma, modèles,
 # contrat). Leur source — le dictionnaire — vit dans le dépôt de DONNÉES, absent de la CI. Ce
-# contrôle tourne donc avant le push, sur le poste : `outils/verifier-engendre.sh --installer`.
+# contrôle tourne donc avant le push, sur le poste : `tools/check-generated.sh --install`.
 # Le dire ici plutôt que de laisser un job s'ignorer en silence et se croire vert.
 #
 # Le pipeline doit rester COURT. Un pipeline de dix minutes n'est pas attendu : il est contourné.
@@ -59,7 +59,7 @@ webmail:
   script:
     - npm run css
     - git diff --exit-code -- css/app.css || { echo "✗ css/app.css n'est pas à jour : npm run css"; exit 1; }
-    - python3 outils/bundle.py && python3 outils/bundle.py dist/prod.html prod
+    - python3 tools/bundle.py && python3 tools/bundle.py dist/prod.html prod
     - node test/smoke.js
     - node test/prod.js
     - node test/parcours.js      # chaque écran UTILISÉ en mode produit (RM3189)

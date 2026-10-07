@@ -24,7 +24,7 @@ from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..journal import journal
-from ..schema.modeles import Acces, Marker, MarkerPersonal, Rattachement, ReadState
+from ..schema.models import Acces, Marker, MarkerPersonal, Rattachement, ReadState
 
 log = journal("api")
 
@@ -89,9 +89,9 @@ async def states_of(s: AsyncSession, compte_id, comm_ids: list) -> dict:
     est creuse, et c'est son intérêt."""
     if not comm_ids: return {}
     out: dict = {}
-    lignes = await s.execute(select(ReadState).where(ReadState.compte_id == compte_id,
+    lines = await s.execute(select(ReadState).where(ReadState.compte_id == compte_id,
                                                     ReadState.comm_id.in_(comm_ids)))
-    for (r,) in lignes:
+    for (r,) in lines:
         out.setdefault((r.comm_id, r.boite_id), {}).update(
             lu=r.opened_at is not None, drapeau=bool(r.flagged),
             ouvert_le=r.opened_at, vu_le=r.last_seen_at, nb_ouvertures=r.open_count)
@@ -124,15 +124,15 @@ def serialize_state(e: dict | None) -> dict:
 #     await s.execute(open_stmt(...))     depuis l'API
 #     s.execute(open_stmt(...))           depuis le démon
 
-def open_stmt(compte_id, comm_id, boite_id, quand=None):
+def open_stmt(compte_id, comm_id, boite_id, when=None):
     """OUVERT : la première fois pose `opened_at` et ne la retouche plus jamais.
 
     Un UPSERT et non « lire, puis écrire » : deux onglets qui ouvrent le même message en même temps
     feraient sinon deux INSERT dont un échoue. `open_count` s'incrémente côté SGBD pour la même
     raison — lire, ajouter un, écrire, c'est perdre un compte dès qu'on est deux."""
-    maintenant = quand or datetime.now(timezone.utc)
+    now = when or datetime.now(timezone.utc)
     st = insert(ReadState).values(compte_id=compte_id, comm_id=comm_id, boite_id=boite_id,
-                                 opened_at=maintenant, last_seen_at=maintenant,
+                                 opened_at=now, last_seen_at=now,
                                  open_count=1, flagged=False)
     # COALESCE et non `excluded` : la PREMIÈRE ouverture gagne pour toujours. Écrire `excluded`
     # aurait fait d'`opened_at` la DERNIÈRE ouverture — un doublon de `last_seen_at` —, et l'on
@@ -140,17 +140,17 @@ def open_stmt(compte_id, comm_id, boite_id, quand=None):
     return st.on_conflict_do_update(
         constraint="pk_read_state",
         set_={"opened_at": func.coalesce(ReadState.opened_at, st.excluded.opened_at),
-              "last_seen_at": maintenant, "open_count": ReadState.open_count + 1})
+              "last_seen_at": now, "open_count": ReadState.open_count + 1})
 
 
-def flag_stmt(compte_id, comm_id, boite_id, flagged: bool, quand=None):
+def flag_stmt(compte_id, comm_id, boite_id, flagged: bool, when=None):
     """pose ou retire le drapeau — crée la ligne au besoin, SANS prétendre à une ouverture.
 
     C'est pour ce cas qu'`opened_at` est nullable : mettre un drapeau sur un message qu'on n'a pas
     ouvert est un geste courant, et inventer une ouverture pour avoir une ligne serait un faux."""
-    maintenant = quand or datetime.now(timezone.utc)
+    now = when or datetime.now(timezone.utc)
     st = insert(ReadState).values(compte_id=compte_id, comm_id=comm_id, boite_id=boite_id,
-                                 opened_at=None, last_seen_at=maintenant, open_count=0,
+                                 opened_at=None, last_seen_at=now, open_count=0,
                                  flagged=bool(flagged))
     return st.on_conflict_do_update(constraint="pk_read_state", set_={"flagged": bool(flagged)})
 
@@ -171,9 +171,9 @@ def polling_account(s, boite_id):
     choisit pas : un faux fait ne se distingue plus d'un vrai, et c'est irréversible. Le jour où
     l'IMAP sortant (D174) est la seule porte, la question ne se pose plus : chacun s'y connecte avec
     son compte, et le drapeau est personnel par construction."""
-    lignes = list(s.scalars(select(Acces.compte_id)
+    lines = list(s.scalars(select(Acces.compte_id)
                             .where(Acces.boite_id == boite_id, Acces.fin.is_(None))))
-    return lignes[0] if len(lignes) == 1 else None
+    return lines[0] if len(lines) == 1 else None
 
 
 class PersonalState:
@@ -192,31 +192,31 @@ class PersonalState:
         self.flagged, self.a_revoir = bool(flagged), bool(a_revoir)
 
     @property
-    def vu(self) -> bool:
+    def seen(self) -> bool:
         return self.opened_at is not None and not self.a_revoir
 
 
 def state_sync(s, compte_id, comm_id, boite_id) -> PersonalState | None:
     """l'état d'UN message pour UN compte, en session synchrone (le démon, le serveur IMAP)"""
     if compte_id is None: return None
-    ligne = s.get(ReadState, (compte_id, comm_id, boite_id))
+    line = s.get(ReadState, (compte_id, comm_id, boite_id))
     marque = s.scalar(select(MarkerPersonal.set_at)
                       .join(Marker, Marker.marker_id == MarkerPersonal.marker_id)
                       .where(MarkerPersonal.compte_id == compte_id, MarkerPersonal.comm_id == comm_id,
                              MarkerPersonal.boite_id == boite_id, Marker.code == TO_REVIEW))
-    if ligne is None and marque is None: return None
-    return PersonalState(opened_at=ligne.opened_at if ligne else None,
-                         last_seen_at=ligne.last_seen_at if ligne else None,
-                         flagged=ligne.flagged if ligne else False,
+    if line is None and marque is None: return None
+    return PersonalState(opened_at=line.opened_at if line else None,
+                         last_seen_at=line.last_seen_at if line else None,
+                         flagged=line.flagged if line else False,
                          a_revoir=marque is not None)
 
 
 # ── les marqueurs ───────────────────────────────────────────────────────────────────────────────
 # Même principe que pour les faits : l'ORDRE d'un côté, les deux façons de le passer de l'autre.
 
-def set_marker_stmt(marker_id, compte_id, comm_id, boite_id, due_at=None, value=None, quand=None):
+def set_marker_stmt(marker_id, compte_id, comm_id, boite_id, due_at=None, value=None, when=None):
     st = insert(MarkerPersonal).values(compte_id=compte_id, comm_id=comm_id, boite_id=boite_id,
-                                       marker_id=marker_id, set_at=quand or datetime.now(timezone.utc),
+                                       marker_id=marker_id, set_at=when or datetime.now(timezone.utc),
                                        due_at=due_at, value=value)
     return st.on_conflict_do_update(constraint="pk_marker_personal",
                                     set_={"due_at": due_at, "value": value})

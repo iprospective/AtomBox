@@ -1,2 +1,2 @@
-from .analyse import analyze, Analyse
-from .identite import identity_fingerprint
+from .analysis import analyze, Analysis
+from .identity import identity_fingerprint

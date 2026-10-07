@@ -27,10 +27,10 @@ def monde(tmp_path):
     if not os.environ.get("DATABASE_URL"): pytest.skip("DATABASE_URL absent")
     import psycopg
     from atombox.db import session as ouvrir
-    from atombox.api.securite import hacher_mot_de_passe
-    from atombox.ingestion.ingestion import adresse as adresse_de
+    from atombox.api.security import hash_password
+    from atombox.ingestion.ingestion import address_of
     from atombox.store import Store
-    from atombox.schema.modeles import Acces, Boite, Comm, Compte, Dossier, Rattachement
+    from atombox.schema.models import Acces, Boite, Comm, Compte, Dossier, Rattachement
     from atombox.schema.seeds import seed_builtins
     from atombox.services.mailbox import ensure_mailboxes
     from atombox.uuid7 import uuid7
@@ -49,15 +49,15 @@ def monde(tmp_path):
     from atombox import settings
     coupees = ["ATOMBOX_IMAP_HOST"]
     coupees += [v for k, v in settings.FORMER_NAMES.items() if k in coupees]
-    avant = {k: os.environ.get(k) for k in ["DATABASE_URL", "ATOMBOX_STORE"] + coupees}
+    before = {k: os.environ.get(k) for k in ["DATABASE_URL", "ATOMBOX_STORE"] + coupees}
     os.environ["DATABASE_URL"] = u
     os.environ["ATOMBOX_STORE"] = str(tmp_path / "magasin")
     for k in coupees: os.environ.pop(k, None)
     s = ouvrir(u); Store(os.environ["ATOMBOX_STORE"])
-    a = adresse_de(s, "contact@exemple.fr")
+    a = address_of(s, "contact@exemple.fr")
     boite = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(boite)
     compte = Compte(compte_id=uuid7(), login="mathieu", nom="Mathieu", actif=True,
-                    cree_le=datetime.now(timezone.utc), mot_de_passe_empreinte=hacher_mot_de_passe("secret")); s.add(compte)
+                    cree_le=datetime.now(timezone.utc), mot_de_passe_empreinte=hash_password("secret")); s.add(compte)
     s.add(Acces(compte_id=compte.compte_id, boite_id=boite.boite_id, role="gestionnaire",
                 debut=datetime.now(timezone.utc), accorde_par=compte.compte_id))
     inbox = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom="INBOX", alias_imap="INBOX", protege=True)
@@ -75,9 +75,9 @@ def monde(tmp_path):
     s.commit()
 
     from fastapi.testclient import TestClient
-    from atombox.api.app import creer_app
+    from atombox.api.app import create_app
     import atombox.db as db; db._async.clear(); db._sync.clear()
-    client = TestClient(creer_app())
+    client = TestClient(create_app())
     r = client.post("/api/v1/session", json={"utilisateur": "mathieu", "mot_de_passe": "secret"})
     assert r.status_code == 200, r.text
     h = {"Authorization": "Bearer " + r.json()["jeton"]}
@@ -86,7 +86,7 @@ def monde(tmp_path):
                "compte_id": compte.compte_id, "boite_id": boite.boite_id, "session": s}
     finally:
         s.close()
-        for k, v in avant.items():
+        for k, v in before.items():
             if v is None: os.environ.pop(k, None)
             else: os.environ[k] = v
         import asyncio
@@ -111,7 +111,7 @@ def test_a_revoir_n_efface_pas_l_ouverture(monde):
 
     Contre-épreuve : rendre `lu: false` à son ancien comportement (`opened_at = NULL`) fait rougir
     la deuxième assertion. C'est la ligne qui garde la promesse."""
-    from atombox.schema.modeles import ReadState
+    from atombox.schema.models import ReadState
     m = _patch(monde, {"lu": True})
     assert m["lu"] is True and m["a_revoir"] is False
     s = monde["session"]; s.expire_all()
@@ -140,7 +140,7 @@ def test_a_revoir_n_efface_pas_l_ouverture(monde):
 def test_rouvrir_compte_les_passages_sans_deplacer_la_premiere_fois(monde):
     """`opened_at` est la PREMIÈRE ouverture, `last_seen_at` la dernière, `open_count` les deux
     ensemble. Une clé (compte, message, statut) aurait interdit d'être « ouvert cinq fois »."""
-    from atombox.schema.modeles import ReadState
+    from atombox.schema.models import ReadState
     _patch(monde, {"lu": True})
     s = monde["session"]; s.expire_all()
     e1 = s.get(ReadState, (monde["compte_id"], monde["comm_id"], monde["boite_id"]))
@@ -174,11 +174,11 @@ def test_traite_puis_archive_se_relit(monde):
 
     # LE CHEMIN PARCOURU : il n'est plus sur la ligne, il est au journal, qui n'est jamais purgé
     import asyncio
-    lignes = asyncio.run(_journal(monde["comm_id"]))
-    actions = [x["action"] for x in lignes]
+    lines = asyncio.run(_journal(monde["comm_id"]))
+    actions = [x["action"] for x in lines]
     assert actions[:2] == ["archived", "processed"], \
         "le journal (D054) relit « traité, puis archivé » — l'état courant ne le dit plus (%r)" % actions
-    archive = next(x for x in lignes if x["action"] == "archived")
+    archive = next(x for x in lines if x["action"] == "archived")
     assert archive["details"]["avant"] == "processed" and archive["details"]["apres"] == "archived", \
         "chaque transition écrit d'où elle vient : sans cela l'historique est une liste, pas un chemin"
 
@@ -211,7 +211,7 @@ def test_l_etat_et_la_boite_aux_lettres_concordent(monde):
     Ce test est cette règle. S'il rougit, c'est qu'un chemin d'écriture a été oublié — et le
     symptôme côté client serait un message visible dans deux boîtes, ou dans aucune."""
     from sqlalchemy import select
-    from atombox.schema.modeles import Dossier, Rattachement
+    from atombox.schema.models import Dossier, Rattachement
     s = monde["session"]
     for valeur in ("processed", "archived", "deleted", "junk", None):
         _patch(monde, {"motif_sortie": valeur})
@@ -232,7 +232,7 @@ def test_traiter_depuis_un_dossier_utilisateur_n_oublie_pas_d_ou_il_vient(monde)
     lettres —, mais son dossier d'origine est mémorisé (D088). Sans cette mémoire, traiter un
     message rangé le déclasserait définitivement."""
     from sqlalchemy import select
-    from atombox.schema.modeles import Dossier, Rattachement
+    from atombox.schema.models import Dossier, Rattachement
     from atombox.uuid7 import uuid7
     s = monde["session"]
     devis = Dossier(dossier_id=uuid7(), boite_id=monde["boite_id"], nom="Devis 2026",
@@ -274,7 +274,7 @@ def test_deplacer_vers_une_boite_qui_utilise_deja_cet_uid(monde):
     porte celui qu'on va y envoyer — et on appelle `move_sync`, comme le fait un `UID MOVE`."""
     from sqlalchemy import func, select
     from atombox.db import session as ouvrir_sync
-    from atombox.schema.modeles import Comm, Dossier, Rattachement
+    from atombox.schema.models import Comm, Dossier, Rattachement
     from atombox.services import mailbox
     from atombox.uuid7 import uuid7
     s = monde["session"]

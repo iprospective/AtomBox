@@ -4,7 +4,7 @@ Python 3.12, `asyncio`, PostgreSQL ≥ 14 (**D154**). Découpé par fonctionnali
 
 | Dossier | F… | Rôle |
 |---|---|---|
-| `atombox/schema/` | F114 | le schéma **engendré** depuis le dictionnaire (`outils/gen-schema.py`) et ses migrations (Alembic) |
+| `atombox/schema/` | F114 | le schéma **engendré** depuis le dictionnaire (`tools/gen-schema.py`) et ses migrations (Alembic) |
 | `atombox/store/` | F002 | le magasin d'octets `ab/cd/<id>`, zstd (D145) |
 | `atombox/ingestion/` | F001, F113 | le démon IMAP : IDLE, PEEK, reprise par UID ; synchronisation des états |
 | `atombox/filtres/` | F016 | le moteur de filtres |
@@ -16,7 +16,7 @@ Python 3.12, `asyncio`, PostgreSQL ≥ 14 (**D154**). Découpé par fonctionnali
 ```
 cd serveur
 uv venv && uv pip install -e ".[dev]"
-python3 ../outils/gen-schema.py          # régénère atombox/schema/schema.sql depuis le dictionnaire
+python3 ../tools/gen-schema.py          # régénère atombox/schema/schema.sql depuis le dictionnaire
 .venv/bin/pytest -q                       # sans base : la syntaxe et la fidélité au dictionnaire ;
                                           # avec DATABASE_URL : le schéma s'applique dans une base jetable
 DATABASE_URL=postgresql://…/atombox .venv/bin/alembic upgrade head
@@ -27,7 +27,7 @@ Le schéma n'est **jamais** édité à la main : on corrige le dictionnaire, on 
 ## Le serveur IMAP (D180) — lecture seule
 
 ```
-bash outils/imapd.sh start|stop|restart|status|logs|fg
+bash tools/imapd.sh start|stop|restart|status|logs|fg
 ```
 
 Les réglages viennent de `/etc/atombox/env` (`ATOMBOX_IMAPD_LISTEN`, `ATOMBOX_IMAPD_PORT`) et se
@@ -42,7 +42,7 @@ d'autre est signalé, jamais forcé.
 ## La base, l'ORM et les migrations (D158)
 
 - **ORM** : SQLAlchemy 2 sur `psycopg` 3 — les modèles sont **engendrés** du dictionnaire
-  (`outils/gen-modeles.py` → `atombox/schema/modeles.py`), comme le DDL ; **aucune chaîne SQL**
+  (`tools/gen-models.py` → `atombox/schema/models.py`), comme le DDL ; **aucune chaîne SQL**
   hors de `schema/` (un test le refuse) ; synchrone pour le démon, asynchrone pour l'API ;
 - **migrations** : **Alembic**, la file est `atombox/schema/migrations/versions/` — `0001` applique
   la copie figée `0001_schema.sql`, chaque changement du dictionnaire ajoute une révision
@@ -75,14 +75,14 @@ branché sur le vrai serveur — `serveur.poc.js` n'est pas chargé (D141, D157)
 
 ## Derrière Apache, en service (conteneur dev)
 
-`outils/deployer-apache.sh` (avec `sudo`) installe le vhost **`atombox.dev.lxc`** (reverse proxy vers
+`tools/deploy-apache.sh` (avec `sudo`) installe le vhost **`atombox.dev.lxc`** (reverse proxy vers
 l'API sur `127.0.0.1:8010`, qui sert aussi le webmail), le fichier `/etc/atombox/env` (les secrets :
-base, magasin, IMAP, SMTP — copié de `outils/atombox.env.exemple` s'il n'existe pas) et trois unités
+base, magasin, IMAP, SMTP — copié de `tools/atombox.env.example` s'il n'existe pas) et trois unités
 systemd : `atombox-api` (démarrée), `atombox-ingestion` et `atombox-taches` (installées, à démarrer
 une fois l'environnement rempli). Idempotent. Puis, depuis l'hôte : `http://atombox.dev.lxc/`.
 
 ```
-sudo bash serveur/outils/deployer-apache.sh          # ou --apache / --systemd
+sudo bash serveur/tools/deploy-apache.sh          # ou --apache / --systemd
 sudo systemctl start atombox-ingestion atombox-taches
 journalctl -u atombox-api -f                          # et logs/ pour le journal applicatif (D152)
 ```

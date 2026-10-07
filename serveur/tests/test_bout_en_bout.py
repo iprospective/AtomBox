@@ -6,9 +6,9 @@ ENTRE deux morceaux corrects : une route déclarée mais non écrite, une séria
 jamais attendu. Aucun test unitaire ne pouvait les voir.
 
 Ce qui tourne ici, pour de vrai :
-  - le DÉMON D'INGESTION (`python -m atombox.ingestion.demon`), en sous-processus, contre un IMAP
+  - le DÉMON D'INGESTION (`python -m atombox.ingestion.daemon`), en sous-processus, contre un IMAP
     simulé (tests/doublures.py) — il relève, il se met en IDLE, il se réveille ;
-  - le PROCESSUS DES TÂCHES (`python -m atombox.taches`), en sous-processus — il écoute NOTIFY,
+  - le PROCESSUS DES TÂCHES (`python -m atombox.tasks`), en sous-processus — il écoute NOTIFY,
     remet au relais SMTP simulé, pousse les états vers IMAP ;
   - l'API, dans le processus du test (TestClient) : c'est elle qu'on pilote comme le webmail.
 
@@ -59,9 +59,9 @@ class Chaine:
         if f.exists(): out.append("── erreurs.log\n" + f.read_text(errors="replace")[-3000:])
         return "\n".join(out)
 
-    def attendre(self, condition, quoi: str, delai: float = REVEIL):
+    def wait(self, condition, quoi: str, delay: float = REVEIL):
         """sonde toutes les 50 ms ; échoue avec les journaux des démons, qui disent POURQUOI"""
-        fin, derniere = time.monotonic() + delai, None
+        fin, derniere = time.monotonic() + delay, None
         while time.monotonic() < fin:
             for nom, p in self.procs.items():
                 if p.poll() is not None: pytest.fail("le processus « %s » est mort en attendant : %s\n%s" % (nom, quoi, self.journaux()))
@@ -71,9 +71,9 @@ class Chaine:
             except Exception as e:
                 derniere = e
             time.sleep(0.05)
-        pytest.fail("pas en %.0f s : %s (dernière valeur : %r)\n%s" % (delai, quoi, derniere, self.journaux()))
+        pytest.fail("pas en %.0f s : %s (dernière valeur : %r)\n%s" % (delay, quoi, derniere, self.journaux()))
 
-    def liste(self, dossier: str, **p) -> list[dict]:
+    def listing(self, dossier: str, **p) -> list[dict]:
         """comme le webmail (api.http.js) : un dossier virtuel s'ouvre avec kind=perso"""
         if dossier.startswith("perso:"): p.setdefault("kind", "perso")
         return self.get("/messages", dossier=dossier, **p).json()["messages"]
@@ -88,9 +88,9 @@ def chaine(tmp_path_factory):
     if not url: pytest.skip("DATABASE_URL absent")
     import psycopg
     from atombox.db import session as ouvrir
-    from atombox.schema.modeles import Acces, Boite, Compte, Dossier
-    from atombox.ingestion.ingestion import adresse
-    from atombox.api.securite import hacher_mot_de_passe
+    from atombox.schema.models import Acces, Boite, Compte, Dossier
+    from atombox.ingestion.ingestion import address_of
+    from atombox.api.security import hash_password
     from atombox.uuid7 import uuid7
 
     nom = "atombox_e2e_" + uuid.uuid4().hex[:8]
@@ -102,10 +102,10 @@ def chaine(tmp_path_factory):
 
     # le monde : un compte, une boîte, ses dossiers — ce qu'un administrateur pose avant la première relève
     s = ouvrir(u)
-    a = adresse(s, "contact@exemple.fr")
+    a = address_of(s, "contact@exemple.fr")
     boite = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(boite)
     compte = Compte(compte_id=uuid7(), login="mathieu", nom="Mathieu", actif=True, cree_le=datetime.now(timezone.utc),
-                    mot_de_passe_empreinte=hacher_mot_de_passe("secret")); s.add(compte)
+                    mot_de_passe_empreinte=hash_password("secret")); s.add(compte)
     s.add(Acces(compte_id=compte.compte_id, boite_id=boite.boite_id, role="lecteur", debut=datetime.now(timezone.utc),
                 accorde_par=compte.compte_id))
     for alias in ("INBOX", "Sent", "Drafts", "Trash", "Junk"):
@@ -122,21 +122,21 @@ def chaine(tmp_path_factory):
                ATOMBOX_TASKS_INTERVAL="30", ATOMBOX_IDLE_SECONDS="30",
                PYTHONPATH=str(RACINE))
     # le piège de RM3189 : un venv installé en `pip install -e` importe le code du worktree d'à côté
-    vu = subprocess.run([sys.executable, "-c", "import atombox; print(atombox.__file__)"], cwd=RACINE, env=env,
+    seen = subprocess.run([sys.executable, "-c", "import atombox; print(atombox.__file__)"], cwd=RACINE, env=env,
                         capture_output=True, text=True).stdout.strip()
-    assert vu.startswith(str(RACINE)), "les démons importeraient %s, pas le code de ce worktree" % vu
+    assert seen.startswith(str(RACINE)), "les démons importeraient %s, pas le code de ce worktree" % seen
 
     procs = {n: subprocess.Popen([sys.executable, "-m", mod], cwd=RACINE, env=env,
                                  stdout=open(logs / (n + ".out"), "wb"), stderr=subprocess.STDOUT)
-             for n, mod in (("ingestion", "atombox.ingestion.demon"), ("taches", "atombox.taches"))}
+             for n, mod in (("ingestion", "atombox.ingestion.daemon"), ("taches", "atombox.tasks"))}
 
-    avant = {k: os.environ.get(k) for k in ("DATABASE_URL", "ATOMBOX_STORE", "ATOMBOX_LOGS")}
+    before = {k: os.environ.get(k) for k in ("DATABASE_URL", "ATOMBOX_STORE", "ATOMBOX_LOGS")}
     os.environ.update(DATABASE_URL=u, ATOMBOX_STORE=str(store), ATOMBOX_LOGS=str(logs))
     import atombox.db as db
     db._async.clear(); db._sync.clear()
     from fastapi.testclient import TestClient
-    from atombox.api.app import creer_app
-    client = TestClient(creer_app())
+    from atombox.api.app import create_app
+    client = TestClient(create_app())
     r = client.post("/api/v1/session", json={"utilisateur": "mathieu", "mot_de_passe": "secret"})
     assert r.status_code == 200, r.text
     ch = Chaine(client, {"Authorization": "Bearer " + r.json()["jeton"]}, imap, relais, logs, procs)
@@ -146,7 +146,7 @@ def chaine(tmp_path_factory):
     def releve():
         with psycopg.connect(u) as cnx:
             return cnx.execute("select count(*) from dossier where uid_validity is not null").fetchone()[0] >= 5
-    ch.attendre(releve, "la première relève du démon d'ingestion", delai=20)
+    ch.wait(releve, "la première relève du démon d'ingestion", delay=20)
     try:
         yield ch
     finally:
@@ -155,7 +155,7 @@ def chaine(tmp_path_factory):
             try: p.wait(5)
             except subprocess.TimeoutExpired: p.kill()
         imap.arreter(); relais.arreter()
-        for k, v in avant.items():
+        for k, v in before.items():
             if v is None: os.environ.pop(k, None)
             else: os.environ[k] = v
         import asyncio
@@ -181,63 +181,63 @@ def test_1_un_courrier_arrive_et_se_traite(chaine):
 
     uid = ch.imap.put(message("Commande 4412"))
     # IDLE doit réveiller le démon : sans lui, il dormirait 30 s
-    m = ch.attendre(lambda: next((x for x in ch.liste("inbox") if x["sujet"] == "Commande 4412"), None),
+    m = ch.wait(lambda: next((x for x in ch.listing("inbox") if x["sujet"] == "Commande 4412"), None),
                     "le message déposé dans IMAP apparaît dans la boîte de réception (IDLE a réveillé le démon)")
     assert m["lu"] is False
     assert ch.compteur("inbox").get("u", 0) >= 1, "le compteur de non-lus suit la liste"
 
-    regles = ch.get("/filtres").json()["filtres"]
-    assert regles[0]["nb_declenchements"] == 1, \
+    rules = ch.get("/filtres").json()["filtres"]
+    assert rules[0]["nb_declenchements"] == 1, \
         "la règle créée depuis l'écran s'applique au courrier entrant (D171 : une règle qui agit est une règle de boîte)"
     # …et ce qu'elle a posé PART VERS IMAP. Sans cet ordre, la synchronisation descendante — qui
     # tourne dans la même relève — lisait un IMAP sans \\Flagged et défaisait la règle 50 ms plus
     # tard. Lire le drapeau en base ne le prouve pas (on le lit avant qu'il soit défait) ; IMAP
     # qui le reçoit, si : c'est impossible sans l'ordre montant.
-    ch.attendre(lambda: "\\Flagged" in ch.imap.drapeaux("INBOX", uid),
+    ch.wait(lambda: "\\Flagged" in ch.imap.flags("INBOX", uid),
                 "le drapeau posé par la règle remonte à IMAP — sinon la relève suivante le défait")
     assert ch.get("/messages/" + m["id"]).json()["drapeau"] is True
 
     # on le lit : l'état part vers IMAP par l'événement, et le processus des tâches le pousse
     assert ch.patch("/messages/%s/rattachement" % m["id"], {"lu": True}).json()["ok"]
-    ch.attendre(lambda: "\\Seen" in ch.imap.drapeaux("INBOX", uid),
+    ch.wait(lambda: "\\Seen" in ch.imap.flags("INBOX", uid),
                 "« lu » remonte à IMAP (\\Seen) — le NOTIFY a réveillé le processus des tâches")
 
     # on répond, avec un Cc : l'envoi part, et les DEUX destinataires sont dans l'enveloppe (RM3214)
     r = ch.post("/messages", {"destinataires": ["achats@fournisseur.example"], "cc": "collegue@exemple.fr",
                               "sujet": "Re: Commande 4412", "corps": "Bien reçu."}).json()
     assert r["ok"], r
-    remises = ch.relais.attendre(1, REVEIL)
+    remises = ch.relais.wait(1, REVEIL)
     assert remises, "la réponse n'est jamais arrivée au relais\n" + ch.journaux()
     assert set(remises[-1]["pour"]) == {"achats@fournisseur.example", "collegue@exemple.fr"}, remises[-1]["pour"]
     assert b"Bien re" in remises[-1]["octets"]
-    e = ch.attendre(lambda: (lambda x: x if x.get("etat") == "remis" else None)(ch.get("/envois/" + r["message"]["id"]).json()),
+    e = ch.wait(lambda: (lambda x: x if x.get("etat") == "remis" else None)(ch.get("/envois/" + r["message"]["id"]).json()),
                     "le suivi d'envoi passe à « remis »")
     assert {d["etat"] for d in e["destinataires"]} == {"remis"}
 
     # D140c — l'envoi est COPIÉ dans « Sent » côté IMAP, marqué lu : sinon le téléphone ne voit aucun
     # message envoyé depuis AtomBox, et l'utilisateur croit que rien n'est parti
     copies = lambda: [x for x in ch.imap.boites["Sent"]["messages"] if b"Re: Commande 4412" in x["octets"]]
-    ch.attendre(lambda: copies() and "\\Seen" in copies()[0]["flags"],
+    ch.wait(lambda: copies() and "\\Seen" in copies()[0]["flags"],
                 "l'envoi est copié dans « Sent » côté IMAP, marqué lu (D140c)")
     assert copies()[0]["octets"].replace(b"\r\n", b"\n") == remises[-1]["octets"].replace(b"\r\n", b"\n"), \
         "ce qui est copié est ce qui est parti — les mêmes octets"
 
     # un AUTRE client (Thunderbird, le téléphone) RETIRE le drapeau : le retrait descend…
-    ch.imap.retirer("INBOX", uid, "\\Flagged")
-    ch.imap.poser("INBOX", uid, "\\Answered")      # un mot-clé qu'AtomBox ne traduit pas : il ne doit pas gêner
-    ch.attendre(lambda: ch.get("/messages/" + m["id"]).json()["drapeau"] is False,
+    ch.imap.remove("INBOX", uid, "\\Flagged")
+    ch.imap.add("INBOX", uid, "\\Answered")      # un mot-clé qu'AtomBox ne traduit pas : il ne doit pas gêner
+    ch.wait(lambda: ch.get("/messages/" + m["id"]).json()["drapeau"] is False,
                 "un drapeau retiré dans un autre client descend dans AtomBox (F113) — IDLE a signalé le FETCH")
     # …et dans l'autre sens : posé dans AtomBox (RM3244), il arrive sur le téléphone
     assert ch.patch("/messages/%s/rattachement" % m["id"], {"drapeau": True}).json()["ok"]
-    ch.attendre(lambda: "\\Flagged" in ch.imap.drapeaux("INBOX", uid),
+    ch.wait(lambda: "\\Flagged" in ch.imap.flags("INBOX", uid),
                 "un drapeau posé dans AtomBox remonte à IMAP — le téléphone le voit (D140c)")
     # …et la relève n'a PAS défait ce qu'on a fait ici
     assert ch.get("/messages/" + m["id"]).json()["lu"] is True, "la synchronisation descendante a défait « lu »"
 
     # la relève suivante voit la copie dans « Sent » : elle ne doit PAS en faire un second message
     ch.imap.put(message("Réveil"))
-    ch.attendre(lambda: any(x["sujet"] == "Réveil" for x in ch.liste("inbox", filtre="tous")), "une relève complète a eu lieu")
-    assert len([x for x in ch.liste("sent", filtre="tous") if x["sujet"] == "Re: Commande 4412"]) == 1, \
+    ch.wait(lambda: any(x["sujet"] == "Réveil" for x in ch.listing("inbox", filtre="tous")), "une relève complète a eu lieu")
+    assert len([x for x in ch.listing("sent", filtre="tous") if x["sujet"] == "Re: Commande 4412"]) == 1, \
         "la copie IMAP de l'envoi a été réingérée comme un second message"
     assert len(copies()) == 1, "l'envoi n'est copié qu'UNE fois dans IMAP"
 
@@ -245,16 +245,16 @@ def test_1_un_courrier_arrive_et_se_traite(chaine):
     # processus est tombé avant d'enregistrer l'UID. Rejouée, elle doit retrouver sa copie par le
     # Message-ID, pas en faire une seconde.
     import psycopg
-    from atombox.modules import evenements
+    from atombox.modules import events
     from atombox.db import session as ouvrir
     with psycopg.connect(os.environ["DATABASE_URL"]) as cnx:
         cnx.execute("update rattachement set uid_imap = null where comm_id = %s", (r["message"]["id"],)); cnx.commit()
     with ouvrir(os.environ["DATABASE_URL"]) as s:
-        evenements.emettre(s, "message.envoye", {"comm_id": r["message"]["id"], "boite_id": ch.boite, "refuses": []}); s.commit()
+        events.emit(s, "message.envoye", {"comm_id": r["message"]["id"], "boite_id": ch.boite, "refuses": []}); s.commit()
     def uid_repose():
         with psycopg.connect(os.environ["DATABASE_URL"]) as cnx:
             return cnx.execute("select uid_imap from rattachement where comm_id = %s", (r["message"]["id"],)).fetchone()[0]
-    ch.attendre(uid_repose, "la tâche rejouée retrouve la copie et repose l'UID")
+    ch.wait(uid_repose, "la tâche rejouée retrouve la copie et repose l'UID")
     assert len(copies()) == 1, "une tâche rejouée a copié l'envoi une SECONDE fois dans IMAP"
 
 
@@ -262,11 +262,11 @@ def test_2_un_brouillon_vit(chaine):
     """composer → enregistrer → reprendre → réenregistrer → envoyer : le brouillon disparaît, le
     message est dans « envoyés » avec ses destinataires en base, et il part au relais."""
     ch = chaine
-    avant = len(ch.relais.remises)
+    before = len(ch.relais.remises)
     br = ch.post("/messages", {"destinataires": ["client@exemple.org"], "sujet": "Devis",
                                "corps": "première version", "composition": {"a": "client@exemple.org"}}).json()["message"]
     assert br["dossier_origine"] == "drafts"
-    assert any(x["id"] == br["id"] for x in ch.liste("drafts", filtre="tous")), "le brouillon est dans « brouillons »"
+    assert any(x["id"] == br["id"] for x in ch.listing("drafts", filtre="tous")), "le brouillon est dans « brouillons »"
 
     repris = ch.get("/messages/" + br["id"]).json()["composition"]
     assert repris and repris["a"] == "client@exemple.org", "un brouillon se reprend : sa composition est reconstruite"
@@ -281,18 +281,18 @@ def test_2_un_brouillon_vit(chaine):
     env = ch.post("/messages/%s/envoyer" % br["id"], {"destinataires": ["client@exemple.org"], "cc": "patron@exemple.org",
                                                       "sujet": "Devis révisé", "corps": "seconde version"}).json()["message"]
     assert env["id"] == br["id"], "envoyé, le brouillon garde son identité"
-    assert not any(x["id"] == br["id"] for x in ch.liste("drafts", filtre="tous")), \
+    assert not any(x["id"] == br["id"] for x in ch.listing("drafts", filtre="tous")), \
         "le brouillon a quitté « Brouillons », même avec la puce « Tout »"
-    assert not any(x["id"] == br["id"] for x in ch.liste("trash", filtre="tous")), \
+    assert not any(x["id"] == br["id"] for x in ch.listing("trash", filtre="tous")), \
         "et il n'est PAS à la corbeille : l'envoi le consomme, il ne le supprime pas"
-    envoye = next(x for x in ch.liste("sent", filtre="tous") if x["id"] == env["id"])
+    envoye = next(x for x in ch.listing("sent", filtre="tous") if x["id"] == env["id"])
     relu = ch.get("/messages/" + envoye["id"]).json()
     assert relu["destinataires"] == ["client@exemple.org", "patron@exemple.org"], "les destinataires sont en BASE"
 
-    remises = ch.relais.attendre(avant + 1, REVEIL)
-    assert len(remises) == avant + 1, "l'envoi n'est jamais parti au relais\n" + ch.journaux()
+    remises = ch.relais.wait(before + 1, REVEIL)
+    assert len(remises) == before + 1, "l'envoi n'est jamais parti au relais\n" + ch.journaux()
     assert set(remises[-1]["pour"]) == {"client@exemple.org", "patron@exemple.org"}
-    assert len(ch.relais.remises) == avant + 1, "un seul message est parti : le brouillon promu"
+    assert len(ch.relais.remises) == before + 1, "un seul message est parti : le brouillon promu"
 
 
 def test_3_un_tag_remplit_un_dossier(chaine):
@@ -300,22 +300,22 @@ def test_3_un_tag_remplit_un_dossier(chaine):
     redescendent."""
     ch = chaine
     ch.imap.put(message("Relance chantier Dupont"))
-    m = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Relance chantier Dupont"), None),
+    m = ch.wait(lambda: next((x for x in ch.listing("inbox", filtre="tous") if x["sujet"] == "Relance chantier Dupont"), None),
                     "le message arrive")
     v = ch.post("/dossiers-virtuels", {"label": "Chantier Dupont", "criteres": [{"axe": "projet", "val": "dupont"}]}).json()
     assert v["ok"], v
     vid = v["dossier"]["id"]
-    assert ch.liste(vid, filtre="tous") == [], "vide tant que rien ne porte le tag"
+    assert ch.listing(vid, filtre="tous") == [], "vide tant que rien ne porte le tag"
 
     t = ch.post("/messages/%s/tags" % m["id"], {"axe": "projet", "val": "dupont"}).json()
     assert t["ok"], t
-    assert [x["id"] for x in ch.liste(vid, filtre="tous")] == [m["id"]], "le dossier virtuel se remplit"
+    assert [x["id"] for x in ch.listing(vid, filtre="tous")] == [m["id"]], "le dossier virtuel se remplit"
     assert ch.compteur(vid).get("t") == 1, "et son compteur suit (%r)" % ch.compteur(vid)
     assert ch.compteur("projet:dupont").get("t") == 1 or ch.compteur("axe:projet").get("t") == 1, \
         "la branche d'axe compte ce qu'elle liste (D166)"
 
     assert ch.delete("/messages/%s/tags/projet=dupont" % m["id"]).json()["ok"]
-    assert ch.liste(vid, filtre="tous") == [], "retirer le tag vide le dossier"
+    assert ch.listing(vid, filtre="tous") == [], "retirer le tag vide le dossier"
     assert (ch.compteur(vid).get("t") or 0) == 0, "et son compteur redescend"
 
 
@@ -354,16 +354,16 @@ def test_4_les_regles_tiennent_sur_le_flux(chaine):
                      "Message-ID: <lettre-1@liste.example>\r\nList-Id: <nouveautes.liste.example>\r\n"
                      "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nBonjour.\r\n").encode())
 
-    compte = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Situation de compte"), None),
+    compte = ch.wait(lambda: next((x for x in ch.listing("inbox", filtre="tous") if x["sujet"] == "Situation de compte"), None),
                          "le courrier de la compta arrive")
     assert compte["statut"] == "todo", "la règle d'EXPÉDITEUR a posé le statut à l'ingestion"
 
-    facture = ch.attendre(lambda: next((x for x in ch.liste("trash", filtre="tous") if x["sujet"] == "Facture n°2026-118"), None),
+    facture = ch.wait(lambda: next((x for x in ch.listing("trash", filtre="tous") if x["sujet"] == "Facture n°2026-118"), None),
                           "la règle de SUJET a mis la facture à la corbeille")
-    assert not any(x["sujet"] == "Facture n°2026-118" for x in ch.liste("inbox", filtre="tous")), \
+    assert not any(x["sujet"] == "Facture n°2026-118" for x in ch.listing("inbox", filtre="tous")), \
         "et elle n'est PAS restée dans la boîte de réception"
 
-    ch.attendre(lambda: next((x for x in ch.liste("junk", filtre="tous") if x["sujet"] == "Nouveautés de septembre"), None),
+    ch.wait(lambda: next((x for x in ch.listing("junk", filtre="tous") if x["sujet"] == "Nouveautés de septembre"), None),
                 "la règle de LISTE a classé la lettre d'information")
 
     # ── les compteurs tiennent en base : c'est eux qui rendent une règle muette visible ─────────
@@ -380,11 +380,11 @@ def test_4_les_regles_tiennent_sur_le_flux(chaine):
     # La facture a été DÉPLACÉE dans IMAP par la règle. À la relève suivante, le démon la retrouve
     # dans sa nouvelle place, avec un UID neuf : si le moteur repassait, le compteur doublerait et
     # chaque tour de relève referait le travail.
-    avant = compteur_regle("Factures : corbeille")
+    before = compteur_regle("Factures : corbeille")
     ch.imap.put(message("Réveil", de="Quelconque <rien@autre.example>"))
-    ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Réveil"), None),
+    ch.wait(lambda: next((x for x in ch.listing("inbox", filtre="tous") if x["sujet"] == "Réveil"), None),
                 "une relève complète a eu lieu")
-    assert compteur_regle("Factures : corbeille") == avant, \
+    assert compteur_regle("Factures : corbeille") == before, \
         "la règle ne s'est pas redéclenchée sur le message qu'elle avait elle-même déplacé"
 
     # ── une règle n'a PAS d'effet rétroactif (Q067) ─────────────────────────────────────────────
@@ -392,9 +392,9 @@ def test_4_les_regles_tiennent_sur_le_flux(chaine):
     # l'utilisateur a fait depuis, sans qu'il l'ait demandé.
     regle("Rétroactive ?", "sujet", "Situation de compte", {"type": "corbeille"})
     ch.imap.put(message("Second réveil", de="Quelconque <rien@autre.example>"))
-    ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Second réveil"), None),
+    ch.wait(lambda: next((x for x in ch.listing("inbox", filtre="tous") if x["sujet"] == "Second réveil"), None),
                 "une seconde relève complète a eu lieu")
-    assert any(x["id"] == compte["id"] for x in ch.liste("inbox", filtre="tous")), \
+    assert any(x["id"] == compte["id"] for x in ch.listing("inbox", filtre="tous")), \
         "le courrier déjà arrivé n'est pas repris par une règle écrite après lui (Q067)"
     assert compteur_regle("Rétroactive ?") == 0, "et elle n'a rien compté"
 
@@ -403,11 +403,11 @@ def test_4_les_regles_tiennent_sur_le_flux(chaine):
     regle("2 — stop", "sujet", "Chaîne de règles", {"type": "marquer_lu", "arreter": True}, ordre=2)
     regle("3 — jamais atteinte", "sujet", "Chaîne de règles", {"type": "corbeille"}, ordre=3)
     ch.imap.put(message("Chaîne de règles", de="Quelconque <rien@autre.example>"))
-    enchaine = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Chaîne de règles"), None),
+    enchaine = ch.wait(lambda: next((x for x in ch.listing("inbox", filtre="tous") if x["sujet"] == "Chaîne de règles"), None),
                            "le message soumis à la chaîne de règles arrive")
     assert enchaine["drapeau"] is True and enchaine["lu"] is True, "les deux premières règles ont agi, dans l'ordre"
     assert compteur_regle("3 — jamais atteinte") == 0, "« arrêter » a interrompu la chaîne — comme le stop de Sieve"
-    assert not any(x["sujet"] == "Chaîne de règles" for x in ch.liste("trash", filtre="tous")), \
+    assert not any(x["sujet"] == "Chaîne de règles" for x in ch.listing("trash", filtre="tous")), \
         "la troisième règle n'a donc pas mis le message à la corbeille"
 
     # ── une règle ne se CASSE pas après coup : PATCH valide comme POST ──────────────────────────
@@ -432,9 +432,9 @@ def test_4_les_regles_tiennent_sur_le_flux(chaine):
     avant_compta = compteur_regle("Compta : à traiter")
     assert ch.patch("/filtres/" + compta, {"actif": False}).json()["ok"]
     ch.imap.put(message("Second relevé", de="Compta <compta@compta.example>"))
-    apres = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "Second relevé"), None),
+    after = ch.wait(lambda: next((x for x in ch.listing("inbox", filtre="tous") if x["sujet"] == "Second relevé"), None),
                         "un second courrier de la compta arrive")
-    assert apres["statut"] == "new", "la règle désactivée n'a pas posé son statut"
+    assert after["statut"] == "new", "la règle désactivée n'a pas posé son statut"
     assert compteur_regle("Compta : à traiter") == avant_compta, "et elle n'a rien compté"
 
     assert ch.delete("/filtres/" + muette).json()["ok"], "une règle se supprime"
@@ -458,7 +458,7 @@ def test_5_les_uid_servis_tiennent_leurs_invariants(chaine):
         with psycopg.connect(os.environ["DATABASE_URL"]) as cnx:
             return cnx.execute("select uid_imap from rattachement where comm_id = %s", (mid,)).fetchone()[0]
 
-    def compteurs():
+    def counters():
         with psycopg.connect(os.environ["DATABASE_URL"]) as cnx:
             return dict(cnx.execute("select alias_imap, uid_servi_suivant from dossier").fetchall())
 
@@ -468,30 +468,30 @@ def test_5_les_uid_servis_tiennent_leurs_invariants(chaine):
 
     # ── croissance stricte à l'arrivée ──────────────────────────────────────────────────────────
     ch.imap.put(message("UID un", de="Suite <suite@exemple.org>"))
-    a = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "UID un"), None), "le premier arrive")
+    a = ch.wait(lambda: next((x for x in ch.listing("inbox", filtre="tous") if x["sujet"] == "UID un"), None), "le premier arrive")
     ch.imap.put(message("UID deux", de="Suite <suite@exemple.org>"))
-    b = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "UID deux"), None), "le second arrive")
+    b = ch.wait(lambda: next((x for x in ch.listing("inbox", filtre="tous") if x["sujet"] == "UID deux"), None), "le second arrive")
     ua, ub = uid(a["id"]), uid(b["id"])
     assert ua and ub and ub > ua, "les UID servis croissent dans l'ordre d'arrivée (%r puis %r)" % (ua, ub)
 
     # ── jamais réutilisé, même après suppression ────────────────────────────────────────────────
-    avant = compteurs()["INBOX"]
+    before = counters()["INBOX"]
     assert ch.delete("/messages/%s/rattachement" % b["id"]).json()["ok"]
     ch.imap.put(message("UID trois", de="Suite <suite@exemple.org>"))
-    c = ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "UID trois"), None), "le troisième arrive")
+    c = ch.wait(lambda: next((x for x in ch.listing("inbox", filtre="tous") if x["sujet"] == "UID trois"), None), "le troisième arrive")
     uc = uid(c["id"])
     assert uc > ub, "l'UID d'un message supprimé n'est JAMAIS resservi (%r après %r)" % (uc, ub)
-    assert compteurs()["INBOX"] > avant, "le compteur du dossier ne fait qu'avancer"
+    assert counters()["INBOX"] > before, "le compteur du dossier ne fait qu'avancer"
 
     # ── déplacer, c'est changer de boîte aux lettres : UID neuf, pris à l'arrivée ────────────────
     # Attention : comparer les VALEURS ne prouve rien — l'UID 1 d'INBOX et l'UID 1 de Junk sont deux
     # choses différentes, l'UID vit dans l'espace de nommage de son dossier. Ce qui se teste, c'est
     # que le compteur du dossier d'ARRIVÉE a servi, et que c'est bien lui qu'on a servi.
-    junk_avant = compteurs()["Junk"] or 1
+    junk_avant = counters()["Junk"] or 1
     assert ch.patch("/messages/%s/rattachement" % a["id"], {"dossier": "junk"}).json()["ok"]
     assert uid(a["id"]) == junk_avant, "le message déplacé prend l'UID que le dossier d'ARRIVÉE allait servir"
-    assert compteurs()["Junk"] == junk_avant + 1, "et le compteur de Junk a avancé d'un"
-    assert compteurs()["INBOX"] > ua, "celui d'INBOX n'est PAS revenu en arrière : un UID quitté ne se resert pas"
+    assert counters()["Junk"] == junk_avant + 1, "et le compteur de Junk a avancé d'un"
+    assert counters()["INBOX"] > ua, "celui d'INBOX n'est PAS revenu en arrière : un UID quitté ne se resert pas"
 
     # ── l'UIDVALIDITY : posé une fois, et STABLE ────────────────────────────────────────────────
     # C'est sa stabilité qui compte, pas sa valeur : s'il change, le client jette tout son cache et
@@ -499,7 +499,7 @@ def test_5_les_uid_servis_tiennent_leurs_invariants(chaine):
     v1 = validites()
     assert v1["INBOX"] and v1["Junk"], "un dossier qui a servi un UID a un UIDVALIDITY (%r)" % v1
     ch.imap.put(message("UID quatre", de="Suite <suite@exemple.org>"))
-    ch.attendre(lambda: next((x for x in ch.liste("inbox", filtre="tous") if x["sujet"] == "UID quatre"), None), "le quatrième arrive")
+    ch.wait(lambda: next((x for x in ch.listing("inbox", filtre="tous") if x["sujet"] == "UID quatre"), None), "le quatrième arrive")
     assert validites()["INBOX"] == v1["INBOX"], "et il ne bouge PAS quand du courrier arrive"
 
     # ── notre numérotation ne dépend PAS de celle du fournisseur ────────────────────────────────
@@ -508,8 +508,8 @@ def test_5_les_uid_servis_tiennent_leurs_invariants(chaine):
     # plus — déplacer chez nous déplace AUSSI chez le fournisseur (F113, pour que le client IMAP
     # voie le tri), donc les deux bougent.
     # Ce qui le prouve : AtomBox sert un UID à un message que le fournisseur n'a JAMAIS vu.
-    sent_avant = compteurs()["Sent"] or 1
+    sent_avant = counters()["Sent"] or 1
     ecrit = ch.post("/messages", {"destinataires": ["ailleurs@exemple.org"], "sujet": "Écrit ici",
                                   "corps": "sans passer par IMAP"}).json()["message"]
     assert uid(ecrit["id"]) == sent_avant, "un message écrit dans AtomBox reçoit un UID tout de suite"
-    assert compteurs()["Sent"] == sent_avant + 1, "pris au compteur des envoyés, sans rien demander au fournisseur"
+    assert counters()["Sent"] == sent_avant + 1, "pris au compteur des envoyés, sans rien demander au fournisseur"

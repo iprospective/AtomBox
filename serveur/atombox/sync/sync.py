@@ -13,9 +13,9 @@ def down_sync() -> bool:
 
 @contextlib.contextmanager
 def in_down_sync():
-    avant = down_sync(); _local.down_sync = True
+    before = down_sync(); _local.down_sync = True
     try: yield
-    finally: _local.down_sync = avant
+    finally: _local.down_sync = before
 
 def wanted_flags(ratt, etat=None) -> tuple[list[str], list[str]]:
     """(à poser, à retirer) — la traduction de l'état AtomBox vers les FLAGS IMAP.
@@ -27,10 +27,10 @@ def wanted_flags(ratt, etat=None) -> tuple[list[str], list[str]]:
 
     On ne touche QUE ce qu'on sait traduire : \\Seen et \\Flagged. Les mots-clés d'un autre client
     ne sont jamais effacés (D140b : IMAP est la vérité, pas notre copie)."""
-    poser, retirer = [], []
-    (poser if (etat and etat.vu) else retirer).append("\\Seen")
-    (poser if (etat and etat.flagged) else retirer).append("\\Flagged")
-    return poser, retirer
+    add, remove = [], []
+    (add if (etat and etat.seen) else remove).append("\\Seen")
+    (add if (etat and etat.flagged) else remove).append("\\Flagged")
+    return add, remove
 
 def imap_state(flags: list[str]) -> dict:
     """la traduction inverse : ce que les FLAGS disent de l'état"""
@@ -51,21 +51,21 @@ def apply_down_sync(s, ratt, flags: list[str]) -> list[str]:
 
     Rend la liste des champs modifiés — vide si rien ne bouge, ce qui est le cas courant et doit
     rester silencieux."""
-    from ..services import personal_state as perso
+    from ..services import personal_state as personal
     e = imap_state(flags); change = []
-    compte_id = perso.polling_account(s, ratt.boite_id)
+    compte_id = personal.polling_account(s, ratt.boite_id)
     if compte_id is None:
         log.debug("boîte %s : pas de relève unique, les drapeaux du fournisseur ne sont imputés à personne", ratt.boite_id)
         return change
-    etat = perso.state_sync(s, compte_id, ratt.comm_id, ratt.boite_id)
+    etat = personal.state_sync(s, compte_id, ratt.comm_id, ratt.boite_id)
     with in_down_sync():
         if e["lu"] and not (etat and etat.opened_at):
-            s.execute(perso.open_stmt(compte_id, ratt.comm_id, ratt.boite_id)); change.append("lu")
+            s.execute(personal.open_stmt(compte_id, ratt.comm_id, ratt.boite_id)); change.append("lu")
         elif not e["lu"] and etat and etat.opened_at:
             # on ne rend pas le message « non ouvert » — ça n'existe pas. On dit « à revoir ».
-            perso.set_marker_sync(s, compte_id, ratt.comm_id, ratt.boite_id, perso.TO_REVIEW)
+            personal.set_marker_sync(s, compte_id, ratt.comm_id, ratt.boite_id, personal.TO_REVIEW)
             change.append("à revoir")
         if e["drapeau"] != bool(etat.flagged if etat else False):
-            s.execute(perso.flag_stmt(compte_id, ratt.comm_id, ratt.boite_id, e["drapeau"]))
+            s.execute(personal.flag_stmt(compte_id, ratt.comm_id, ratt.boite_id, e["drapeau"]))
             change.append("drapeau")
     return change

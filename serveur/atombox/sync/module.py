@@ -9,8 +9,8 @@ import os, uuid
 from sqlalchemy import select
 from ..ingestion.imap import Poller, tls_imap
 from ..journal import journal
-from ..modules import Module, evenement
-from ..schema.modeles import Adresse, Boite, CommEmail, Dossier, Rattachement
+from ..modules import Module, event
+from ..schema.models import Adresse, Boite, CommEmail, Dossier, Rattachement
 from .sync import wanted_flags
 from .. import settings
 
@@ -29,8 +29,8 @@ class ModuleSync(Module):
     nom = "sync"; version = "0.1"; interne = True
     description = "synchronisation montante des états vers IMAP : STORE et MOVE (F113, D140b)"
 
-    @evenement("rattachement.change")
-    def pousser(self, ctx):
+    @event("rattachement.change")
+    def push(self, ctx):
         s, charge = ctx["session"], ctx["charge"]
         comm_id, boite_id = uuid.UUID(charge["comm_id"]), uuid.UUID(charge["boite_id"])
         r = s.get(Rattachement, (comm_id, boite_id))
@@ -45,25 +45,25 @@ class ModuleSync(Module):
         cible = s.get(Dossier, r.dossier_id)
         if source is None or cible is None:
             log.warning("%s : dossier IMAP inconnu — rien à pousser", comm_id); return
-        releve = Poller(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_of(adresse, cfg["master"]), cfg["mot_de_passe"])
+        releve = Poller(cfg["hote"], cfg["port"], tls=tls_imap()).connect(login_of(adresse, cfg["master"]), cfg["mot_de_passe"])
         try:
-            releve.selectionner(source.alias_imap or source.nom, ecriture=True)
+            releve.select_folder(source.alias_imap or source.nom, writable=True)
             # Les drapeaux qu'on POUSSE sont ceux du membre qui relève (D175 § 3) : le
             # fournisseur n'a qu'un jeu de drapeaux, et c'est le sien qui le représente.
-            from ..services import personal_state as perso
-            releveur = perso.polling_account(s, boite_id)
-            poser, retirer = wanted_flags(r, perso.state_sync(s, releveur, r.comm_id, r.boite_id))
-            releve.poser_drapeaux(r.uid_imap, poser, retirer)
+            from ..services import personal_state as personal
+            releveur = personal.polling_account(s, boite_id)
+            add, remove = wanted_flags(r, personal.state_sync(s, releveur, r.comm_id, r.boite_id))
+            releve.set_flags(r.uid_imap, add, remove)
             if cible.dossier_id != source.dossier_id:
-                neuf = releve.deplacer(r.uid_imap, cible.alias_imap or cible.nom)
+                neuf = releve.move(r.uid_imap, cible.alias_imap or cible.nom)
                 r.uid_imap = neuf                      # None : le prochain passage le retrouvera
                 s.commit()
             log.info("%s : état poussé vers %s/%s (uid %s)", comm_id, adresse, cible.alias_imap, r.uid_imap)
         finally:
-            releve.fermer()
+            releve.close()
 
-    @evenement("message.envoye")
-    def copier_envoye(self, ctx):
+    @event("message.envoye")
+    def copy_sent(self, ctx):
         """D140c — l'envoi est copié dans le dossier IMAP des envoyés, marqué lu : sinon le téléphone ne
         voit AUCUN message envoyé depuis AtomBox, et l'utilisateur croit que rien n'est parti.
 
@@ -83,19 +83,19 @@ class ModuleSync(Module):
         if dossier is None or not (dossier.alias_imap or dossier.nom):
             log.warning("%s : dossier des envoyés inconnu — rien à copier", comm_id); return
         from ..store import Store
-        octets = Store(settings.read("ATOMBOX_STORE", "./magasin")).read(str(comm_id))
+        raw_bytes = Store(settings.read("ATOMBOX_STORE", "./magasin")).read(str(comm_id))
         e = s.get(CommEmail, comm_id)
         boite = s.get(Boite, boite_id); adresse = s.get(Adresse, boite.adresse_id).adresse_complete
-        releve = Poller(cfg["hote"], cfg["port"], tls=tls_imap()).ouvrir(login_of(adresse, cfg["master"]), cfg["mot_de_passe"])
+        releve = Poller(cfg["hote"], cfg["port"], tls=tls_imap()).connect(login_of(adresse, cfg["master"]), cfg["mot_de_passe"])
         try:
             alias = dossier.alias_imap or dossier.nom
-            releve.selectionner(alias, ecriture=True)
-            uid = releve.chercher_message_id(e.message_id if e else None)
+            releve.select_folder(alias, writable=True)
+            uid = releve.find_message_id(e.message_id if e else None)
             if uid is None:
-                uid = releve.ajouter(alias, octets)
+                uid = releve.append(alias, raw_bytes)
             else:
                 log.info("%s : déjà copié dans %s (uid %d) — une tâche rejouée ne duplique pas", comm_id, alias, uid)
             r.uid_imap = uid
             s.commit()
         finally:
-            releve.fermer()
+            releve.close()

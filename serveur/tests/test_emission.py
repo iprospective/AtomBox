@@ -1,6 +1,6 @@
 """F109 — la remise au relais SMTP, contre un relais factice en mémoire (le protocole, pas le réseau)."""
 import socket, threading
-from atombox.emission.smtp import remettre
+from atombox.sending.smtp import deliver
 
 class RelaisFactice(threading.Thread):
     """un serveur SMTP minimal : EHLO, MAIL, RCPT, DATA, QUIT ; refuse toute adresse en @refuse.example"""
@@ -11,8 +11,8 @@ class RelaisFactice(threading.Thread):
         c, _ = self.sock.accept(); f = c.makefile("rwb", buffering=0)
         def rep(x): f.write((x + "\r\n").encode())
         rep("220 factice"); data = False; corps = []
-        for ligne in f:
-            l = ligne.decode(errors="replace").rstrip("\r\n")
+        for line in f:
+            l = line.decode(errors="replace").rstrip("\r\n")
             if data:
                 if l == ".": self.recu = "\n".join(corps); data = False; rep("250 OK reçu")
                 else: corps.append(l)
@@ -31,17 +31,17 @@ class RelaisFactice(threading.Thread):
 def test_remise_et_refus_par_destinataire():
     r = RelaisFactice(); r.start()
     cfg = {"hote": "127.0.0.1", "port": r.port, "utilisateur": None, "mot_de_passe": None, "tls": "aucun"}
-    res = remettre(b"From: a@b.fr\r\nTo: c@d.fr\r\nSubject: test\r\n\r\ncorps\r\n", "a@b.fr", ["c@d.fr", "x@refuse.example"], cfg)
+    res = deliver(b"From: a@b.fr\r\nTo: c@d.fr\r\nSubject: test\r\n\r\ncorps\r\n", "a@b.fr", ["c@d.fr", "x@refuse.example"], cfg)
     r.join(timeout=5)
     assert "corps" in r.recu and len(r.rcpt) == 2
     assert list(res["refuses"]) == ["x@refuse.example"], "un refus par destinataire, pas pour l'envoi entier (D099)"
 
 def test_sans_relais_configure():
     import pytest
-    with pytest.raises(RuntimeError): remettre(b"", "a@b.fr", ["c@d.fr"], {"hote": None, "port": 25, "utilisateur": None, "mot_de_passe": None, "tls": "aucun"})
+    with pytest.raises(RuntimeError): deliver(b"", "a@b.fr", ["c@d.fr"], {"hote": None, "port": 25, "utilisateur": None, "mot_de_passe": None, "tls": "aucun"})
 
 def test_le_module_est_charge_et_abonne():
-    from atombox.modules import chargement
-    from atombox.modules.evenements import abonnes
-    charges = chargement.charger(tiers=False)
-    assert "emission" in [m.nom for m in charges] and abonnes.pour("message.a_envoyer")[0][0] == "emission"
+    from atombox.modules import loading
+    from atombox.modules.events import subscribers
+    loaded = loading.load(tiers=False)
+    assert "emission" in [m.nom for m in loaded] and subscribers.for_type("message.a_envoyer")[0][0] == "emission"

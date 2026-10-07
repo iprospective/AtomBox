@@ -30,7 +30,7 @@ def seed_builtins(s) -> int:
     """pose ce qui manque, en session SYNCHRONE — idempotent, on peut l'appeler à chaque démarrage"""
     import uuid as _uuid
     from sqlalchemy import select
-    from .modeles import Marker
+    from .models import Marker
     poses = 0
     for m in BUILTIN_MARKERS:
         if s.scalar(select(Marker).where(Marker.code == m["code"])) is not None:

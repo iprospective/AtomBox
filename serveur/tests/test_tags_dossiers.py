@@ -12,10 +12,10 @@ from test_messages import monde  # noqa: F401 — la même base jetable
 
 def _client(monde):  # noqa: F811
     from fastapi.testclient import TestClient
-    from atombox.api.app import creer_app
+    from atombox.api.app import create_app
     import atombox.db as db
     db._async.clear(); db._sync.clear()
-    c = TestClient(creer_app())
+    c = TestClient(create_app())
     r = c.post("/api/v1/session", json={"utilisateur": "mathieu", "mot_de_passe": "secret"})
     assert r.status_code == 200, r.text
     return c, {"Authorization": "Bearer " + r.json()["jeton"]}
@@ -32,10 +32,10 @@ def test_poser_et_retirer_un_tag(monde):  # noqa: F811
 
     # le tag remonte dans le DÉTAIL et dans la LISTE — il était rendu `[]` en dur des deux côtés
     assert c.get("/api/v1/messages/" + mid, headers=h).json()["tags"][0]["val"] == "Tessier"
-    liste = c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=h).json()["messages"]
-    porteur = next(m for m in liste if m["id"] == mid)
+    listing = c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=h).json()["messages"]
+    porteur = next(m for m in listing if m["id"] == mid)
     assert porteur["tags"] == [{"axe": "client", "val": "Tessier", "source": "manuel"}]
-    assert all(m["tags"] == [] for m in liste if m["id"] != mid), "et seulement sur celui-là"
+    assert all(m["tags"] == [] for m in listing if m["id"] != mid), "et seulement sur celui-là"
 
     # poser deux fois est un succès silencieux ; un second AXE ne remplace pas le premier (D020)
     assert len(c.post("/api/v1/messages/%s/tags" % mid, json={"axe": "client", "val": "Tessier"},
@@ -65,8 +65,8 @@ def test_un_dossier_virtuel_filtre_sur_les_tags(monde):  # noqa: F811
     d = c.post("/api/v1/dossiers-virtuels",
                json={"label": "Projet 2881", "criteres": [{"axe": "projet", "val": "RM2881"}]},
                headers=h).json()["dossier"]
-    liste = c.get("/api/v1/messages", params={"dossier": d["id"], "kind": "perso"}, headers=h).json()
-    assert [m["id"] for m in liste["messages"]] == [a], "le dossier virtuel ne rend QUE le message tagué"
+    listing = c.get("/api/v1/messages", params={"dossier": d["id"], "kind": "perso"}, headers=h).json()
+    assert [m["id"] for m in listing["messages"]] == [a], "le dossier virtuel ne rend QUE le message tagué"
 
     # une FAMILLE : l'axe sans valeur — « tout ce qui porte un projet, quel qu'il soit »
     fam = c.post("/api/v1/dossiers-virtuels",
@@ -87,8 +87,8 @@ def test_un_dossier_virtuel_filtre_sur_les_tags(monde):  # noqa: F811
     assert any(v["id"] == d["id"] for v in arbo.get("virtuels", [])), "il apparaît dans l'arborescence"
     c.put("/api/v1/parametres", json={"cle": "epingles", "valeur": [d["id"]]}, headers=h)
     assert c.delete("/api/v1/dossiers-virtuels/" + d["id"], headers=h).json()["supprimes"] == 1
-    apres = c.get("/api/v1/arborescence", headers=h).json()
-    assert not any(v["id"] == d["id"] for v in apres.get("virtuels", []))
+    after = c.get("/api/v1/arborescence", headers=h).json()
+    assert not any(v["id"] == d["id"] for v in after.get("virtuels", []))
     assert d["id"] not in (c.get("/api/v1/parametres", headers=h).json().get("epingles") or []), \
         "supprimer un dossier virtuel retire son épingle — sinon l'épingle pointe un mort"
 
@@ -122,8 +122,8 @@ def test_un_dossier_virtuel_est_compte(monde):  # noqa: F811
     arbo = c.get("/api/v1/arborescence", headers=h).json()
     compte = arbo["compteurs"].get(d["id"])
     assert compte, "le dossier virtuel a un compteur — il n'en avait aucun, d'où le 0/0"
-    liste = c.get("/api/v1/messages", params={"dossier": d["id"], "kind": "perso"}, headers=h).json()
-    assert compte["t"] == liste["total"] == 1, "le compteur dit ce que la liste montre"
+    listing = c.get("/api/v1/messages", params={"dossier": d["id"], "kind": "perso"}, headers=h).json()
+    assert compte["t"] == listing["total"] == 1, "le compteur dit ce que la liste montre"
 
     # un second message tagué : les deux suivent
     b = str(monde["ids"][1])

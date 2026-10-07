@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..journal import journal
-from ..schema.modeles import Journal
+from ..schema.models import Journal
 from ..uuid7 import uuid7
 
 log = journal("api")
@@ -29,10 +29,10 @@ def record(s, compte_id, action: str, cible_type: str, cible_id, details: dict |
                   action=action, cible_type=cible_type, cible_id=cible_id, details=details or None))
 
 
-async def history(s: AsyncSession, cible_id, limite: int = 50) -> list[dict]:
+async def history(s: AsyncSession, cible_id, limit: int = 50) -> list[dict]:
     """l'histoire d'une cible, la plus récente d'abord — « traité puis archivé » se relit ici"""
     from sqlalchemy import select
-    lignes = await s.scalars(select(Journal).where(Journal.cible_id == cible_id)
-                             .order_by(Journal.quand.desc()).limit(limite))
+    lines = await s.scalars(select(Journal).where(Journal.cible_id == cible_id)
+                             .order_by(Journal.quand.desc()).limit(limit))
     return [{"quand": j.quand.astimezone(timezone.utc).isoformat(), "qui": str(j.qui) if j.qui else None,
-             "action": j.action, "details": j.details} for j in lignes]
+             "action": j.action, "details": j.details} for j in lines]

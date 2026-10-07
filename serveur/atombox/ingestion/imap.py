@@ -19,27 +19,27 @@ def tls_imap() -> bool:
 
 
 class Poller:
-    def __init__(self, hote: str, port: int = 993, tls: bool = True, delai: int = 60):
-        self.hote, self.port, self.tls, self.delai = hote, port, tls, delai
+    def __init__(self, hote: str, port: int = 993, tls: bool = True, delay: int = 60):
+        self.hote, self.port, self.tls, self.delay = hote, port, tls, delay
         self.cnx: imaplib.IMAP4 | None = None
 
-    def ouvrir(self, utilisateur: str, mot_de_passe: str):
+    def connect(self, utilisateur: str, mot_de_passe: str):
         """utilisateur = « boite@domaine*masteruser » avec le compte master (chapitre 06)"""
-        self.cnx = imaplib.IMAP4_SSL(self.hote, self.port, ssl_context=ssl.create_default_context(), timeout=self.delai) if self.tls \
-                   else imaplib.IMAP4(self.hote, self.port, timeout=self.delai)
+        self.cnx = imaplib.IMAP4_SSL(self.hote, self.port, ssl_context=ssl.create_default_context(), timeout=self.delay) if self.tls \
+                   else imaplib.IMAP4(self.hote, self.port, timeout=self.delay)
         self.cnx.login(utilisateur, mot_de_passe)
         log.info("connecté %s@%s:%d", utilisateur, self.hote, self.port)
         return self
 
-    def fermer(self):
+    def close(self):
         try:
             if self.cnx: self.cnx.logout()
         finally: self.cnx = None
 
-    def dossiers(self) -> list[str]:
-        typ, lignes = self.cnx.list()
+    def folders(self) -> list[str]:
+        typ, lines = self.cnx.list()
         out = []
-        for l in lignes or []:
+        for l in lines or []:
             m = re.match(rb'\((?P<flags>[^)]*)\) "(?P<sep>[^"]*)" (?P<nom>.+)$', l if isinstance(l, bytes) else l[0])
             if not m: continue
             if b"\\Noselect" in m.group("flags"): continue
@@ -50,30 +50,30 @@ class Poller:
             out.append(nom)
         return out
 
-    def selectionner(self, dossier: str, ecriture: bool = False) -> tuple[int, int]:
+    def select_folder(self, dossier: str, writable: bool = False) -> tuple[int, int]:
         """EXAMINE (lecture seule) par défaut ; SELECT quand on doit écrire un flag ou déplacer
         (F113). Rend (UIDVALIDITY, UIDNEXT)."""
-        typ, _ = self.cnx.select(self._quoter(dossier), readonly=not ecriture)
+        typ, _ = self.cnx.select(self._quote(dossier), readonly=not writable)
         if typ != "OK":
             log.warning("EXAMINE %s refusé : %s", dossier, typ); raise RuntimeError("EXAMINE %s : %s" % (dossier, typ))
-        def statut(nom):
+        def status(nom):
             typ, v = self.cnx.response(nom); return int(v[0]) if v and v[0] else 0
-        v, n = statut("UIDVALIDITY"), statut("UIDNEXT")
+        v, n = status("UIDVALIDITY"), status("UIDNEXT")
         log.debug("EXAMINE %s : uidvalidity %d, uidnext %d", dossier, v, n)
         return v, n
 
-    def nouveaux(self, depuis_uid: int) -> list[int]:
+    def new_uids(self, since_uid: int) -> list[int]:
         """les UID à partir de depuis_uid — la reprise (D043) ; « 1:* » au premier passage"""
-        typ, data = self.cnx.uid("search", None, "UID", "%d:*" % max(1, depuis_uid))
+        typ, data = self.cnx.uid("search", None, "UID", "%d:*" % max(1, since_uid))
         if typ != "OK" or not data or not data[0]: return []
-        return [u for u in map(int, data[0].split()) if u >= depuis_uid]
+        return [u for u in map(int, data[0].split()) if u >= since_uid]
 
     def read(self, uid: int) -> tuple[bytes, datetime | None, list[str]]:
         """le message brut, sans poser \\Seen : BODY.PEEK[] ; avec sa date interne et ses drapeaux"""
         typ, data = self.cnx.uid("fetch", str(uid), "(BODY.PEEK[] INTERNALDATE FLAGS)")
         if typ != "OK" or not data or data[0] is None:
             log.warning("FETCH uid %d : %s", uid, typ); raise RuntimeError("FETCH %d : %s" % (uid, typ))
-        meta, octets = data[0][0], data[0][1]
+        meta, raw_bytes = data[0][0], data[0][1]
         m = re.search(rb'INTERNALDATE "([^"]+)"', meta)
         date = None
         if m:
@@ -81,51 +81,51 @@ class Poller:
             except Exception: date = None
         f = re.search(rb'FLAGS \(([^)]*)\)', meta)
         drapeaux = f.group(1).decode().split() if f else []
-        log.debug("FETCH uid %d : %d octets, %s", uid, len(octets), " ".join(drapeaux) or "-")
-        return octets, date, drapeaux
+        log.debug("FETCH uid %d : %d octets, %s", uid, len(raw_bytes), " ".join(drapeaux) or "-")
+        return raw_bytes, date, drapeaux
 
-    def drapeaux(self, uids: list[int]) -> dict[int, list[str]]:
+    def flags(self, uids: list[int]) -> dict[int, list[str]]:
         """les FLAGS des UID demandés — la synchro DESCENDANTE : ce que les autres clients ont fait"""
         if not uids: return {}
         typ, data = self.cnx.uid("fetch", ",".join(str(u) for u in uids), "(FLAGS)")
         if typ != "OK" or not data: return {}
         out = {}
         for item in data:
-            ligne = item if isinstance(item, bytes) else (item[0] if item else b"")
-            u = re.search(rb"UID (\d+)", ligne); f = re.search(rb"FLAGS \(([^)]*)\)", ligne)
+            line = item if isinstance(item, bytes) else (item[0] if item else b"")
+            u = re.search(rb"UID (\d+)", line); f = re.search(rb"FLAGS \(([^)]*)\)", line)
             if u and f: out[int(u.group(1))] = f.group(1).decode().split()
         return out
 
-    def poser_drapeaux(self, uid: int, ajouter: list[str] = (), retirer: list[str] = ()) -> None:
+    def set_flags(self, uid: int, ajouter: list[str] = (), remove: list[str] = ()) -> None:
         """STORE (F113) : le dossier doit être sélectionné EN ÉCRITURE"""
-        for mode, flags in (("+FLAGS.SILENT", ajouter), ("-FLAGS.SILENT", retirer)):
+        for mode, flags in (("+FLAGS.SILENT", ajouter), ("-FLAGS.SILENT", remove)):
             if not flags: continue
             typ, _ = self.cnx.uid("store", str(uid), mode, "(%s)" % " ".join(flags))
             if typ != "OK":
                 log.warning("STORE %s uid %d %s : %s", mode, uid, flags, typ)
                 raise RuntimeError("STORE %s uid %d : %s" % (mode, uid, typ))
-        log.debug("STORE uid %d : +%s -%s", uid, " ".join(ajouter) or "-", " ".join(retirer) or "-")
+        log.debug("STORE uid %d : +%s -%s", uid, " ".join(ajouter) or "-", " ".join(remove) or "-")
 
-    def deplacer(self, uid: int, vers: str) -> int | None:
+    def move(self, uid: int, to_folder: str) -> int | None:
         """MOVE (RFC 6851) si le serveur le sait, COPY + \\Deleted + EXPUNGE sinon. Rend le nouvel
         UID si le serveur le donne (UIDPLUS), None sinon — le prochain passage le retrouvera."""
         if "MOVE" in (self.cnx.capabilities or ()):
-            typ, data = self.cnx.uid("move", str(uid), self._quoter(vers))
+            typ, data = self.cnx.uid("move", str(uid), self._quote(to_folder))
         else:
-            typ, data = self.cnx.uid("copy", str(uid), self._quoter(vers))
+            typ, data = self.cnx.uid("copy", str(uid), self._quote(to_folder))
             if typ == "OK":
                 self.cnx.uid("store", str(uid), "+FLAGS.SILENT", "(\\Deleted)")
                 self.cnx.expunge()
         if typ != "OK":
-            log.warning("MOVE uid %d → %s : %s", uid, vers, typ); raise RuntimeError("MOVE uid %d → %s : %s" % (uid, vers, typ))
+            log.warning("MOVE uid %d → %s : %s", uid, to_folder, typ); raise RuntimeError("MOVE uid %d → %s : %s" % (uid, to_folder, typ))
         neuf = None
         for item in (data or []):
             m = re.search(rb"COPYUID \d+ \S+ (\d+)", item if isinstance(item, bytes) else b"")
             if m: neuf = int(m.group(1))
-        log.info("uid %d déplacé vers %s%s", uid, vers, " (nouvel uid %d)" % neuf if neuf else "")
+        log.info("uid %d déplacé vers %s%s", uid, to_folder, " (nouvel uid %d)" % neuf if neuf else "")
         return neuf
 
-    def chercher_message_id(self, message_id: str) -> int | None:
+    def find_message_id(self, message_id: str) -> int | None:
         """l'UID du message qui porte ce Message-ID dans le dossier sélectionné, s'il y est — ce qui rend
         une écriture IMAP IDEMPOTENTE : une tâche rejouée (D161) retrouve ce qu'elle a déjà fait"""
         if not message_id: return None
@@ -134,38 +134,38 @@ class Poller:
         uids = [int(u) for u in data[0].split()]
         return uids[-1] if uids else None
 
-    def ajouter(self, dossier: str, octets: bytes, drapeaux: tuple = ("\\Seen",)) -> int | None:
+    def append(self, dossier: str, raw_bytes: bytes, drapeaux: tuple = ("\\Seen",)) -> int | None:
         """APPEND (D140c) — la seule CRÉATION que la transition s'autorise : un message envoyé depuis
         AtomBox, copié là où les autres clients le cherchent. Rend l'UID (APPENDUID, RFC 4315) si le
         serveur le donne ; sans lui, la relève le retrouvera par son empreinte (D064)."""
-        typ, data = self.cnx.append(self._quoter(dossier), "(%s)" % " ".join(drapeaux), None, octets)
+        typ, data = self.cnx.append(self._quote(dossier), "(%s)" % " ".join(drapeaux), None, raw_bytes)
         if typ != "OK":
             log.warning("APPEND %s : %s", dossier, typ); raise RuntimeError("APPEND %s : %s" % (dossier, typ))
         m = re.search(rb"APPENDUID \d+ (\d+)", b" ".join(x for x in (data or []) if isinstance(x, bytes)))
         uid = int(m.group(1)) if m else None
-        log.info("copié dans %s (%d octets)%s", dossier, len(octets), " — uid %d" % uid if uid else "")
+        log.info("copié dans %s (%d octets)%s", dossier, len(raw_bytes), " — uid %d" % uid if uid else "")
         return uid
 
-    def creer_dossier(self, nom: str) -> None:
+    def create_folder(self, nom: str) -> None:
         """CREATE (F013) : tant qu'IMAP est la vérité (D140b), un dossier créé ici doit y exister"""
-        typ, data = self.cnx.create(self._quoter(nom))
+        typ, data = self.cnx.create(self._quote(nom))
         if typ != "OK" and b"ALREADYEXISTS" not in b" ".join(data or []):
             log.warning("CREATE %s : %s", nom, typ); raise RuntimeError("CREATE %s : %s" % (nom, typ))
-        self.cnx.subscribe(self._quoter(nom))
+        self.cnx.subscribe(self._quote(nom))
         log.info("dossier %s créé", nom)
 
-    def renommer_dossier(self, ancien: str, neuf: str) -> None:
-        typ, _ = self.cnx.rename(self._quoter(ancien), self._quoter(neuf))
+    def rename_folder(self, ancien: str, neuf: str) -> None:
+        typ, _ = self.cnx.rename(self._quote(ancien), self._quote(neuf))
         if typ != "OK": log.warning("RENAME %s → %s : %s", ancien, neuf, typ); raise RuntimeError("RENAME : %s" % typ)
         log.info("dossier %s renommé en %s", ancien, neuf)
 
-    def supprimer_dossier(self, nom: str) -> None:
-        self.cnx.unsubscribe(self._quoter(nom))
-        typ, _ = self.cnx.delete(self._quoter(nom))
+    def delete_folder(self, nom: str) -> None:
+        self.cnx.unsubscribe(self._quote(nom))
+        typ, _ = self.cnx.delete(self._quote(nom))
         if typ != "OK": log.warning("DELETE %s : %s", nom, typ); raise RuntimeError("DELETE : %s" % typ)
         log.info("dossier %s supprimé", nom)
 
-    def idle(self, secondes: int = 25 * 60) -> bool:
+    def idle(self, seconds: int = 25 * 60) -> bool:
         """attend un changement du dossier sélectionné (RFC 2177) ; rend True si quelque chose est arrivé.
         Les serveurs coupent un IDLE après ~30 min : on renouvelle avant."""
         c = self.cnx
@@ -174,16 +174,16 @@ class Poller:
         rep = c.readline()
         if not rep.startswith(b"+"):
             log.warning("IDLE refusé : %r", rep); raise RuntimeError("IDLE refusé : %r" % rep)
-        log.debug("IDLE (%d s)", secondes)
+        log.debug("IDLE (%d s)", seconds)
         arrive = False
-        c.sock.settimeout(secondes)
+        c.sock.settimeout(seconds)
         try:
-            ligne = c.readline()
-            arrive = bool(ligne) and (b"EXISTS" in ligne or b"EXPUNGE" in ligne or b"FETCH" in ligne)
+            line = c.readline()
+            arrive = bool(line) and (b"EXISTS" in line or b"EXPUNGE" in line or b"FETCH" in line)
         except (socket.timeout, TimeoutError):
             arrive = False
         finally:
-            c.sock.settimeout(self.delai)
+            c.sock.settimeout(self.delay)
             c.send(b"DONE\r\n")
             while True:
                 l = c.readline()
@@ -192,5 +192,5 @@ class Poller:
         return arrive
 
     @staticmethod
-    def _quoter(nom: str) -> str:
+    def _quote(nom: str) -> str:
         return '"%s"' % nom.replace('"', '\\"')

@@ -5,20 +5,20 @@ from datetime import datetime, timezone
 from atombox.services import messages as svc
 
 def test_dossiers_speciaux_par_alias():
-    from atombox.schema.modeles import Dossier
-    assert svc.special_de("INBOX") == "inbox" and svc.special_de("Sent") == "sent" and svc.special_de("Junk") == "junk" and svc.special_de("Corbeille") == "trash"
-    d = Dossier(dossier_id=uuid.uuid4(), nom="Devis", alias_imap="Devis"); assert svc.dossier_id_court(d) == str(d.dossier_id)
-    assert svc.dossier_id_court(Dossier(dossier_id=uuid.uuid4(), nom="INBOX", alias_imap="INBOX")) == "inbox"
+    from atombox.schema.models import Dossier
+    assert svc.special_of("INBOX") == "inbox" and svc.special_of("Sent") == "sent" and svc.special_of("Junk") == "junk" and svc.special_of("Corbeille") == "trash"
+    d = Dossier(dossier_id=uuid.uuid4(), nom="Devis", alias_imap="Devis"); assert svc.short_folder_id(d) == str(d.dossier_id)
+    assert svc.short_folder_id(Dossier(dossier_id=uuid.uuid4(), nom="INBOX", alias_imap="INBOX")) == "inbox"
 
 def test_serialisation_porte_le_contrat():
-    from atombox.schema.modeles import Comm, Rattachement, Dossier
+    from atombox.schema.models import Comm, Rattachement, Dossier
     did = uuid.uuid4(); inbox = Dossier(dossier_id=did, nom="INBOX", alias_imap="INBOX"); trash = Dossier(dossier_id=uuid.uuid4(), nom="Trash", alias_imap="Trash")
     ds = {did: inbox, trash.dossier_id: trash}
     c = Comm(comm_id=uuid.uuid4(), sujet="Devis 12", from_nom="Jean", from_adresse="jean@x.fr", date_recue=datetime(2026, 9, 4, 9, 12, tzinfo=timezone.utc), thread_id=None, nb_pieces_jointes=1, taille=2048, sens="in", nature="humain", snippet="Bonjour")
     r = Rattachement(comm_id=c.comm_id, boite_id=uuid.uuid4(), status="new", dossier_id=trash.dossier_id, dossier_origine_id=did, exit_reason=None)
     # `etat` non passé = personne n'y a touché : c'est le cas de la très grande majorité des lignes,
     # et c'est ce qui rend la table des faits de lecture CREUSE (D175 § 5).
-    o = svc.serialiser(r, c, ds, "contact@exemple.fr")
+    o = svc.serialize(r, c, ds, "contact@exemple.fr")
     assert o["id"] == str(c.comm_id) and o["date_recue"] == "2026-09-04T09:12:00+00:00" and o["lu"] is False
     assert o["a_revoir"] is False and o["drapeau"] is False
     assert o["dossier_origine"] == "inbox" and o["dossier"] == "trash", "déplacé en corbeille : origine gardée (D088)"
@@ -26,16 +26,16 @@ def test_serialisation_porte_le_contrat():
               "a_revoir", "drapeau", "sommeil", "marqueurs", "traite_le", "archive_le", "statut_le"):
         assert k in o, k
 
-def _transfert_de(brut: bytes):
+def _transfert_de(raw: bytes):
     import email.policy
-    from atombox.ingestion.analyse import analyze
+    from atombox.ingestion.analysis import analyze
 
     class FauxCompte:
         nom, login = "Mathieu", "mathieu"
-    octets = svc._composer(FauxCompte(), "contact@exemple.fr",
+    raw_bytes = svc._compose(FauxCompte(), "contact@exemple.fr",
                            {"destinataires": ["jean@x.fr"], "sujet": "Tr: essai", "corps": "voir dessous"},
-                           uuid.uuid4(), datetime.now(timezone.utc), None, brut)
-    return octets, analyze(octets)
+                           uuid.uuid4(), datetime.now(timezone.utc), None, raw)
+    return raw_bytes, analyze(raw_bytes)
 
 
 def test_l_encapsule_porte_l_octet_exact_du_magasin():
@@ -57,11 +57,11 @@ def test_l_encapsule_porte_l_octet_exact_du_magasin():
                            + "Réponse attendue : 1 200 €\r\n".encode("utf-8"),
         "base64": en_tetes + b"Content-Type: text/plain\r\n\r\n" + b"x" * 1200 + b"\r\n",
     }
-    for attendu, brut in cas.items():
-        octets, a = _transfert_de(brut)
+    for attendu, raw in cas.items():
+        raw_bytes, a = _transfert_de(raw)
         assert len(a.pieces) == 1 and a.pieces[0].type_declare == "message/rfc822", (attendu, a.structure_mime)
-        assert a.pieces[0].octets == brut, "%s : l'octet encapsulé n'est plus celui du magasin" % attendu
-        assert ("Content-Transfer-Encoding: " + attendu).encode() in octets, \
+        assert a.pieces[0].raw_bytes == raw, "%s : l'octet encapsulé n'est plus celui du magasin" % attendu
+        assert ("Content-Transfer-Encoding: " + attendu).encode() in raw_bytes, \
             "%s : l'encodage de transport choisi n'est pas le bon" % attendu
         assert a.corps_texte.strip() == "voir dessous", "le commentaire reste le seul texte indexé (D163)"
 
@@ -78,12 +78,12 @@ def test_une_adresse_est_parsee_avant_d_entrer_en_base():
 
 
 def test_quand_accepte_ms_et_iso():
-    assert svc.quand(1756976400000).year == 2025 or svc.quand(1756976400000).year == 2026
-    assert svc.quand("2026-09-04T09:12:00Z").tzinfo is not None and svc.quand(None) is None
+    assert svc.when(1756976400000).year == 2025 or svc.when(1756976400000).year == 2026
+    assert svc.when("2026-09-04T09:12:00Z").tzinfo is not None and svc.when(None) is None
 
 def test_le_contrat_couvre_ce_que_le_webmail_appelle():
-    from atombox.api.app import creer_app
-    app = creer_app(); b = app.state.contrat
+    from atombox.api.app import create_app
+    app = create_app(); b = app.state.contrat
     assert b["hors_contrat"] == [] and b["couvertes"] >= 10, b
     ecrites = {(m, c) for m, c, _ in app.state.table}
     for m, c in (("GET", "/referentiels"), ("GET", "/arborescence"), ("GET", "/messages"), ("GET", "/messages/{id}"),
@@ -96,7 +96,7 @@ def test_transfert_encapsule_le_source_et_ne_marque_pas_le_message():
     une relation en base. Un marqueur dans le message partirait chez le destinataire, ne
     s'indexerait pas, et rendrait le message non reconstructible à l'octet (D025)."""
     import email, email.policy
-    from atombox.ingestion.analyse import analyze
+    from atombox.ingestion.analysis import analyze
 
     class FauxCompte:
         nom, login = "Mathieu", "mathieu"
@@ -106,22 +106,22 @@ def test_transfert_encapsule_le_source_et_ne_marque_pas_le_message():
     src["Subject"] = "Devis 2026 / travaux"; src["Message-ID"] = "<abc@exemple.fr>"
     src.set_content("Bonjour,\nvoici le devis.")
     src.add_attachment(b"%PDF-1.4 devis", maintype="application", subtype="pdf", filename="devis.pdf")
-    brut = src.as_bytes()
+    raw = src.as_bytes()
 
-    octets = svc._composer(FauxCompte(), "contact@exemple.fr",
+    raw_bytes = svc._compose(FauxCompte(), "contact@exemple.fr",
                            {"destinataires": ["jean@x.fr"], "sujet": "Tr: Devis 2026 / travaux",
                             "corps": "tu peux regarder ?", "reference": "peu-importe"},
-                           uuid.uuid4(), datetime.now(timezone.utc), None, brut)
-    a = analyze(octets)
+                           uuid.uuid4(), datetime.now(timezone.utc), None, raw)
+    a = analyze(raw_bytes)
     assert a.corps_texte.strip() == "tu peux regarder ?", "l'index ne voit que le commentaire (D163)"
     assert len(a.pieces) == 1 and a.pieces[0].type_declare == "message/rfc822", a.structure_mime
     assert a.pieces[0].nom_declare.endswith(".eml"), "la pièce porte le sujet du message transmis"
     # le PDF du message transmis est DEDANS, il n'est pas une pièce du transfert (D066) : compter
     # les deux annoncerait « 2 pièces jointes » à qui n'en a joint qu'une.
-    assert a.pieces[0].octets, "une partie message/rfc822 n'a pas de charge décodable : sans le cas " \
+    assert a.pieces[0].raw_bytes, "une partie message/rfc822 n'a pas de charge décodable : sans le cas " \
                                "particulier, toutes les pièces encapsulées pesaient zéro octet"
-    assert b"X-AtomBox-Reference" not in octets, "la provenance vit en base, jamais dans le message (D067)"
-    interne = email.message_from_bytes(octets, policy=email.policy.SMTP).get_payload(1).get_payload(0)
+    assert b"X-AtomBox-Reference" not in raw_bytes, "la provenance vit en base, jamais dans le message (D067)"
+    interne = email.message_from_bytes(raw_bytes, policy=email.policy.SMTP).get_payload(1).get_payload(0)
     assert interne["Subject"] == "Devis 2026 / travaux" and interne["Message-ID"] == "<abc@exemple.fr>", \
         "le message transféré part tel qu'il a été reçu"
 
@@ -135,9 +135,9 @@ def monde(tmp_path_factory):
     if not url: pytest.skip("DATABASE_URL absent")
     import psycopg
     from atombox.db import session as ouvrir
-    from atombox.schema.modeles import Acces, Boite, Compte, Dossier
-    from atombox.ingestion.ingestion import adresse, ingest
-    from atombox.api.securite import hacher_mot_de_passe
+    from atombox.schema.models import Acces, Boite, Compte, Dossier
+    from atombox.ingestion.ingestion import address_of, ingest
+    from atombox.api.security import hash_password
     from atombox.store import Store
     from atombox.uuid7 import uuid7
     nom = "atombox_test_" + uuid.uuid4().hex[:8]
@@ -152,13 +152,13 @@ def monde(tmp_path_factory):
     from atombox import settings
     coupees = ["ATOMBOX_IMAP_HOST"]
     coupees += [v for k, v in settings.FORMER_NAMES.items() if k in coupees]
-    avant = {k: os.environ.get(k) for k in ["DATABASE_URL", "ATOMBOX_STORE"] + coupees}
+    before = {k: os.environ.get(k) for k in ["DATABASE_URL", "ATOMBOX_STORE"] + coupees}
     for k in coupees: os.environ.pop(k, None)
     os.environ["DATABASE_URL"] = u; os.environ["ATOMBOX_STORE"] = str(tmp_path_factory.mktemp("magasin"))
     s = ouvrir(u); m = Store(os.environ["ATOMBOX_STORE"])
-    a = adresse(s, "contact@exemple.fr")
+    a = address_of(s, "contact@exemple.fr")
     boite = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(boite)
-    compte = Compte(compte_id=uuid7(), login="mathieu", nom="Mathieu", actif=True, cree_le=datetime.now(timezone.utc), mot_de_passe_empreinte=hacher_mot_de_passe("secret")); s.add(compte)
+    compte = Compte(compte_id=uuid7(), login="mathieu", nom="Mathieu", actif=True, cree_le=datetime.now(timezone.utc), mot_de_passe_empreinte=hash_password("secret")); s.add(compte)
     s.add(Acces(compte_id=compte.compte_id, boite_id=boite.boite_id, role="lecteur", debut=datetime.now(timezone.utc), accorde_par=compte.compte_id))
     inbox = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom="INBOX", alias_imap="INBOX", protege=True); s.add(inbox)
     for alias in ("Sent", "Drafts", "Trash", "Junk"): s.add(Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom=alias, alias_imap=alias, protege=True))
@@ -171,7 +171,7 @@ def monde(tmp_path_factory):
     ids = [ingest(s, m, boite.boite_id, read(f), dossier_id=inbox.dossier_id)["comm_id"] for f in ("simple.eml", "reponse.eml", "pieces.eml", "liste.eml")]
     yield {"session": s, "ids": ids, "url": u}
     s.close()
-    for k, v in avant.items():   # ne jamais laisser l'environnement pointer sur une base détruite
+    for k, v in before.items():   # ne jamais laisser l'environnement pointer sur une base détruite
         if v is None: os.environ.pop(k, None)
         else: os.environ[k] = v
     import atombox.db as db, asyncio
@@ -185,9 +185,9 @@ def monde(tmp_path_factory):
 
 def test_parcours_du_webmail(monde):
     from fastapi.testclient import TestClient
-    from atombox.api.app import creer_app
+    from atombox.api.app import create_app
     import atombox.db as db; db._async.clear(); db._sync.clear()
-    c = TestClient(creer_app())
+    c = TestClient(create_app())
     r = c.post("/api/v1/session", json={"utilisateur": "mathieu", "mot_de_passe": "secret"}); assert r.status_code == 200, r.text
     h = {"Authorization": "Bearer " + r.json()["jeton"]}
     ref = c.get("/api/v1/referentiels", headers=h).json()
@@ -200,8 +200,8 @@ def test_parcours_du_webmail(monde):
     mid = str(monde["ids"][2])
     d = c.get("/api/v1/messages/" + mid, headers=h).json()
     assert d["corps"].startswith("Veuillez") and len(d["pieces_jointes"]) == 3 and d["pieces_jointes"][1]["mime_detecte"] == "application/pdf"
-    fil = c.get("/api/v1/messages/%s/fil" % monde["ids"][1], headers=h).json()["messages"]
-    assert len(fil) == 2, "simple et sa réponse forment un fil (D055)"
+    thread = c.get("/api/v1/messages/%s/fil" % monde["ids"][1], headers=h).json()["messages"]
+    assert len(thread) == 2, "simple et sa réponse forment un fil (D055)"
     p = c.patch("/api/v1/messages/" + mid + "/rattachement", json={"lu": True}, headers=h).json()
     assert p["ok"] and p["modifies"] == 1 and p["message"]["lu"] is True
     assert c.get("/api/v1/arborescence", headers=h).json()["compteurs"]["inbox"]["u"] == 3
@@ -243,9 +243,9 @@ def test_parcours_du_webmail(monde):
     assert premiere["ok"] and premiere["identite"]["par_defaut"] is True
     i = c.post("/api/v1/identites", json={"nom_affiche": "Service commercial", "signature": "-- \nL'équipe", "par_defaut": True}, headers=h).json()
     assert i["ok"] and i["identite"]["signature"].endswith("L'équipe")
-    apres = c.get("/api/v1/identites", headers=h).json()["identites"]
-    assert len(apres) == 2 and sum(1 for x in apres if x["par_defaut"]) == 1, "une seule identité par défaut"
-    autre = next(x for x in apres if not x["par_defaut"])
+    after = c.get("/api/v1/identites", headers=h).json()["identites"]
+    assert len(after) == 2 and sum(1 for x in after if x["par_defaut"]) == 1, "une seule identité par défaut"
+    autre = next(x for x in after if not x["par_defaut"])
     assert c.delete("/api/v1/identites/" + autre["id"], headers=h).json()["supprimes"] == 1
     seule = c.get("/api/v1/identites", headers=h).json()["identites"][0]
     assert c.delete("/api/v1/identites/" + seule["id"], headers=h).status_code == 409, "jamais la dernière"
@@ -291,10 +291,10 @@ def test_parcours_du_webmail(monde):
     assert parti["composition"] is None, "ce n'est plus un brouillon : il ne se rouvre plus en composition"
     assert parti["suppr"] is False and parti["motif_sortie"] is None, "et il n'est PAS à la corbeille"
     assert parti["destinataires"] == ["jean@x.fr", "paul@x.fr"], "ses destinataires sont en base"
-    liste = lambda d, f: [x["id"] for x in c.get("/api/v1/messages", params={"dossier": d, "filtre": f}, headers=h).json()["messages"]]
-    assert br3["id"] not in liste("drafts", "tous"), "il a quitté « Brouillons », même avec la puce « Tout »"
-    assert br3["id"] in liste("sent", "tous"), "et il est dans « Envoyés »"
-    assert br3["id"] not in liste("trash", "tous"), "la Corbeille ne le contient pas"
+    listing = lambda d, f: [x["id"] for x in c.get("/api/v1/messages", params={"dossier": d, "filtre": f}, headers=h).json()["messages"]]
+    assert br3["id"] not in listing("drafts", "tous"), "il a quitté « Brouillons », même avec la puce « Tout »"
+    assert br3["id"] in listing("sent", "tous"), "et il est dans « Envoyés »"
+    assert br3["id"] not in listing("trash", "tous"), "la Corbeille ne le contient pas"
 
     # F132 — TRANSFÉRER : le source encapsulé, la provenance en base, le commentaire à part (D167)
     source = str(monde["ids"][2])                      # pieces.eml — avec ses propres pièces jointes
@@ -315,11 +315,11 @@ def test_parcours_du_webmail(monde):
     pj = relu_tr["pieces_jointes"][0]
     assert pj["comm_id"] == source, "la pièce message/rfc822 pointe le message AtomBox d'origine"
     # RM3213 — l'encapsulé EST le blob de l'original : même octet, même empreinte, donc dédupliqué
-    from atombox.schema.modeles import CommEmail
+    from atombox.schema.models import CommEmail
     monde["session"].expire_all()
     blob_source = monde["session"].get(CommEmail, uuid.UUID(source)).blob_ref
     assert pj["sha256"] == blob_source, "le message transmis est stocké une seconde fois (D066)"
-    from atombox.schema.modeles import Blob
+    from atombox.schema.models import Blob
     assert monde["session"].get(Blob, blob_source).nb_references >= 2, \
         "UN fichier au magasin, deux porteurs : l'original (comme message) et son transfert (comme pièce)"
     # F136 — et les octets d'une pièce se servent enfin : sans cette route, aucun clic n'aboutit
@@ -351,8 +351,8 @@ def test_parcours_du_webmail(monde):
     assert relu3["composition"] is None, "un message parti n'est plus un brouillon"
 
     # F108 — le carnet auto-collecté
-    carnet = c.get("/api/v1/carnet", headers=h).json()["carnet"]
-    assert any(x["adresse"] == "jean@x.fr" for x in carnet), "les destinataires écrits nourrissent le carnet (D109)"
+    address_book = c.get("/api/v1/carnet", headers=h).json()["carnet"]
+    assert any(x["adresse"] == "jean@x.fr" for x in address_book), "les destinataires écrits nourrissent le carnet (D109)"
     assert c.get("/api/v1/carnet", params={"q": "paul"}, headers=h).json()["carnet"][0]["adresse"] == "paul@x.fr"
 
     # F016 — une règle qui classe, et son compteur

@@ -34,9 +34,9 @@ def serveur_imap(tmp_path_factory):
     import psycopg, re as _re
     from atombox.db import session as open_mailbox
     from atombox.store import Store
-    from atombox.api.securite import hacher_mot_de_passe
-    from atombox.ingestion.ingestion import adresse, ingest
-    from atombox.schema.modeles import Acces, Boite, Compte, Dossier
+    from atombox.api.security import hash_password
+    from atombox.ingestion.ingestion import address_of, ingest
+    from atombox.schema.models import Acces, Boite, Compte, Dossier
     from atombox.uuid7 import uuid7
 
     name = "atombox_imap_" + uuid.uuid4().hex[:8]
@@ -47,10 +47,10 @@ def serveur_imap(tmp_path_factory):
         c.execute(open(os.path.join(ici, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read()); c.commit()
     store = Store(str(tmp_path_factory.mktemp("magasin")))
     s = open_mailbox(u)
-    a = adresse(s, "contact@exemple.fr")
+    a = address_of(s, "contact@exemple.fr")
     mailbox = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(mailbox)
     compte = Compte(compte_id=uuid7(), login="mathieu", nom="Mathieu", actif=True,
-                    cree_le=datetime.now(timezone.utc), mot_de_passe_empreinte=hacher_mot_de_passe("secret")); s.add(compte)
+                    cree_le=datetime.now(timezone.utc), mot_de_passe_empreinte=hash_password("secret")); s.add(compte)
     s.add(Acces(compte_id=compte.compte_id, boite_id=mailbox.boite_id, role="membre",
                 debut=datetime.now(timezone.utc), accorde_par=compte.compte_id))
     inbox = Dossier(dossier_id=uuid7(), boite_id=mailbox.boite_id, nom="INBOX", alias_imap="INBOX", protege=True); s.add(inbox)
@@ -71,8 +71,8 @@ def serveur_imap(tmp_path_factory):
     boucle = {}
 
     def tourner():
-        async def demarrer():
-            from atombox.imap.serveur import Listener
+        async def start():
+            from atombox.imap.server import Listener
             e = Listener(lambda: open_mailbox(u), store)
             srv = await asyncio.start_server(e.client, "127.0.0.1", port)
             boucle["serveur"] = srv
@@ -80,10 +80,10 @@ def serveur_imap(tmp_path_factory):
             async with srv: await srv.serve_forever()
         # `asyncio.run` dans un fil DÉMON : il meurt avec le processus. Arrêter la boucle à la
         # main depuis un autre fil a sa part de pièges, et on n'a rien à sauver ici.
-        try: asyncio.run(demarrer())
+        try: asyncio.run(start())
         except (asyncio.CancelledError, RuntimeError): pass
 
-    fil = threading.Thread(target=tourner, daemon=True); fil.start()
+    thread = threading.Thread(target=tourner, daemon=True); thread.start()
     assert pret.wait(10), "le serveur IMAP n'a pas démarré"
     yield {"port": port, "magasin": store, "session": s}
     s.close()
@@ -116,24 +116,24 @@ def test_un_vrai_client_se_connecte_liste_et_lit(serveur_imap):
 
         code, mailboxes = c.list()
         assert code == "OK"
-        noms = " ".join(b.decode() for b in mailboxes)
-        assert '"INBOX"' in noms, noms
-        assert '"Trash"' in noms, "les autres dossiers sont là aussi"
+        names = " ".join(b.decode() for b in mailboxes)
+        assert '"INBOX"' in names, names
+        assert '"Trash"' in names, "les autres dossiers sont là aussi"
 
         code, n = c.select("INBOX", readonly=True)
         assert code == "OK" and int(n[0]) == 3, n
         assert c.untagged_responses.get("OK"), "la sélection porte UIDVALIDITY et UIDNEXT"
 
         code, uids = c.uid("SEARCH", None, "ALL")
-        liste = uids[0].split()
-        assert code == "OK" and len(liste) == 3, uids
+        listing = uids[0].split()
+        assert code == "OK" and len(listing) == 3, uids
 
-        code, data = c.uid("FETCH", liste[0], "(BODY.PEEK[])")
+        code, data = c.uid("FETCH", listing[0], "(BODY.PEEK[])")
         raw = data[0][1]
-        expected = serveur_imap["magasin"].read(_blob(serveur_imap["session"], int(liste[0])))
+        expected = serveur_imap["magasin"].read(_blob(serveur_imap["session"], int(listing[0])))
         assert raw == expected, "l'octet servi est CELUI DU MAGASIN, pas une reconstruction (D025, RM3213)"
 
-        code, data = c.uid("FETCH", liste[0], "(FLAGS RFC822.SIZE ENVELOPE)")
+        code, data = c.uid("FETCH", listing[0], "(FLAGS RFC822.SIZE ENVELOPE)")
         rendu = data[0].decode() if isinstance(data[0], bytes) else " ".join(map(str, data[0]))
         assert "RFC822.SIZE %d" % len(expected) in rendu, rendu
         assert "Commande 4412" in rendu, "l'enveloppe porte le sujet"
@@ -198,7 +198,7 @@ def test_ce_qu_on_ne_sert_pas_est_refuse_franchement(serveur_imap):
 
 def _blob(session, uid):
     from sqlalchemy import select
-    from atombox.schema.modeles import CommEmail, Rattachement
+    from atombox.schema.models import CommEmail, Rattachement
     r = session.scalar(select(Rattachement).where(Rattachement.uid_servi == uid))
     return session.get(CommEmail, r.comm_id).blob_ref
 
@@ -206,7 +206,7 @@ def _blob(session, uid):
 def _etat(session, sujet_ou_uid=None, comm_id=None):
     """(exit_reason, dossier servi, uid) d'un message, relu de la BASE et non du client"""
     from sqlalchemy import select
-    from atombox.schema.modeles import Dossier, Rattachement
+    from atombox.schema.models import Dossier, Rattachement
     session.expire_all()
     r = session.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id))
     d = session.get(Dossier, r.dossier_id) if r.dossier_id else None
@@ -218,7 +218,7 @@ def _un_message_en_inbox(session):
 
     Se fier à l'ordre des tests, c'est écrire un test qui passe seul et tombe en suite."""
     from sqlalchemy import select
-    from atombox.schema.modeles import Comm, Dossier, Rattachement
+    from atombox.schema.models import Comm, Dossier, Rattachement
     session.expire_all()
     return session.scalar(
         select(Rattachement.comm_id).join(Comm, Comm.comm_id == Rattachement.comm_id)
@@ -261,7 +261,7 @@ def test_deplacer_vers_archive_change_l_etat_et_le_message_y_reste(serveur_imap)
         # L'UID VIENT DU COMPTEUR D'ARCHIVE, et pas du message : c'est ça qu'il faut vérifier, et
         # non « il a changé » — les deux compteurs peuvent coïncider, et le test passerait à côté.
         from sqlalchemy import select as _sel
-        from atombox.schema.modeles import Dossier as _D
+        from atombox.schema.models import Dossier as _D
         s.expire_all()
         archive = s.scalar(_sel(_D).where(_D.exit_reason == "archived"))
         assert archive.uid_servi_suivant == uid + 1, \
@@ -286,7 +286,7 @@ def test_deplacer_vers_archive_change_l_etat_et_le_message_y_reste(serveur_imap)
         assert inbox.uid_servi_suivant == uid2 + 1, "et l'INBOX attribue le sien, pris à son compteur"
         # LES DATES RESTENT : « il a été archivé le 3 » est un fait, même s'il est revenu
         from sqlalchemy import select as _select
-        from atombox.schema.modeles import Rattachement
+        from atombox.schema.models import Rattachement
         s.expire_all()
         r = s.scalar(_select(Rattachement).where(Rattachement.comm_id == cid))
         assert r.archived_at is not None, "la date d'archivage est un fait : elle survit au retour"
@@ -302,7 +302,7 @@ def test_supprimer_met_a_la_corbeille_et_ne_detruit_rien(serveur_imap):
     le retrouver dans la corbeille. Et D118 interdit d'effacer la ligne — EXPUNGE n'en détruit donc
     aucune, il annonce seulement ce qui a quitté la boîte."""
     from sqlalchemy import select
-    from atombox.schema.modeles import Comm, Rattachement
+    from atombox.schema.models import Comm, Rattachement
     s = serveur_imap["session"]
     s.expire_all()
     cible = _un_message_en_inbox(s)
@@ -331,7 +331,7 @@ def test_retirer_seen_ne_detruit_pas_l_ouverture(serveur_imap):
     """La projection IMAP de D175 § 2, éprouvée par un vrai client : retirer `\\Seen` pose
     « à revoir » et laisse la date d'ouverture intacte. Le message repasse en gras des deux côtés."""
     from sqlalchemy import select
-    from atombox.schema.modeles import Marker, MarkerPersonal, ReadState
+    from atombox.schema.models import Marker, MarkerPersonal, ReadState
     s = serveur_imap["session"]
     cid = _un_message_en_inbox(s)
     c = imaplib.IMAP4("127.0.0.1", serveur_imap["port"], timeout=10)

@@ -30,7 +30,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from ..journal import journal
-from ..schema.modeles import Dossier, Rattachement
+from ..schema.models import Dossier, Rattachement
 from . import trace
 
 log = journal("api")
@@ -81,8 +81,8 @@ def _target_query(boite_id, valeur: str | None, origine_id):
                                  Dossier.alias_imap.in_(("INBOX", "Inbox", "inbox")))
 
 
-def _apply_move(r: Rattachement, valeur: str | None, cible: Dossier | None, compte_id, maintenant,
-              courant: Dossier | None, uid: int | None):
+def _apply_move(r: Rattachement, valeur: str | None, cible: Dossier | None, compte_id, now,
+              current: Dossier | None, uid: int | None):
     """LA MUTATION, SANS AUCUNE REQUÊTE : c'est toute la raison d'être de cette fonction.
 
     `courant` est le dossier d'où l'on part — nécessaire pour savoir si c'était un dossier
@@ -98,7 +98,7 @@ def _apply_move(r: Rattachement, valeur: str | None, cible: Dossier | None, comp
     La règle qui en sort : **entre le moment où l'on change de boîte aux lettres et celui où l'on
     pose le nouvel UID, il ne doit y avoir AUCUNE requête.** Les deux champs forment un couple ;
     les écrire séparément, c'est laisser exister un état interdit, ne serait-ce qu'un instant."""
-    avant = r.exit_reason
+    before = r.exit_reason
     if cible is None:
         # PAS UN AVERTISSEMENT, UNE ERREUR : sans la boîte d'arrivée, l'état est écrit mais le
         # message ne bouge pas — c'est-à-dire exactement le symptôme « je déplace et rien ne
@@ -113,7 +113,7 @@ def _apply_move(r: Rattachement, valeur: str | None, cible: Dossier | None, comp
         # ensuite de Traités à la Corbeille, l'origine ne bouge pas — on part d'une boîte d'état,
         # qui n'est la place de personne. Garder « le premier » ramenait tout à l'INBOX.
         if (r.dossier_id is not None and r.dossier_id != cible.dossier_id
-                and (courant is None or courant.exit_reason is None)):
+                and (current is None or current.exit_reason is None)):
             r.dossier_origine_id = r.dossier_id
         r.dossier_id = cible.dossier_id
         r.uid_servi = uid          # même instant, même transaction, aucune requête entre les deux
@@ -121,11 +121,11 @@ def _apply_move(r: Rattachement, valeur: str | None, cible: Dossier | None, comp
     if valeur in TRANSITION_DATES:
         champ_date, champ_qui = TRANSITION_DATES[valeur]
         if getattr(r, champ_date) is None:
-            setattr(r, champ_date, maintenant)
+            setattr(r, champ_date, now)
             setattr(r, champ_qui, compte_id)
     if valeur == "deleted":
-        r.restaurable_jusqu_au = maintenant + TRASH_RETENTION
-    return avant
+        r.restaurable_jusqu_au = now + TRASH_RETENTION
+    return before
 
 
 async def move(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier | None = None) -> str | None:
@@ -134,8 +134,8 @@ async def move(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier
     `cible` IMPOSE la boîte d'arrivée : un `MOVE` IMAP nomme sa destination, et déduire celle-ci de
     l'état enverrait le message dans l'INBOX alors que le client a dit « Devis 2026 »."""
     from ..served_uid import assign_async
-    maintenant = datetime.now(timezone.utc)
-    courant = await s.get(Dossier, r.dossier_id) if r.dossier_id else None
+    now = datetime.now(timezone.utc)
+    current = await s.get(Dossier, r.dossier_id) if r.dossier_id else None
     if cible is None:
         cible = await s.scalar(_target_query(r.boite_id, valeur, r.dossier_origine_id).limit(1))
     # L'UID D'ABORD : toutes les requêtes ont lieu AVANT la première mutation (cf. `_apply_move`).
@@ -145,26 +145,26 @@ async def move(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier
     # appliqué — `dossier_id` neuf avec l'ancien `uid_servi` heurte l'unicité, et le client voit
     # « erreur interne » sans rien de déplacé. L'invariant devient structurel, pas discipliné.
     with s.no_autoflush:
-        avant = _apply_move(r, valeur, cible, compte_id, maintenant, courant, uid)
+        before = _apply_move(r, valeur, cible, compte_id, now, current, uid)
     trace.record(s, compte_id, JOURNAL_ACTIONS.get(valeur or "", "refiled"), "rattachement", r.comm_id,
-                 {"boite_id": str(r.boite_id), "avant": avant, "apres": valeur})
-    return avant
+                 {"boite_id": str(r.boite_id), "avant": before, "apres": valeur})
+    return before
 
 
 def move_sync(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier | None = None) -> str | None:
     """IMAP et démon (session synchrone) — le même geste, la même trace"""
     from ..served_uid import assign
-    maintenant = datetime.now(timezone.utc)
-    courant = s.get(Dossier, r.dossier_id) if r.dossier_id else None
+    now = datetime.now(timezone.utc)
+    current = s.get(Dossier, r.dossier_id) if r.dossier_id else None
     if cible is None:
         cible = s.scalar(_target_query(r.boite_id, valeur, r.dossier_origine_id).limit(1))
     # L'UID D'ABORD, puis `no_autoflush` : voir `deplacer` — même raison, même garantie.
     uid = assign(s, cible.dossier_id) if cible is not None else None
     with s.no_autoflush:
-        avant = _apply_move(r, valeur, cible, compte_id, maintenant, courant, uid)
+        before = _apply_move(r, valeur, cible, compte_id, now, current, uid)
     trace.record(s, compte_id, JOURNAL_ACTIONS.get(valeur or "", "refiled"), "rattachement", r.comm_id,
-                 {"boite_id": str(r.boite_id), "avant": avant, "apres": valeur})
-    return avant
+                 {"boite_id": str(r.boite_id), "avant": before, "apres": valeur})
+    return before
 
 
 def state_of_folder(d: Dossier | None) -> str | None:
@@ -203,13 +203,13 @@ def ensure_mailboxes(s, boite_id) -> int:
     posees = 0
     for etat, (nom, servi, special, alias) in STATES.items():
         if etat in presents: continue
-        existant = next((d for d in libres
+        existing = next((d for d in libres
                          if (d.alias_imap or d.nom or "").upper().split("/")[-1] in alias), None)
-        if existant is not None:
+        if existing is not None:
             # ON N'ÉCRIT PAS `alias_imap` : c'est le nom du dossier chez le fournisseur, et la
             # relève s'en sert pour le retrouver. Le nom SERVI est déduit de l'état (`served_name`).
-            existant.exit_reason, existant.special_use, existant.protege = etat, special, True
-            libres.remove(existant)
+            existing.exit_reason, existing.special_use, existing.protege = etat, special, True
+            libres.remove(existing)
         else:
             s.add(Dossier(dossier_id=uuid7(), boite_id=boite_id, nom=nom, alias_imap=servi,
                           protege=True, exit_reason=etat, special_use=special,

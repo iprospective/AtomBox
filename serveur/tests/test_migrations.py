@@ -47,7 +47,7 @@ import os, uuid as _uuid, pytest
 def _alembic(url, cible):
     from alembic import command
     from alembic.config import Config
-    avant = os.environ.get("DATABASE_URL")
+    before = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = url
     cfg = Config(os.path.join(ICI, "..", "alembic.ini"))
     cfg.set_main_option("script_location", os.path.join(ICI, "..", "atombox", "schema", "migrations"))
@@ -56,8 +56,8 @@ def _alembic(url, cible):
         elif cible.startswith("-"): command.downgrade(cfg, cible[1:])
         else: command.upgrade(cfg, cible)
     finally:
-        if avant is None: os.environ.pop("DATABASE_URL", None)
-        else: os.environ["DATABASE_URL"] = avant
+        if before is None: os.environ.pop("DATABASE_URL", None)
+        else: os.environ["DATABASE_URL"] = before
 
 
 @pytest.fixture
@@ -146,10 +146,10 @@ UPDATE rattachement SET motif_sortie = 'archive', sorti_le = now() - interval '4
         assert arch is not None and proc is not None, \
             "traité PUIS archivé : la date de traitement est reconstituée, c'est la clé d'archivage (D014)"
 
-        lignes = dict(c.execute("select comm_id::text, compte_id::text from read_state").fetchall())
-        assert lignes.get("11111111-0000-7000-8000-000000000011") == "11111111-0000-7000-8000-000000000003", \
+        lines = dict(c.execute("select comm_id::text, compte_id::text from read_state").fetchall())
+        assert lines.get("11111111-0000-7000-8000-000000000011") == "11111111-0000-7000-8000-000000000003", \
             "la lecture va au SEUL membre de la boîte"
-        assert "11111111-0000-7000-8000-000000000015" not in lignes, \
+        assert "11111111-0000-7000-8000-000000000015" not in lines, \
             "à plusieurs, l'ancien lu_le ne dit pas QUI : on n'écrit pas un fait qu'on n'a pas observé"
 
         assert c.execute("""select count(*) from marker_personal m join marker k using (marker_id)

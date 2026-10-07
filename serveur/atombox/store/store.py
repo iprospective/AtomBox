@@ -27,7 +27,7 @@ log = journal("store")
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 GAIN_THRESHOLD = 0.10          # en dessous de 10 % gagnés, on garde les octets tels quels (D069)
 
-def empreinte(data: bytes) -> str:
+def fingerprint(data: bytes) -> str:
     """l'identité d'un contenu : SHA-256 en hexadécimal — c'est aussi son nom de fichier"""
     return hashlib.sha256(data).hexdigest()
 
@@ -75,7 +75,7 @@ class Store:
 
     def put(self, data: bytes) -> tuple[str, dict]:
         """un blob adressé par son contenu (D010, D011) : l'empreinte est le nom"""
-        e = empreinte(data)
+        e = fingerprint(data)
         return e, self.write(e, data)
 
     def read(self, identifiant) -> bytes:

@@ -32,7 +32,7 @@ import email.utils
 from datetime import datetime, timezone
 from sqlalchemy import select
 from ..journal import journal
-from ..schema.modeles import Acces, Adresse, Boite, Comm, CommEmail, Compte, Dossier, Rattachement
+from ..schema.models import Acces, Adresse, Boite, Comm, CommEmail, Compte, Dossier, Rattachement
 
 log = journal("imap")
 
@@ -64,7 +64,7 @@ class ServedMessage:
         # `\\Deleted` viennent du rattachement, parce que répondre et supprimer sont des actes
         # COLLECTIFS — tout le monde voit qu'il y a été répondu.
         self.flags = []
-        if state is not None and state.vu: self.flags.append("\\Seen")
+        if state is not None and state.seen: self.flags.append("\\Seen")
         if state is not None and state.flagged: self.flags.append("\\Flagged")
         if rattachement.repondu_le is not None: self.flags.append("\\Answered")
         # ON NE SERT JAMAIS `\\Deleted`, ET C'EST UN CHOIX DE TRADUCTION, pas un oubli.
@@ -136,10 +136,10 @@ class View:
 
     # ── qui es-tu ───────────────────────────────────────────────────────────────────────────────
     def authenticate(self, login: str, password: str):
-        from ..api.securite import verifier_mot_de_passe
+        from ..api.security import verify_password
         c = self.s.scalar(select(Compte).where(Compte.login == (login or "").strip().lower()))
         if c is None or not c.actif: return None
-        if not verifier_mot_de_passe(password or "", c.mot_de_passe_empreinte): return None
+        if not verify_password(password or "", c.mot_de_passe_empreinte): return None
         self.compte = c
         return c
 
@@ -209,7 +209,7 @@ class View:
         ou = {"FROM": (c.from_adresse or "") + " " + (c.from_nom or ""), "SUBJECT": c.sujet or "",
               "BODY": c.corps_texte or "", "TEXT": " ".join(filter(None, [c.sujet, c.corps_texte, c.from_adresse]))}
         if field in ("TO", "CC"):
-            from ..schema.modeles import Participant
+            from ..schema.models import Participant
             roles = [p.adresse for p in self.s.scalars(
                 select(Participant).where(Participant.comm_id == c.comm_id, Participant.role == field.lower()))]
             return needle in " ".join(roles).lower()
@@ -267,7 +267,7 @@ class View:
         Un `\\Seen` RETIRÉ ne détruit pas la date d'ouverture : il pose « à revoir » (D175 § 2).
         Le message repasse en gras chez le client comme dans le webmail, et le fait reste écrit."""
         from ..services.mailbox import move_sync
-        from ..services import personal_state as perso
+        from ..services import personal_state as personal
         touched = []
         for uid in uids:
             r = self.s.scalar(select(Rattachement).where(Rattachement.dossier_id == mailbox.dossier_id,
@@ -275,19 +275,19 @@ class View:
             if r is None: continue
             for f in to_add:
                 if f == "\\Seen":
-                    self.s.execute(perso.open_stmt(compte.compte_id, r.comm_id, r.boite_id))
-                    perso.unset_marker_sync(self.s, compte.compte_id, r.comm_id, r.boite_id, perso.TO_REVIEW)
+                    self.s.execute(personal.open_stmt(compte.compte_id, r.comm_id, r.boite_id))
+                    personal.unset_marker_sync(self.s, compte.compte_id, r.comm_id, r.boite_id, personal.TO_REVIEW)
                 elif f == "\\Flagged":
-                    self.s.execute(perso.flag_stmt(compte.compte_id, r.comm_id, r.boite_id, True))
+                    self.s.execute(personal.flag_stmt(compte.compte_id, r.comm_id, r.boite_id, True))
                 elif f == "\\Deleted" and r.exit_reason != "deleted":
                     move_sync(self.s, r, "deleted", compte.compte_id)
                 elif f == "\\Answered":
                     r.repondu_le = r.repondu_le or datetime.now(timezone.utc)
             for f in to_remove:
                 if f == "\\Seen":
-                    perso.set_marker_sync(self.s, compte.compte_id, r.comm_id, r.boite_id, perso.TO_REVIEW)
+                    personal.set_marker_sync(self.s, compte.compte_id, r.comm_id, r.boite_id, personal.TO_REVIEW)
                 elif f == "\\Flagged":
-                    self.s.execute(perso.flag_stmt(compte.compte_id, r.comm_id, r.boite_id, False))
+                    self.s.execute(personal.flag_stmt(compte.compte_id, r.comm_id, r.boite_id, False))
                 elif f == "\\Deleted" and r.exit_reason == "deleted":
                     move_sync(self.s, r, None, compte.compte_id)
             touched.append(uid)

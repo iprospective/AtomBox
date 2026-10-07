@@ -10,17 +10,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ..uuid7 import uuid7
 from ..store import Store
-from ..schema.modeles import Adresse, Blob, Comm, CommEmail, CommPieceJointe, Domaine, Dossier, Participant, PieceJointe, Rattachement
-from .analyse import analyze
-from .identite import identity_fingerprint
+from ..schema.models import Adresse, Blob, Comm, CommEmail, CommPieceJointe, Domaine, Dossier, Participant, PieceJointe, Rattachement
+from .analysis import analyze
+from .identity import identity_fingerprint
 from ..journal import journal
-from ..modules.accroches import accroches
-from ..modules import evenements
-from ..filtres import appliquer as appliquer_filtres, filtres_de
+from ..modules.hooks import hooks
+from ..modules import events
+from ..filters import apply as apply_rules, rules_for
 
 log = journal("ingestion")
 
-def domaine(s: Session, nom: str) -> Domaine:
+def domain_of(s: Session, nom: str) -> Domaine:
     nom_ascii = nom.lower()
     try: nom_ascii = nom.encode("idna").decode()
     except Exception: pass
@@ -30,7 +30,7 @@ def domaine(s: Session, nom: str) -> Domaine:
     s.add(d); s.flush()
     return d
 
-def normalize_address(brut: str) -> str:
+def normalize_address(raw: str) -> str:
     """« Florian HENRY <florian.henry@scopen.fr> » → « florian.henry@scopen.fr ».
 
     Une adresse vient TOUJOURS de l'extérieur — d'un en-tête reçu ou d'un champ de saisie — donc
@@ -38,22 +38,22 @@ def normalize_address(brut: str) -> str:
     est entrée en base (`local = "Florian HENRY <florian.henry"`) : smtplib parsait à la remise, le
     courrier partait, et le suivi d'envoi pointait une adresse qui n'existe pas."""
     import email.utils
-    _, adr = email.utils.parseaddr((brut or "").strip())
+    _, adr = email.utils.parseaddr((raw or "").strip())
     adr = (adr or "").strip().strip("<>")
     return adr if "@" in adr else ""      # `parseaddr` rend volontiers du texte quelconque
 
 
-def adresse(s: Session, complete: str) -> Adresse:
-    complete = normalize_address(complete) or (complete or "").strip().strip("<>")
-    a = s.scalar(select(Adresse).where(Adresse.adresse_complete == complete))
+def address_of(s: Session, full: str) -> Adresse:
+    full = normalize_address(full) or (full or "").strip().strip("<>")
+    a = s.scalar(select(Adresse).where(Adresse.adresse_complete == full))
     if a: return a
-    local, _, dom = complete.partition("@")
-    a = Adresse(adresse_id=uuid7(), local=local, local_cmp=local.lower(), domaine_id=domaine(s, dom or "invalide").domaine_id, adresse_complete=complete)
+    local, _, dom = full.partition("@")
+    a = Adresse(adresse_id=uuid7(), local=local, local_cmp=local.lower(), domaine_id=domain_of(s, dom or "invalide").domaine_id, adresse_complete=full)
     s.add(a); s.flush()
     return a
 
-def blob(s: Session, store: Store, octets: bytes) -> Blob:
-    e, info = store.put(octets)
+def blob_of(s: Session, store: Store, raw_bytes: bytes) -> Blob:
+    e, info = store.put(raw_bytes)
     b = s.get(Blob, e)
     if b: b.nb_references += 1; return b
     b = Blob(empreinte=e, taille_octets=info["taille_octets"], taille_stockee=info["taille_stockee"], compression=info["compression"],
@@ -61,27 +61,27 @@ def blob(s: Session, store: Store, octets: bytes) -> Blob:
     s.add(b); s.flush()
     return b
 
-def ingest(s: Session, store: Store, boite_id, octets: bytes, *, uid=None, uid_validity=None, dossier_id=None,
+def ingest(s: Session, store: Store, boite_id, raw_bytes: bytes, *, uid=None, uid_validity=None, dossier_id=None,
             date_recue: datetime | None = None, sens: str = "in", dossier_alias: str | None = None) -> dict:
-    a = analyze(octets)
-    ctx = accroches.emettre("message.avant_ingestion", analyse=a, boite_id=boite_id, octets=octets, tags=[])
+    a = analyze(raw_bytes)
+    ctx = hooks.emit("message.avant_ingestion", analyse=a, boite_id=boite_id, raw_bytes=raw_bytes, tags=[])
     if ctx.get("ignorer"):
         log.info("ignoré par un module : %s (%s)", a.message_id, ctx.get("raison", "sans raison")); return {"comm_id": None, "nouveau": False, "ignore": True, "identite": None, "nature": a.nature, "pieces": len(a.pieces)}
     identite = identity_fingerprint(a)
-    existant = s.scalar(select(CommEmail).where(CommEmail.empreinte == identite))
-    if existant:
-        comm_id, nouveau = existant.comm_id, False
+    existing = s.scalar(select(CommEmail).where(CommEmail.empreinte == identite))
+    if existing:
+        comm_id, fresh = existing.comm_id, False
         log.debug("déjà connu %s (%s) → rattachement à %s", comm_id, a.message_id, boite_id)
     else:
-        nouveau = True; comm_id = uuid7()
+        fresh = True; comm_id = uuid7()
         # le fil (D055) : par In-Reply-To / References vers une comm connue, sinon soi-même
         thread_id = comm_id
         refs = ([a.in_reply_to] if a.in_reply_to else []) + list(reversed(a.references))
         if refs:
             parent = s.scalar(select(Comm).join(CommEmail, CommEmail.comm_id == Comm.comm_id).where(CommEmail.message_id.in_(refs)).limit(1))
             if parent and parent.thread_id: thread_id = parent.thread_id
-        store.write(str(comm_id), octets)               # le message brut, sous l'UUID de la comm (D145)
-        brut = blob(s, store, octets)                    # et son blob, pour la reconstruction à l'octet (D025)
+        store.write(str(comm_id), raw_bytes)               # le message brut, sous l'UUID de la comm (D145)
+        raw = blob_of(s, store, raw_bytes)                    # et son blob, pour la reconstruction à l'octet (D025)
         s.add(Comm(comm_id=comm_id, type="email", date_recue=date_recue or a.date_declaree or datetime.now(timezone.utc),
                    date_declaree=a.date_declaree, date_ingestion=datetime.now(timezone.utc), sens=sens, sujet=a.sujet,
                    sujet_normalise=a.sujet_normalise, thread_id=thread_id, nature=a.nature, from_adresse=a.from_adresse,
@@ -89,37 +89,37 @@ def ingest(s: Session, store: Store, boite_id, octets: bytes, *, uid=None, uid_v
                    est_chiffre=a.est_chiffre, est_signe=a.est_signe, snippet=a.snippet, corps_texte=(a.corps_texte or "")[:200000] or None))
         s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, in_reply_to=a.in_reply_to, references=" ".join(a.references) or None,
                         return_path=a.return_path, list_id=a.list_id, list_unsubscribe=a.list_unsubscribe, headers=a.headers,
-                        blob_ref=brut.empreinte, empreinte=identite, structure_mime=a.structure_mime, uid=uid, uid_validity=uid_validity,
+                        blob_ref=raw.empreinte, empreinte=identite, structure_mime=a.structure_mime, uid=uid, uid_validity=uid_validity,
                         reponse_possible=a.reponse_possible))
         for role, nom, adr, ordre in a.participants:
-            s.add(Participant(comm_id=comm_id, role=role, adresse_id=adresse(s, adr).adresse_id, nom_affiche=nom, ordre=ordre))
+            s.add(Participant(comm_id=comm_id, role=role, adresse_id=address_of(s, adr).adresse_id, nom_affiche=nom, ordre=ordre))
         for p in a.pieces:
-            b = blob(s, store, p.octets)
+            b = blob_of(s, store, p.raw_bytes)
             pj = s.scalar(select(PieceJointe).where(PieceJointe.blob_ref == b.empreinte, PieceJointe.type_detecte == p.type_detecte))
             if pj: pj.nb_references += 1
             else:
-                pj = PieceJointe(piece_jointe_id=uuid7(), blob_ref=b.empreinte, type_detecte=p.type_detecte, taille_octets=len(p.octets), nb_references=1)
+                pj = PieceJointe(piece_jointe_id=uuid7(), blob_ref=b.empreinte, type_detecte=p.type_detecte, taille_octets=len(p.raw_bytes), nb_references=1)
                 s.add(pj); s.flush()
             s.add(CommPieceJointe(comm_id=comm_id, piece_jointe_id=pj.piece_jointe_id, ordre=p.ordre, nom_declare=p.nom_declare,
                                   type_declare=p.type_declare, transfer_encoding=p.transfer_encoding, disposition=p.disposition,
                                   content_id=p.content_id, parametres=p.parametres))
         s.flush()
-        evenements.emettre(s, "message.ingere", {"comm_id": str(comm_id), "boite_id": str(boite_id), "nature": a.nature, "sujet": a.sujet}, cible=None)
+        events.emit(s, "message.ingere", {"comm_id": str(comm_id), "boite_id": str(boite_id), "nature": a.nature, "sujet": a.sujet}, cible=None)
     r = s.get(Rattachement, (comm_id, boite_id))
     if r is None:
         # LE MOTEUR DE FILTRES (F016, D074) : il décide du dossier et de l'état d'arrivée. Il ne
         # tourne qu'à la PREMIÈRE arrivée dans une boîte : rejouer les règles sur un message déjà
         # rattaché défferait ce que l'utilisateur a fait depuis.
-        regles = appliquer_filtres(s, filtres_de(s, boite_id), a, {"dossier": dossier_alias or ""})
-        if regles["ignorer"]:
-            log.info("ignoré par une règle (%s) : %s", ", ".join(regles["regles"]), a.message_id)
-            s.commit(); return {"comm_id": comm_id, "nouveau": nouveau, "ignore": True, "identite": identite, "nature": a.nature, "pieces": len(a.pieces)}
-        p = regles["patch"]
+        rules = apply_rules(s, rules_for(s, boite_id), a, {"dossier": dossier_alias or ""})
+        if rules["ignorer"]:
+            log.info("ignoré par une règle (%s) : %s", ", ".join(rules["regles"]), a.message_id)
+            s.commit(); return {"comm_id": comm_id, "nouveau": fresh, "ignore": True, "identite": identite, "nature": a.nature, "pieces": len(a.pieces)}
+        p = rules["patch"]
         cible = dossier_id
-        if regles["dossier"]:
-            d2 = s.scalar(select(Dossier).where(Dossier.boite_id == boite_id, Dossier.alias_imap == regles["dossier"]))
+        if rules["dossier"]:
+            d2 = s.scalar(select(Dossier).where(Dossier.boite_id == boite_id, Dossier.alias_imap == rules["dossier"]))
             if d2 is not None: cible = d2.dossier_id
-            else: log.warning("règle « %s » : dossier %r inconnu dans cette boîte", ", ".join(regles["regles"]), regles["dossier"])
+            else: log.warning("règle « %s » : dossier %r inconnu dans cette boîte", ", ".join(rules["regles"]), rules["dossier"])
         from ..served_uid import assign as assign_uid
         s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, uid_servi=assign_uid(s, cible),
                            status=p.get("statut", "new"), personnel=False, gele=False,
@@ -128,12 +128,12 @@ def ingest(s: Session, store: Store, boite_id, octets: bytes, *, uid=None, uid_v
         # rattachement (D175). À l'arrivée, la seule personne qu'on connaisse est celle qui relève —
         # et s'ils sont plusieurs sur la boîte, la règle ne marque personne : « lu » voudrait dire
         # « lu par tous », ce qui est faux, et écrase la seule information qu'on aurait pu garder.
-        from ..services import personal_state as perso
-        releveur = perso.polling_account(s, boite_id) if (p.get("lu") or p.get("drapeau")) else None
+        from ..services import personal_state as personal
+        releveur = personal.polling_account(s, boite_id) if (p.get("lu") or p.get("drapeau")) else None
         if releveur is not None:
             s.flush()
-            if p.get("lu"): s.execute(perso.open_stmt(releveur, comm_id, boite_id))
-            if p.get("drapeau"): s.execute(perso.flag_stmt(releveur, comm_id, boite_id, True))
+            if p.get("lu"): s.execute(personal.open_stmt(releveur, comm_id, boite_id))
+            if p.get("drapeau"): s.execute(personal.flag_stmt(releveur, comm_id, boite_id, True))
         elif p.get("lu") or p.get("drapeau"):
             log.info("règle avec lu/drapeau sur une boîte à plusieurs membres : état personnel non imputé (D175)")
         # CE QU'UNE RÈGLE POSE DOIT PARTIR VERS IMAP (RM3188). Sans cet ordre, la synchronisation
@@ -143,11 +143,11 @@ def ingest(s: Session, store: Store, boite_id, octets: bytes, *, uid=None, uid_v
         # chemin, et le message est DÉPLACÉ côté IMAP — sinon Thunderbird ne voyait rien du tri.
         if uid is not None and (p.get("lu") or p.get("drapeau") or cible != dossier_id):
             s.flush()
-            evenements.emettre(s, "rattachement.change", {"comm_id": str(comm_id), "boite_id": str(boite_id),
+            events.emit(s, "rattachement.change", {"comm_id": str(comm_id), "boite_id": str(boite_id),
                                "dossier_avant": str(dossier_id) if cible != dossier_id else None}, cible=None)
     elif r.uid_imap is None and uid is not None:
         r.uid_imap = uid
     s.commit()
-    if nouveau: log.info("nouveau %s : %s, de %s, %d octets, %d pièce(s), nature %s", comm_id, a.sujet or "(sans sujet)", a.from_adresse, a.taille, len(a.pieces), a.nature)
-    accroches.emettre("message.ingere", comm_id=comm_id, nouveau=nouveau, analyse=a, boite_id=boite_id, tags=ctx.get("tags", []))
-    return {"comm_id": comm_id, "nouveau": nouveau, "identite": identite, "nature": a.nature, "pieces": len(a.pieces)}
+    if fresh: log.info("nouveau %s : %s, de %s, %d octets, %d pièce(s), nature %s", comm_id, a.sujet or "(sans sujet)", a.from_adresse, a.taille, len(a.pieces), a.nature)
+    hooks.emit("message.ingere", comm_id=comm_id, fresh=fresh, analyse=a, boite_id=boite_id, tags=ctx.get("tags", []))
+    return {"comm_id": comm_id, "nouveau": fresh, "identite": identite, "nature": a.nature, "pieces": len(a.pieces)}

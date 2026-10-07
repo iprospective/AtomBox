@@ -1,4 +1,4 @@
--- SCHÉMA ATOMBOX — engendré par outils/gen-schema.py depuis le dictionnaire des données.
+-- SCHÉMA ATOMBOX — engendré par tools/gen-schema.py depuis le dictionnaire des données.
 -- NE PAS ÉDITER : la source est .mmi-pm/docs/dict/*.yml (F114, D154). PostgreSQL ≥ 14 (D027).
 -- 40 tables, 88 clés étrangères, 74 index, 9 unicités. Identifiants : uuid v7 engendrés par
 -- l'application (D145). Le tronc comm n'est PAS partitionné en V0 : la partition par canal (D138)

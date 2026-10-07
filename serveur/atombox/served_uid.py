@@ -19,7 +19,7 @@ en deux temps, c'est se donner rendez-vous avec le doublon.
 from __future__ import annotations
 from sqlalchemy import BigInteger, func, update
 from .journal import journal
-from .schema.modeles import Dossier
+from .schema.models import Dossier
 
 log = journal("imap")
 

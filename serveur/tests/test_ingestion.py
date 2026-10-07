@@ -27,18 +27,18 @@ def base():
 
 @pytest.fixture
 def boites(base):
-    from atombox.ingestion.ingestion import adresse
-    from atombox.schema.modeles import Boite
+    from atombox.ingestion.ingestion import address_of
+    from atombox.schema.models import Boite
     out = []
     for adr in ("contact@exemple.fr", "fred@exemple.fr"):
-        a = adresse(base, adr)
+        a = address_of(base, adr)
         b = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="personnelle")
         base.add(b); out.append(b.boite_id)
     base.commit(); return out
 
 def test_ingestion_complete(base, boites, tmp_path):
     from atombox.ingestion.ingestion import ingest
-    from atombox.schema.modeles import Comm, Rattachement, PieceJointe, CommPieceJointe
+    from atombox.schema.models import Comm, Rattachement, PieceJointe, CommPieceJointe
     m = Store(str(tmp_path))
     r1 = ingest(base, m, boites[0], read("simple.eml"), uid=12, uid_validity=1)
     assert r1["nouveau"] and r1["nature"] == "humain"

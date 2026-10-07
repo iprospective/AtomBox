@@ -1,6 +1,6 @@
 """Les unités systemd nomment des modules — et un nom de module est un CONTRAT DE DÉPLOIEMENT.
 
-`ExecStart=… -m atombox.imap.serveur` vit dans deux endroits : le dépôt, et
+`ExecStart=… -m atombox.imap.server` vit dans deux endroits : le dépôt, et
 `/etc/systemd/system/` sur la machine servie. Le déployeur ne réinstalle pas les unités (il dit
 comment le faire) : renommer le module dans le dépôt fait donc échouer le service au prochain
 démarrage, avec un `ModuleNotFoundError` que personne ne lit — le service est simplement « failed ».
@@ -22,17 +22,17 @@ RACINE = pathlib.Path(__file__).resolve().parent.parent
 
 def _execstart():
     for u in sorted((RACINE / "outils").glob("*.service")):
-        for ligne in u.read_text(encoding="utf-8").splitlines():
-            if ligne.startswith("ExecStart="):
-                yield u.name, ligne
+        for line in u.read_text(encoding="utf-8").splitlines():
+            if line.startswith("ExecStart="):
+                yield u.name, line
 
 
 def test_les_modules_nommes_par_les_unites_existent():
     """`-m atombox.x.y` et `uvicorn atombox.x.y:app` doivent désigner un module importable."""
     manquants = []
-    for nom, ligne in _execstart():
-        for module in (re.findall(r"-m\s+(atombox[\w.]*)", ligne)
-                       + re.findall(r"\s(atombox[\w.]*):", ligne)):
+    for nom, line in _execstart():
+        for module in (re.findall(r"-m\s+(atombox[\w.]*)", line)
+                       + re.findall(r"\s(atombox[\w.]*):", line)):
             if importlib.util.find_spec(module) is None:
                 manquants.append("%s → %s" % (nom, module))
     assert not manquants, ("une unité nomme un module qui n'existe pas — le service ne démarrera "

@@ -22,28 +22,28 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..journal import journal
-from ..schema.modeles import Axe, Comm, CommTag, Compte, Rattachement, Tag
+from ..schema.models import Axe, Comm, CommTag, Compte, Rattachement, Tag
 from ..uuid7 import uuid7
 
 log = journal("api")
 
 
-async def tags_de(s: AsyncSession, comm_ids: list) -> dict:
+async def tags_of(s: AsyncSession, comm_ids: list) -> dict:
     """{comm_id: [{axe, val, source}]} — EN UNE PASSE pour toute une liste (D078).
     Une requête par message rendrait la liste inutilisable dès la deuxième page."""
     if not comm_ids:
         return {}
-    lignes = (await s.execute(
+    lines = (await s.execute(
         select(CommTag.comm_id, Axe.nom, Tag.valeur, CommTag.source)
         .join(Tag, Tag.tag_id == CommTag.tag_id).join(Axe, Axe.axe_id == Tag.axe_id)
         .where(CommTag.comm_id.in_(comm_ids)).order_by(Axe.ordre, Axe.nom, Tag.valeur))).all()
     out: dict = {}
-    for cid, axe, val, source in lignes:
+    for cid, axe, val, source in lines:
         out.setdefault(cid, []).append({"axe": axe, "val": val, "source": source})
     return out
 
 
-async def _axe(s: AsyncSession, nom: str) -> Axe:
+async def _axis(s: AsyncSession, nom: str) -> Axe:
     nom = nom.strip().lower()
     a = await s.scalar(select(Axe).where(Axe.nom == nom))
     if a is None:
@@ -66,28 +66,28 @@ async def _tag(s: AsyncSession, axe: Axe, valeur: str) -> Tag:
     return t
 
 
-async def _portee(s: AsyncSession, compte: Compte, comm_id) -> bool:
+async def _scope(s: AsyncSession, compte: Compte, comm_id) -> bool:
     """Le message est-il rattaché à une boîte du compte ? Hors portée = 404, jamais 403 (D108)."""
-    from .messages import boites_du_compte
-    boites = [b.boite_id for b in await boites_du_compte(s, compte)]
-    if not boites:
+    from .messages import account_mailboxes
+    mailbox_ids = [b.boite_id for b in await account_mailboxes(s, compte)]
+    if not mailbox_ids:
         return False
     r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id,
-                                                  Rattachement.boite_id.in_(boites)).limit(1))
+                                                  Rattachement.boite_id.in_(mailbox_ids)).limit(1))
     return r is not None
 
 
-async def poser(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur: str,
+async def add(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur: str,
                 source: str = "manuel") -> list | None:
     """Rend la liste des tags du message, ou None si le message est hors de portée."""
     axe_nom, valeur = (axe_nom or "").strip(), (valeur or "").strip()
     if not axe_nom or not valeur:
         return None
-    if not await _portee(s, compte, comm_id):
+    if not await _scope(s, compte, comm_id):
         return None
     if await s.get(Comm, comm_id) is None:
         return None
-    axe = await _axe(s, axe_nom)
+    axe = await _axis(s, axe_nom)
     tag = await _tag(s, axe, valeur)
     exists = await s.scalar(select(CommTag).where(CommTag.comm_id == comm_id, CommTag.tag_id == tag.tag_id))
     if exists is None:
@@ -98,11 +98,11 @@ async def poser(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur: 
         log.info("tag %s=%s posé sur %s par %s (%s)", axe.nom, tag.valeur, comm_id, compte.login, source)
     else:
         await s.commit()          # poser deux fois le même tag est un succès silencieux (D019)
-    return (await tags_de(s, [comm_id])).get(comm_id, [])
+    return (await tags_of(s, [comm_id])).get(comm_id, [])
 
 
-async def retirer(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur: str) -> list | None:
-    if not await _portee(s, compte, comm_id):
+async def remove(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur: str) -> list | None:
+    if not await _scope(s, compte, comm_id):
         return None
     axe = await s.scalar(select(Axe).where(Axe.nom == (axe_nom or "").strip().lower()))
     if axe is None:
@@ -110,15 +110,15 @@ async def retirer(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur
     tag = await s.scalar(select(Tag).where(Tag.axe_id == axe.axe_id, Tag.valeur == (valeur or "").strip()))
     if tag is None:
         return None
-    lien = await s.scalar(select(CommTag).where(CommTag.comm_id == comm_id, CommTag.tag_id == tag.tag_id))
-    if lien is None:
+    link = await s.scalar(select(CommTag).where(CommTag.comm_id == comm_id, CommTag.tag_id == tag.tag_id))
+    if link is None:
         return None
     # Retirer un tag posé par un CONNECTEUR est un geste qui se trace (D021, Q034) : le connecteur
     # le reposera à son prochain passage, et l'utilisateur doit pouvoir comprendre pourquoi.
-    if lien.source != "manuel":
+    if link.source != "manuel":
         log.warning("tag %s=%s retiré à la main sur %s alors qu'il vient de « %s » — il sera reposé",
-                    axe.nom, tag.valeur, comm_id, lien.source)
-    await s.delete(lien)
+                    axe.nom, tag.valeur, comm_id, link.source)
+    await s.delete(link)
     await s.commit()
     log.info("tag %s=%s retiré de %s par %s", axe.nom, tag.valeur, comm_id, compte.login)
-    return (await tags_de(s, [comm_id])).get(comm_id, [])
+    return (await tags_of(s, [comm_id])).get(comm_id, [])

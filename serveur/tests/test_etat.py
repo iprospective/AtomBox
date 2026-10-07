@@ -2,8 +2,8 @@
 import os
 from fastapi.testclient import TestClient
 from atombox import journal as J
-from atombox.api.app import creer_app
-from atombox.api.securite import compte_courant
+from atombox.api.app import create_app
+from atombox.api.security import current_account
 
 class FauxCompte: login = "test"; actif = True
 
@@ -14,7 +14,7 @@ def test_journal_par_l_api(tmp_path):
         for lg in ("atombox", "atombox.imap", "atombox.auth"):
             import logging
             for h in logging.getLogger(lg).handlers: h.flush()
-        app = creer_app(); app.dependency_overrides[compte_courant] = lambda: FauxCompte()
+        app = create_app(); app.dependency_overrides[current_account] = lambda: FauxCompte()
         c = TestClient(app)
         assert c.get("/api/v1/etat/journal").status_code == 200
         r = c.get("/api/v1/etat/journal", params={"domaine": "imap", "niveau": "DEBUG"}).json()
@@ -25,7 +25,7 @@ def test_journal_par_l_api(tmp_path):
         assert len(r["lignes"]) == 1
         assert c.get("/api/v1/etat/journal", params={"domaine": "nimporte"}).status_code == 404
         app.dependency_overrides.clear()
-        c2 = TestClient(creer_app(), raise_server_exceptions=False)
+        c2 = TestClient(create_app(), raise_server_exceptions=False)
         assert c2.get("/api/v1/etat/journal").status_code in (401, 500), "sans jeton, pas de journal"
     finally:
         J.configure(force=True)
