@@ -15,7 +15,7 @@ Un seul dépôt pour le produit (**D156**) :
 | Dossier | Contenu |
 |---|---|
 | `webmail/` | l'interface — un seul `index.html` (D157) ; `src/noyau`, `src/modules/<nom>/` (vue, contrôleur, service, style SCSS), `src/poc` ; `css/app.css` compilé par `npm run css` — **D141**, **D160** |
-| `serveur/` | le serveur, en Python (**D154**) : schéma, magasin d'octets, démon d'ingestion, moteur de filtres, API, page d'état — découpé par fonctionnalité de V0 |
+| `server/` | le serveur, en Python (**D154**) : schéma, magasin d'octets, démon d'ingestion, moteur de filtres, API, page d'état — découpé par fonctionnalité de V0 |
 | `tools/` | ce qui sert aux deux : `gen-dict.py` (le chapitre 16 depuis `dict/*.yml`), `gen-cdc-index.py` (l'index du CDC lisible dans le webmail), `gen-schema.py` (le DDL PostgreSQL depuis le dictionnaire), et le vérificateur de contrat à venir |
 
 Le cahier des charges et le dictionnaire des données **ne sont pas ici** : ils vivent dans le dépôt
@@ -24,7 +24,7 @@ PM (`.mmi-pm/docs`, ticket RM2881). Le code les lit, il ne les possède pas.
 ```
 python3 tools/gen-dict.py            # régénère le chapitre 16 du CDC
 python3 tools/gen-cdc-index.py       # régénère webmail/src/poc/cdc-index.js
-python3 tools/gen-schema.py          # régénère serveur/atombox/schema/schema.sql (F114) — rapport vide exigé
+python3 tools/gen-schema.py          # régénère server/atombox/schema/schema.sql (F114) — rapport vide exigé
 cd webmail && python3 tools/bundle.py && node test/smoke.js   # le POC (voir webmail/README.md)
 bash webmail/outils/deploy.sh         # mise en ligne du webmail
 ```

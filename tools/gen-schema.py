@@ -4,10 +4,10 @@
     python3 tools/gen-schema.py          (depuis la racine du dépôt)
 
 Lit .mmi-pm/docs/dict/{entites,champs,relations,enumerations}.yml et écrit :
-  serveur/atombox/schema/schema.sql      le DDL, une table par entité, TOUTES (F114 : les
+  server/atombox/schema/schema.sql      le DDL, une table par entité, TOUTES (F114 : les
                                          tables de la V1 existent, vides), clés, références,
                                          unicités, index des clés étrangères ;
-  serveur/atombox/schema/manifest.json   ce que le DDL contient, pour les tests.
+  server/atombox/schema/manifest.json   ce que le DDL contient, pour les tests.
 
 Le dictionnaire est la source : rien n'est écrit ici qui n'y soit — un champ `ref` sans
 cible connue est rapporté, pas deviné. Les types sont LOGIQUES dans le dictionnaire ;
@@ -26,7 +26,7 @@ def trouver_cdc():
 CDC = os.environ.get("CDC_DIR") or trouver_cdc()
 DICT = os.path.join(CDC, "dict")
 DEPOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-SORTIE = os.path.join(DEPOT, "serveur", "atombox", "schema")
+SORTIE = os.path.join(DEPOT, "server", "atombox", "schema")
 
 def lire(nom): return yaml.safe_load(io.open(os.path.join(DICT, nom + ".yml"), encoding="utf-8"))
 E = lire("entites"); CH = lire("champs"); REL = lire("relations"); EN = lire("enumerations")
@@ -120,5 +120,5 @@ sql = entete + "\nBEGIN;\n\n" + "\n\n".join(tables) + "\n\n-- clés étrangères
 os.makedirs(SORTIE, exist_ok=True)
 io.open(os.path.join(SORTIE, "schema.sql"), "w", encoding="utf-8").write(sql)
 io.open(os.path.join(SORTIE, "manifest.json"), "w", encoding="utf-8").write(json.dumps(manifest, ensure_ascii=False, indent=1))
-print("serveur/atombox/schema/schema.sql : %d tables, %d clés étrangères, %d index, %d unicités" % (len(tables), len(fks), len(index), len(contraintes)))
+print("server/atombox/schema/schema.sql : %d tables, %d clés étrangères, %d index, %d unicités" % (len(tables), len(fks), len(index), len(contraintes)))
 for r in rapport: print("  ! " + r)

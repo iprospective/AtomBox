@@ -6,9 +6,9 @@ le DDL de gen-schema.py, les modèles, le contrat).
     python3 tools/gen-models.py        (depuis la racine du dépôt)
 
 Écrit :
-  serveur/atombox/schema/models.py     une classe par entité, une colonne par champ, une relation
+  server/atombox/schema/models.py     une classe par entité, une colonne par champ, une relation
                                         par référence à cible connue — NE PAS ÉDITER
-  serveur/atombox/api/contract.py        un schéma Pydantic par entité (les noms de champs.yml sont
+  server/atombox/api/contract.py        un schéma Pydantic par entité (les noms de champs.yml sont
                                         ceux du contrat JSON que le webmail lit — D141)
 """
 import io, os, re, sys, datetime, yaml
@@ -94,8 +94,8 @@ for e in E:
     C.append("")
 M.append("MODELS = {%s}" % ", ".join('"%s": %s' % (e["id"], classe(e["id"])) for e in E if CH.get(e["id"])))
 C.append("CONTRACT = {%s}" % ", ".join('"%s": %s' % (e["id"], classe(e["id"])) for e in E if CH.get(e["id"])))
-os.makedirs(os.path.join(DEPOT, "serveur", "atombox", "api"), exist_ok=True)
-io.open(os.path.join(DEPOT, "serveur", "atombox", "schema", "models.py"), "w", encoding="utf-8").write("\n".join(M) + "\n")
-io.open(os.path.join(DEPOT, "serveur", "atombox", "api", "contract.py"), "w", encoding="utf-8").write("\n".join(C) + "\n")
+os.makedirs(os.path.join(DEPOT, "server", "atombox", "api"), exist_ok=True)
+io.open(os.path.join(DEPOT, "server", "atombox", "schema", "models.py"), "w", encoding="utf-8").write("\n".join(M) + "\n")
+io.open(os.path.join(DEPOT, "server", "atombox", "api", "contract.py"), "w", encoding="utf-8").write("\n".join(C) + "\n")
 n = sum(1 for e in E if CH.get(e["id"]))
-print("serveur/atombox/schema/models.py et api/contract.py : %d modèles, %d colonnes" % (n, sum(len(CH[e["id"]]) for e in E if CH.get(e["id"]))))
+print("server/atombox/schema/models.py et api/contract.py : %d modèles, %d colonnes" % (n, sum(len(CH[e["id"]]) for e in E if CH.get(e["id"]))))

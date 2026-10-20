@@ -75,7 +75,7 @@ def serveur_imap(tmp_path_factory):
             from atombox.imap.server import Listener
             e = Listener(lambda: open_mailbox(u), store)
             srv = await asyncio.start_server(e.client, "127.0.0.1", port)
-            boucle["serveur"] = srv
+            boucle["server"] = srv
             pret.set()
             async with srv: await srv.serve_forever()
         # `asyncio.run` dans un fil DÉMON : il meurt avec le processus. Arrêter la boucle à la

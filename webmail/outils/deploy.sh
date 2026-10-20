@@ -55,16 +55,16 @@ nettoyer() {
 }
 trap nettoyer EXIT
 
-SERVEUR_DIR="$(cd "$RACINE/../serveur" 2>/dev/null && pwd || true)"
-if [ -n "$SERVEUR_DIR" ] && [ -d "$SERVEUR_DIR/atombox" ] && [ "${1:-}" != "--force" ]; then
-  CODE=$(find "$SERVEUR_DIR/atombox" -name '*.py' -printf '%T@\n' 2>/dev/null | sort -rn | head -1 || true)
+SERVER_DIR="$(cd "$RACINE/../server" 2>/dev/null && pwd || true)"
+if [ -n "$SERVER_DIR" ] && [ -d "$SERVER_DIR/atombox" ] && [ "${1:-}" != "--force" ]; then
+  CODE=$(find "$SERVER_DIR/atombox" -name '*.py' -printf '%T@\n' 2>/dev/null | sort -rn | head -1 || true)
   DEMARRE=$(date -d "$(systemctl show atombox-api -p ActiveEnterTimestamp --value 2>/dev/null)" +%s 2>/dev/null || echo 0)
   if [ -n "$CODE" ] && [ "$DEMARRE" != 0 ] && [ "${CODE%.*}" -gt "$DEMARRE" ]; then
     echo "✗ le code serveur est PLUS RÉCENT que l'API qui tourne :"
     echo "    code   : $(date -d @${CODE%.*} '+%F %H:%M')"
     echo "    service: $(date -d @$DEMARRE '+%F %H:%M')"
     echo "  Déployer l'interface maintenant, c'est proposer des gestes que le serveur refusera."
-    echo "  → sudo systemctl restart atombox-api atombox-taches atombox-ingestion"
+    echo "  → sudo systemctl restart atombox-api atombox-tasks atombox-ingestion"
     echo "  (ou $0 --force, si l'écart est voulu)"
     exit 3
   fi

@@ -26,12 +26,17 @@
 set -uo pipefail
 
 ICI="$(cd "$(dirname "$0")" && pwd)"
-SERVEUR="$(cd "$ICI/.." && pwd)"
+SERVER_DIR="$(cd "$ICI/.." && pwd)"
 ENV_FICHIER="${ATOMBOX_ENV:-/etc/atombox/env}"
 ETAT="${XDG_RUNTIME_DIR:-/tmp}/atombox-imapd"
 PIDF="$ETAT/imapd.pid"
 LOGF="$ETAT/imapd.log"
-MODULE="atombox.imap.serveur"
+MODULE="atombox.imap.server"
+# LES DEUX NOMS, LE TEMPS DE LA BASCULE (RM3351). Le module s'appelait `atombox.imap.serveur` : un
+# serveur démarré avant le renommage porte encore ce nom dans sa ligne de commande. Le chercher
+# sous le seul nouveau nom, c'est conclure « personne ne tourne » pendant qu'un orphelin tient le
+# port — exactement le piège du 30/09. À retirer quand plus aucune machine ne sert l'ancien code.
+TROUVER='atombox\.imap\.serveu?r'
 
 mkdir -p "$ETAT"
 
@@ -44,7 +49,7 @@ if [ -f "$ENV_FICHIER" ]; then
 fi
 HOTE="${ATOMBOX_IMAPD_LISTEN:-127.0.0.1}"
 PORT="${ATOMBOX_IMAPD_PORT:-1143}"
-PYTHON="$SERVEUR/.venv/bin/python"
+PYTHON="$SERVER_DIR/.venv/bin/python"
 
 # --- est-ce BIEN notre serveur ? -----------------------------------------------------------------
 # Un PID se réutilise. Avant de signaler quoi que ce soit, on relit la ligne de commande du
@@ -54,7 +59,7 @@ est_le_notre() {
   [ -n "$pid" ] && [ -d "/proc/$pid" ] || return 1
   # Le groupe porte la redirection d'erreur : le processus peut mourir ENTRE le test ci-dessus et
   # cette lecture, et c'est le shell — pas `tr` — qui se plaint alors du fichier disparu.
-  { tr '\0' ' ' < "/proc/$pid/cmdline"; } 2>/dev/null | grep -q "$MODULE"
+  { tr '\0' ' ' < "/proc/$pid/cmdline"; } 2>/dev/null | grep -qE "$TROUVER"
 }
 
 pid_enregistre() {
@@ -75,7 +80,7 @@ qui_ecoute() { ss -ltnp 2>/dev/null | awk -v a="$HOTE:$PORT" '$4 == a {print; ex
 # ce script existait pour empêcher, et il l'a laissé passer en annonçant un succès.
 autres_notres() {
   local moi=""; [ -f "$PIDF" ] && moi="$(cat "$PIDF" 2>/dev/null)"
-  for pid in $(pgrep -f "[p]ython.* -m $MODULE" 2>/dev/null); do
+  for pid in $(pgrep -f "[p]ython.* -m $TROUVER" 2>/dev/null); do
     [ "$pid" = "$moi" ] && continue
     local ecoute; ecoute="$(ss -ltnp 2>/dev/null | grep -F "pid=$pid," | awk '{print $4}' | paste -sd, -)"
     # `${x:-mot}` et rien d'autre : une apostrophe ou une parenthèse dans la valeur par défaut
@@ -97,7 +102,7 @@ statut() {
     # exact de son démarrage. C'est LA question qui a coûté du temps : « pourquoi le correctif
     # n'a-t-il rien changé ? » — parce que le serveur tournait encore l'ancien code.
     local recent
-    recent="$(find "$SERVEUR/atombox" -name '*.py' -newer "/proc/$pid" -print -quit 2>/dev/null)"
+    recent="$(find "$SERVER_DIR/atombox" -name '*.py' -newer "/proc/$pid" -print -quit 2>/dev/null)"
     [ -n "$recent" ] && echo "  ⚠ le code a changé depuis le lancement ($(basename "$recent")…) — « restart » pour le prendre"
   elif [ -f "$PIDF" ]; then
     echo "· fichier de pid périmé ($PIDF) — le processus n'existe plus, je le retire"; rm -f "$PIDF"
@@ -154,7 +159,7 @@ demarrer() {
   # fichier de pid restait VIDE — donc un serveur lancé qu'on ne savait plus arrêter, c'est-à-dire
   # exactement l'orphelin que ce script devait empêcher. On lance depuis le shell courant, et
   # `disown` retire le travail de sa table pour qu'il ne le retienne pas en sortant.
-  cd "$SERVEUR" || return 1
+  cd "$SERVER_DIR" || return 1
   ATOMBOX_IMAPD_LISTEN="$HOTE" ATOMBOX_IMAPD_PORT="$PORT" \
     nohup "$PYTHON" -m "$MODULE" </dev/null >>"$LOGF" 2>&1 &
   echo $! > "$PIDF"
@@ -209,6 +214,6 @@ case "${1:-status}" in
   fg)      # au premier plan : on ne pose PAS de fichier de pid, il meurt avec le terminal
            [ -n "$(qui_ecoute)" ] && { echo "✗ $HOTE:$PORT déjà occupé :"; echo "  $(qui_ecoute)"; exit 1; }
            echo "— IMAP sur $HOTE:$PORT, Ctrl-C pour sortir —"
-           cd "$SERVEUR" && exec env ATOMBOX_IMAPD_LISTEN="$HOTE" ATOMBOX_IMAPD_PORT="$PORT" "$PYTHON" -m "$MODULE" ;;
+           cd "$SERVER_DIR" && exec env ATOMBOX_IMAPD_LISTEN="$HOTE" ATOMBOX_IMAPD_PORT="$PORT" "$PYTHON" -m "$MODULE" ;;
   *)       echo "usage : $0 [start|stop|stop-tous|restart|status|logs|fg]"; exit 2 ;;
 esac

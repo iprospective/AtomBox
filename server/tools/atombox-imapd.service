@@ -6,7 +6,7 @@ Wants=postgresql.service
 [Service]
 User=mathieu
 Group=mathieu
-WorkingDirectory=__SERVEUR__
+WorkingDirectory=__SERVER__
 EnvironmentFile=/etc/atombox/env
 # Le port et l'adresse viennent de /etc/atombox/env (ATOMBOX_IMAPD_PORT, ATOMBOX_IMAPD_LISTEN).
 # PAS 143 ni 993 : un Dovecot tourne sur cette machine, et deux serveurs sur le même port, c'est
@@ -20,7 +20,7 @@ EnvironmentFile=/etc/atombox/env
 # CE SERVICE EXISTE POUR QUE PERSONNE NE LANCE LE SERVEUR À LA MAIN. Un serveur lancé à la main
 # survit aux déploiements, garde le code de son démarrage, et le client continue de lui parler —
 # on croit avoir déployé, et on a déployé à côté.
-ExecStart=__SERVEUR__/.venv/bin/python -m atombox.imap.server
+ExecStart=__SERVER__/.venv/bin/python -m atombox.imap.server
 Restart=always
 RestartSec=5
 

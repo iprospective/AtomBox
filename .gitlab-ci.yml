@@ -40,13 +40,13 @@ serveur:
     POSTGRES_HOST_AUTH_METHOD: trust
     DATABASE_URL: "postgresql://atombox@postgres/atombox_ci"
   before_script:
-    - cd serveur && pip install --quiet -e ".[dev]"
+    - cd server && pip install --quiet -e ".[dev]"
   script:
     - pytest -q
   # Sans DATABASE_URL, les tests qui ont besoin d'une base s'IGNORENT au lieu d'échouer (RM2749).
   # En CI ce silence est inacceptable : on refuse qu'un test s'ignore pour cette raison-là.
   after_script:
-    - cd serveur && pytest -q -rs 2>&1 | grep -q "DATABASE_URL absent" && { echo "✗ des tests se sont ignorés faute de base"; exit 1; } || true
+    - cd server && pytest -q -rs 2>&1 | grep -q "DATABASE_URL absent" && { echo "✗ des tests se sont ignorés faute de base"; exit 1; } || true
 
 # ---------------------------------------------------------------- 3. le webmail
 webmail:

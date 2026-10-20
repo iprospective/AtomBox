@@ -49,18 +49,18 @@ if [ -z "$DICT" ]; then
   exit 0
 fi
 
-avant=$(md5sum serveur/atombox/schema/schema.sql serveur/atombox/schema/models.py \
-                serveur/atombox/api/contract.py serveur/atombox/schema/manifest.json 2>/dev/null | md5sum)
+avant=$(md5sum server/atombox/schema/schema.sql server/atombox/schema/models.py \
+                server/atombox/api/contract.py server/atombox/schema/manifest.json 2>/dev/null | md5sum)
 python3 tools/gen-schema.py >/dev/null && python3 tools/gen-models.py >/dev/null || {
   echo "✗ la génération a échoué"; exit 1; }
-apres=$(md5sum serveur/atombox/schema/schema.sql serveur/atombox/schema/models.py \
-                serveur/atombox/api/contract.py serveur/atombox/schema/manifest.json 2>/dev/null | md5sum)
+apres=$(md5sum server/atombox/schema/schema.sql server/atombox/schema/models.py \
+                server/atombox/api/contract.py server/atombox/schema/manifest.json 2>/dev/null | md5sum)
 
 if [ "$avant" != "$apres" ]; then
   echo "✗ le schéma, les modèles ou le contrat ne correspondent PAS au dictionnaire."
   echo "  Le dictionnaire est la source (F114, D154) : régénérer et committer."
   echo "    python3 tools/gen-schema.py && python3 tools/gen-models.py"
-  git --no-pager diff --stat -- serveur/atombox/schema serveur/atombox/api/contract.py
+  git --no-pager diff --stat -- server/atombox/schema server/atombox/api/contract.py
   exit 1
 fi
 echo "✓ schéma, modèles et contrat sont à jour avec le dictionnaire"

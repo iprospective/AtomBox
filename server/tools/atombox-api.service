@@ -1,4 +1,4 @@
-# managed-by: serveur/tools/deploy-apache.sh (AtomBox) — __SERVEUR__ est remplacé au déploiement
+# managed-by: server/tools/deploy-apache.sh (AtomBox) — __SERVER__ est remplacé au déploiement
 [Unit]
 Description=AtomBox — app --host 127.0.0.1 --port 8010:l'API et le webmail
 After=network.target postgresql.service
@@ -7,9 +7,9 @@ Wants=postgresql.service
 [Service]
 User=mathieu
 Group=mathieu
-WorkingDirectory=__SERVEUR__
+WorkingDirectory=__SERVER__
 EnvironmentFile=/etc/atombox/env
-ExecStart=__SERVEUR__/.venv/bin/uvicorn atombox.api.app:app --host 127.0.0.1 --port 8010
+ExecStart=__SERVER__/.venv/bin/uvicorn atombox.api.app:app --host 127.0.0.1 --port 8010
 Restart=on-failure
 RestartSec=3
 

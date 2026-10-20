@@ -14,7 +14,7 @@ Python 3.12, `asyncio`, PostgreSQL ≥ 14 (**D154**). Découpé par fonctionnali
 | `atombox/etat/` | F122 | la page d'état et les métriques |
 
 ```
-cd serveur
+cd server
 uv venv && uv pip install -e ".[dev]"
 python3 ../tools/gen-schema.py          # régénère atombox/schema/schema.sql depuis le dictionnaire
 .venv/bin/pytest -q                       # sans base : la syntaxe et la fidélité au dictionnaire ;
@@ -63,9 +63,9 @@ ainsi. Un module tiers s'installe par `pip` (point d'entrée `atombox.modules`) 
 ```
 export DATABASE_URL=postgresql:///atombox ATOMBOX_STORE=/var/lib/atombox/magasin
 .venv/bin/alembic upgrade head                                          # le schéma, par la file des migrations
-.venv/bin/python -m atombox.amorcer --login mathieu --nom "Mathieu" --mot-de-passe … --boite contact@exemple.fr
-ATOMBOX_IMAP_HOST=imap.exemple.fr ATOMBOX_IMAP_PASSWORD=… .venv/bin/python -m atombox.ingestion.demon   # la relève
-ATOMBOX_SMTP_HOST=smtp.exemple.fr .venv/bin/python -m atombox.taches                                        # événements, envois, tâches
+.venv/bin/python -m atombox.bootstrap --login mathieu --nom "Mathieu" --mot-de-passe … --boite contact@exemple.fr
+ATOMBOX_IMAP_HOST=imap.exemple.fr ATOMBOX_IMAP_PASSWORD=… .venv/bin/python -m atombox.ingestion.daemon   # la relève
+ATOMBOX_SMTP_HOST=smtp.exemple.fr .venv/bin/python -m atombox.tasks                                        # événements, envois, tâches
 .venv/bin/uvicorn atombox.api.app:app --host 0.0.0.0 --port 8010        # l'API sous /api/v1, le webmail sur /
 ```
 
@@ -78,12 +78,12 @@ branché sur le vrai serveur — `serveur.poc.js` n'est pas chargé (D141, D157)
 `tools/deploy-apache.sh` (avec `sudo`) installe le vhost **`atombox.dev.lxc`** (reverse proxy vers
 l'API sur `127.0.0.1:8010`, qui sert aussi le webmail), le fichier `/etc/atombox/env` (les secrets :
 base, magasin, IMAP, SMTP — copié de `tools/atombox.env.example` s'il n'existe pas) et trois unités
-systemd : `atombox-api` (démarrée), `atombox-ingestion` et `atombox-taches` (installées, à démarrer
+systemd : `atombox-api` (démarrée), `atombox-ingestion` et `atombox-tasks` (installées, à démarrer
 une fois l'environnement rempli). Idempotent. Puis, depuis l'hôte : `http://atombox.dev.lxc/`.
 
 ```
-sudo bash serveur/tools/deploy-apache.sh          # ou --apache / --systemd
-sudo systemctl start atombox-ingestion atombox-taches
+sudo bash server/tools/deploy-apache.sh          # ou --apache / --systemd
+sudo systemctl start atombox-ingestion atombox-tasks
 journalctl -u atombox-api -f                          # et logs/ pour le journal applicatif (D152)
 ```
 
@@ -94,10 +94,10 @@ journalctl -u atombox-api -f                          # et logs/ pour le journal
 | accroche | `@accroche("message.ingere")` | noyau, synchrone, dans la transaction | échec journalisé et ignoré |
 | déclencheur | `@declencheur("comm.apres_insertion")` | ORM, six points par entité | idem ; `RefusDeclencheur` refuse |
 | événement | `@evenement("message.ingere")` | hors processus, table `evenement`, au moins une fois | tentatives 30 s → 24 h, abandon bruyant |
-| tâche | `@tache(chaque="10m")` | cadencée par `python -m atombox.taches` | échec journalisé, reprogrammée |
+| tâche | `@tache(chaque="10m")` | cadencée par `python -m atombox.tasks` | échec journalisé, reprogrammée |
 
-Processus : `uvicorn atombox.api.app:app` (N travailleurs), `python -m atombox.ingestion.demon`
-(`ATOMBOX_PART=2/4` pour partitionner les boîtes), `python -m atombox.taches` (N travailleurs).
+Processus : `uvicorn atombox.api.app:app` (N travailleurs), `python -m atombox.ingestion.daemon`
+(`ATOMBOX_PART=2/4` pour partitionner les boîtes), `python -m atombox.tasks` (N travailleurs).
 
 ## F001, F002 — l'ingestion et le magasin
 

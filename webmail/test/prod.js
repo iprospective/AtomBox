@@ -104,7 +104,7 @@ const { creerDocument } = require("./fake-dom");
   const lister = d => fs.readdirSync(path.join(RACINE, d), { withFileTypes: true }).flatMap(e =>
     e.isDirectory() ? lister(path.join(d, e.name)) : [path.join(d, e.name)]);
   const srcJs = ["src/noyau", "src/modules"].flatMap(lister);
-  const deballages = srcJs.filter(f => !/serveur\.poc|api\.http/.test(f))
+  const deballages = srcJs.filter(f => !/server\.poc|api\.http/.test(f))
     .map(f => [f, (fs.readFileSync(path.join(RACINE, f), "utf8").match(/_m \|\| r|\._m\b/g) || []).length])
     .filter(([, n]) => n > 0);
   const total = deballages.reduce((s, [, n]) => s + n, 0);
@@ -324,7 +324,7 @@ const { creerDocument } = require("./fake-dom");
   if (fs.existsSync(BUNDLE)) {
     const html = fs.readFileSync(BUNDLE, "utf8");
     const marques = [...html.matchAll(/\/\* ===== (js\/[^ ]+) ===== \*\//g)].map(m => m[1]);
-    const interdits = marques.filter(f => /serveur\.poc|cdc-index|fixtures|corpus\.js|query-log|pages\.js|api-trace|markdown|contexte\.cdc|prng|pocbar/.test(f));
+    const interdits = marques.filter(f => /server\.poc|cdc-index|fixtures|corpus\.js|query-log|pages\.js|api-trace|markdown|contexte\.cdc|prng|pocbar/.test(f));
     vrai(html.includes("window.ABX_SANS_POC = true"), "le bundle produit refuse poc/poc (ABX_SANS_POC)");
     eq(interdits.length, 0, "le bundle produit n'embarque aucun fichier du POC" + (interdits.length ? " — " + interdits.join(", ") : ""));
     vrai(html.length < 400 * 1024, "le bundle produit est léger : " + Math.round(html.length / 1024) + " Ko");

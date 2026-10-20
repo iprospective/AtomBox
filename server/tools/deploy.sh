@@ -1,9 +1,9 @@
 #!/bin/bash
 # Déployer le SERVEUR AtomBox sur l'environnement servi — code, migrations, services.
 #
-#   bash serveur/tools/deploy.sh --verifier     # constater, ne rien changer
-#   bash serveur/tools/deploy.sh                # déployer
-#   bash serveur/tools/deploy.sh --cible <dir>  # déployer un AUTRE worktree que le sien
+#   bash server/tools/deploy.sh --verifier     # constater, ne rien changer
+#   bash server/tools/deploy.sh                # déployer
+#   bash server/tools/deploy.sh --cible <dir>  # déployer un AUTRE worktree que le sien
 #
 # POURQUOI CE SCRIPT EXISTE, et c'est une histoire à ne pas répéter. Le 30/09, la mise en production
 # de deux migrations a été lancée à la main, étape par étape, et n'a RIEN fait — en n'affichant que
@@ -27,7 +27,7 @@ set -uo pipefail
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CIBLE="$(cd "$ICI/../.." && pwd)"          # la racine du dépôt où vit ce script
 BRANCHE="${ATOMBOX_BRANCH:-dev}"
-SERVICES="atombox-api atombox-ingestion atombox-taches"
+SERVICES="atombox-api atombox-ingestion atombox-tasks"
 # LE SERVEUR IMAP AUSSI, DÈS QU'IL A UNE UNITÉ. Tant qu'il se lance à la main, il survit aux
 # déploiements en gardant le code de son démarrage, et le client continue de lui parler : on croit
 # avoir déployé et l'on a déployé à côté (30/09). Avec l'unité, il s'arrête et repart comme les
@@ -45,7 +45,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-SRV="$CIBLE/serveur"
+SRV="$CIBLE/server"
 PY="$SRV/.venv/bin/python"
 DSN="$(grep -m1 '^DATABASE_URL=' /etc/atombox/env 2>/dev/null | cut -d= -f2- | tr -d "\"'")"
 
@@ -83,9 +83,33 @@ etat() {
   fi
 }
 
+UNITES_EN_ATTENTE="$CIBLE/.units-pending"
+unites_perimees() {
+  local u rendu installe ecarts=""
+  rm -rf "$UNITES_EN_ATTENTE"; mkdir -p "$UNITES_EN_ATTENTE"
+  for u in $(git -C "$CIBLE" ls-tree --name-only "origin/$BRANCHE" server/tools/ 2>/dev/null \
+               | sed -n 's#^server/tools/\(atombox-[a-z]*\)\.service$#\1#p'); do
+    [ "$u" = atombox-tunnel ] && continue          # posée à part, avec sa clé (RM3267)
+    rendu="$UNITES_EN_ATTENTE/$u.service"
+    git -C "$CIBLE" show "origin/$BRANCHE:server/tools/$u.service" | sed "s#__SERVER__#$SRV#g" > "$rendu"
+    installe="/etc/systemd/system/$u.service"
+    # on compare ce qui S'EXÉCUTE, pas les commentaires : une phrase reformulée ne vaut pas une réinstallation
+    if [ ! -f "$installe" ] || ! diff -q <(grep -v '^#' "$rendu") <(grep -v '^#' "$installe") >/dev/null; then
+      ecarts="$ecarts $u"
+    fi
+  done
+  # et celles qui n'existent PLUS dans le code, mais tournent encore
+  for u in atombox-taches; do
+    [ -f "/etc/systemd/system/$u.service" ] && ecarts="$ecarts $u(obsolète)"
+  done
+  echo "$ecarts"
+}
 if [ "$MODE" = "verifier" ]; then
   echo "== état, sans rien changer =="
   etat
+  e="$(unites_perimees)"; rm -rf "$UNITES_EN_ATTENTE"
+  [ -z "$e" ] && info "unités systemd      alignées sur origin/$BRANCHE" \
+              || info "unités systemd      ⚠ à réinstaller :$e (le déploiement refusera d'avancer)"
   exit 0
 fi
 
@@ -107,7 +131,7 @@ if ! sudo -n -l /usr/bin/systemctl stop $SERVICES >/dev/null 2>&1; then
   info "Rien n'a été touché. Deux façons d'avancer :"
   info ""
   info "  1. lancer ce script dans un VRAI terminal (le mot de passe une fois) :"
-  info "       cd $CIBLE && bash serveur/tools/deploy.sh"
+  info "       cd $CIBLE && bash server/tools/deploy.sh"
   info ""
   info "  2. ou autoriser ces trois gestes SANS mot de passe — trois commandes exactes, pas un"
   info "     blanc-seing —, ce qui rend le déploiement jouable par l'outillage. La liste de"
@@ -140,6 +164,34 @@ fi
 rm -f /tmp/atombox-fetch.$$
 vert "origin/$BRANCHE = $(git -C "$CIBLE" rev-parse --short "origin/$BRANCHE")"
 
+# --- 1 bis. LES UNITÉS INSTALLÉES SONT-ELLES CELLES DU CODE QU'ON VA SERVIR ? -----------------
+# Une unité systemd vit à deux endroits : le dépôt, et /etc/systemd/system. Le déploiement ne réinstalle
+# pas les unités (il lui faudrait des droits qu'on ne lui donne pas), donc rien ne les gardait
+# alignées. Le jour où un module ou un dossier change de nom (RM3351 : `serveur/` → `server/`,
+# `atombox.imap.serveur` → `.server`, `atombox-taches` → `atombox-tasks`), les unités posées
+# désignent un chemin qui n'existe plus : arrêter les services réussit, les REDÉMARRER échoue, et
+# le déploiement laisse tout à l'arrêt.
+#
+# On compare donc AVANT de toucher au code, sur la version qu'on s'apprête à servir (lue dans
+# origin/$BRANCHE, pas sur le disque), et on refuse d'avancer si elles diffèrent.
+echo "-- 1 bis. les unités systemd"
+ECARTS="$(unites_perimees)"
+if [ -n "$ECARTS" ]; then
+  rouge "les unités installées ne correspondent pas au code à servir :$ECARTS"
+  info "Rien n'a été touché — ni le code, ni les services. Pour les aligner (une fois) :"
+  info ""
+  info "  sudo install -m 644 $UNITES_EN_ATTENTE/*.service /etc/systemd/system/"
+  case "$ECARTS" in *obsolète*)
+    info "  sudo systemctl disable --now atombox-taches && sudo rm /etc/systemd/system/atombox-taches.service" ;; esac
+  info "  sudo systemctl daemon-reload && sudo systemctl enable atombox-api atombox-ingestion atombox-tasks atombox-imapd"
+  info ""
+  info "Les fichiers rendus sont dans $UNITES_EN_ATTENTE : ce sont ceux du code de origin/$BRANCHE,"
+  info "avec le chemin de ce worktree. Relance ensuite ce script."
+  exit 8
+fi
+rm -rf "$UNITES_EN_ATTENTE"
+vert "les unités installées sont celles du code à servir"
+
 # --- 2. le code ---------------------------------------------------------------------------------
 echo "-- 2. le code servi"
 AVANT_CODE="$(git -C "$CIBLE" rev-parse HEAD)"
@@ -166,10 +218,15 @@ BASE_AVANT="$(revision_base)"
 CODE_HEAD="$(revision_code)"
 echo "-- 3. les migrations"
 info "base à $BASE_AVANT, le code en porte jusqu'à $CODE_HEAD"
-if [ "$CODE_A_BOUGE" = 0 ] && [ "$BASE_AVANT" = "$CODE_HEAD" ]; then
-  vert "rien à déployer : le code est à jour et la base est à sa dernière migration."
+# « RIEN À FAIRE » SUPPOSE QUE ÇA TOURNE. Un déploiement interrompu laisse le code et la base à jour
+# mais les services ARRÊTÉS ; le relancer répondait « rien à déployer » et les y laissait.
+INACTIFS=""
+for s in $SERVICES; do systemctl is-active --quiet "$s" || INACTIFS="$INACTIFS $s"; done
+if [ "$CODE_A_BOUGE" = 0 ] && [ "$BASE_AVANT" = "$CODE_HEAD" ] && [ -z "$INACTIFS" ]; then
+  vert "rien à déployer : le code est à jour, la base à sa dernière migration, les services tournent."
   exit 0
 fi
+[ -z "$INACTIFS" ] || info "services à l'arrêt :$INACTIFS — on va au bout pour les redémarrer"
 
 # --- 4. arrêter, migrer, VÉRIFIER ---------------------------------------------------------------
 # À CHAUD, JAMAIS. Le 19/09, une migration a attendu 11 minutes derrière des connexions
@@ -178,9 +235,30 @@ fi
 echo "-- 4. arrêt des services"
 sudo systemctl stop $SERVICES || { rouge "l'arrêt des services a échoué"; exit 5; }
 bash "$SRV/tools/imapd.sh" stop-tous | sed 's/^/    /'
-RESTE="$(pgrep -f '[p]ython.* -m atombox.imap.serveur' | paste -sd, -)"
+# Les deux noms du module (cf. imapd.sh) : un serveur lancé avant la bascule porte l'ancien.
+RESTE="$(pgrep -f '[p]ython.* -m atombox\.imap\.serveu?r' | paste -sd, -)"
 [ -z "$RESTE" ] || { rouge "des serveurs IMAP tournent encore (pid $RESTE) — on ne migre pas sous eux"; exit 5; }
 vert "services arrêtés, aucun serveur IMAP en vie"
+
+# --- 4 bis. LE VENV SUIT LE DOSSIER --------------------------------------------------------------
+# Le venv n'est pas versionné : quand `serveur/` est devenu `server/`, git a déplacé le code et laissé
+# le venv derrière lui, dans un dossier qui ne contient plus que lui. On le déplace — services
+# arrêtés, puisqu'ils l'exécutaient — et on refait l'installation éditable, qui inscrit le CHEMIN
+# du code : sans elle, le venv continuerait d'importer `serveur/atombox`, qui n'existe plus.
+if [ ! -x "$PY" ] && [ -x "$CIBLE/serveur/.venv/bin/python" ]; then
+  echo "-- 4 bis. le venv suit le dossier server/"
+  mv "$CIBLE/serveur/.venv" "$SRV/.venv" || { rouge "déplacement du venv impossible — services ARRÊTÉS"; exit 6; }
+  "$PY" -m pip install -q --no-deps -e "$SRV" 2>&1 | tail -3 | sed 's/^/    /'
+  rm -rf "$CIBLE/serveur"/{atombox.egg-info,.pytest_cache} 2>/dev/null
+  find "$CIBLE/serveur" -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null
+  find "$CIBLE/serveur" -depth -type d -empty -delete 2>/dev/null
+fi
+VU="$(cd / && "$PY" -c 'import atombox; print(atombox.__file__)' 2>/dev/null)"
+case "$VU" in
+  "$SRV"/*) vert "le venv importe le code servi ($SRV)" ;;
+  *) rouge "le venv importe « ${VU:-rien} », pas $SRV — services ARRÊTÉS, rien n'est migré."
+     info "Réparer : $PY -m pip install -e $SRV"; exit 6 ;;
+esac
 
 if [ "$BASE_AVANT" != "$CODE_HEAD" ]; then
   echo "-- 5. migration $BASE_AVANT → $CODE_HEAD"
@@ -205,7 +283,7 @@ if [ ! -f /etc/systemd/system/atombox-imapd.service ]; then
   bash "$SRV/tools/imapd.sh" start | sed 's/^/    /'
   info "⚠ le serveur IMAP n'a pas d'unité systemd : il vient d'être lancé par imapd.sh, donc il ne"
   info "  repartira pas tout seul au prochain démarrage de la machine. Pour l'installer :"
-  info "     sudo sed \"s#__SERVEUR__#$SRV#g\" $SRV/tools/atombox-imapd.service \\"
+  info "     sudo sed \"s#__SERVER__#$SRV#g\" $SRV/tools/atombox-imapd.service \\"
   info "       > /etc/systemd/system/atombox-imapd.service"
   info "     sudo systemctl daemon-reload && sudo systemctl enable --now atombox-imapd"
 fi
