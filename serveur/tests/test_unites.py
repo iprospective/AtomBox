@@ -18,10 +18,11 @@ import pathlib
 import re
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
+UNITES = RACINE / "tools"
 
 
 def _execstart():
-    for u in sorted((RACINE / "outils").glob("*.service")):
+    for u in sorted(UNITES.glob("*.service")):
         for line in u.read_text(encoding="utf-8").splitlines():
             if line.startswith("ExecStart="):
                 yield u.name, line
@@ -40,7 +41,16 @@ def test_les_modules_nommes_par_les_unites_existent():
 
 
 def test_chaque_unite_de_service_a_bien_un_execstart():
-    """Sinon le test ci-dessus passerait au vert en ne regardant rien."""
+    """Sinon le test ci-dessus passerait au vert en ne regardant rien.
+
+    ET IL L'A FAIT. Quand `serveur/outils/` est devenu `serveur/tools/` (RM3351, étage 2d), ce test
+    comparait deux ensembles VIDES — aucune unité trouvée, aucune attendue — et passait au vert.
+    Le test d'à côté, lui, ne trouvait aucun ExecStart à vérifier, et passait aussi. La garde
+    écrite pour le jour du renommage a été désarmée par le renommage lui-même, et rien ne l'a dit.
+    D'où la première assertion : on sait combien d'unités le serveur déploie, et zéro n'en est pas
+    un nombre possible."""
+    attendues = {f.name for f in UNITES.glob("*.service")}
+    assert attendues, ("aucune unité systemd sous %s — le dossier a bougé ? Sans unités, ce fichier "
+                       "ne vérifie RIEN et passe au vert" % UNITES)
     vues = {nom for nom, _ in _execstart()}
-    attendues = {f.name for f in (RACINE / "outils").glob("*.service")}
     assert vues == attendues, "unités sans ExecStart : " + ", ".join(sorted(attendues - vues))

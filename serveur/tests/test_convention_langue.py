@@ -36,7 +36,7 @@ def _fichiers(*motifs):
 def test_aucune_variable_d_environnement_en_francais():
     """La table de repli de `settings.py` est la seule exception : elle NOMME les anciens."""
     fautives = {}
-    for f in _fichiers("*.py", "*.sh", "*.service", "*.exemple", "*.md"):
+    for f in _fichiers("*.py", "*.sh", "*.service", "*.example", "*.md"):
         if not f.exists(): continue
         texte = f.read_text(errors="replace")
         for nom in set(re.findall(r"\bATOMBOX_[A-Z_]+\b", texte)):
