@@ -1,0 +1,76 @@
+"""LE MODULE D'ÉMISSION — @evenement("message.a_envoyer") : au moins une fois, hors processus (D161)."""
+from __future__ import annotations
+import os, uuid
+from datetime import datetime, timezone
+from sqlalchemy import select
+from ..journal import journal
+from ..store import Store
+from ..controllers.sends import SendsController
+from ..modules import Module, event
+from ..modules import events
+from ..schema.models import Adresse, Boite, Comm, Envoi, EnvoiDestinataire, Identite, Participant
+from ..uuid7 import uuid7
+from ..ingestion.ingestion import address_of, normalize_address
+from .smtp import deliver
+from .. import settings
+
+log = journal("apps")
+
+def recipients_of(s, comm_id, repli: list[str]) -> list[str]:
+    """L'ENVELOPPE se dérive des participants DU MESSAGE — `to`, `cc`, `bcc` — jamais de la charge
+    de l'événement.
+
+    Le Cc saisi au clavier n'était pas dans cette charge : il figurait dans l'en-tête, le
+    destinataire le voyait donc écrit, et personne ne le lui avait envoyé. Un courrier qui se dit
+    envoyé à quelqu'un qui ne le reçoit pas est pire qu'une erreur : c'est un mensonge silencieux.
+
+    Le repli ne sert qu'à un message sans participant enregistré. Les doublons sont écartés : la
+    même adresse en `to` et en `cc` ne fait qu'un RCPT."""
+    lines = s.execute(select(Adresse.adresse_complete)
+                       .join(Participant, Participant.adresse_id == Adresse.adresse_id)
+                       .where(Participant.comm_id == comm_id, Participant.role.in_(("to", "cc", "bcc")))
+                       .order_by(Participant.ordre)).scalars().all()
+    seen, out = set(), []
+    for a in list(lines) + [normalize_address(d) for d in (repli or [])]:
+        if a and a not in seen: seen.add(a); out.append(a)
+    return out
+
+
+class SendingModule(Module):
+    nom = "emission"; version = "0.1"; description = "remise au relais SMTP (F109, D114), envoi et destinataires, suivi et relance (D099)"; interne = True
+    controllers = [SendsController]
+
+    @event("message.a_envoyer")
+    def send(self, ctx):
+        s = ctx["session"]; charge = ctx["charge"]
+        comm_id = uuid.UUID(charge["comm_id"]); boite_id = uuid.UUID(charge["boite_id"])
+        dest = recipients_of(s, comm_id, charge.get("destinataires") or [])
+        comm = s.get(Comm, comm_id); boite = s.get(Boite, boite_id)
+        if not comm or not boite: raise RuntimeError("message ou boîte introuvable : %s" % comm_id)
+        expediteur = s.get(Adresse, boite.adresse_id).adresse_complete
+        identite = s.scalar(select(Identite).where(Identite.boite_id == boite_id).order_by(Identite.par_defaut.desc()).limit(1))
+        if identite is None:
+            identite = Identite(identite_id=uuid7(), boite_id=boite_id, nom_affiche=comm.from_nom or expediteur, adresse_id=boite.adresse_id, au_nom_de=False, par_defaut=True)
+            s.add(identite); s.flush()
+        store = Store(settings.read("ATOMBOX_STORE", "./magasin"))
+        raw_bytes = store.read(str(comm_id))
+        envoi = s.scalar(select(Envoi).where(Envoi.comm_id == comm_id))
+        if envoi is None:
+            envoi = Envoi(envoi_id=uuid7(), comm_id=comm_id, identite_id=identite.identite_id, retour_enveloppe=expediteur)
+            s.add(envoi); s.flush()
+            for d in dest:
+                s.add(EnvoiDestinataire(envoi_id=envoi.envoi_id, adresse_id=address_of(s, d).adresse_id, etat="prepare", mis_a_jour_le=datetime.now(timezone.utc)))
+            s.flush()
+        if not dest: raise RuntimeError("aucun destinataire pour %s" % comm_id)
+        resultat = deliver(raw_bytes, envoi.retour_enveloppe, dest)          # lève si le relais est injoignable → tentative suivante (D161)
+        envoi.remis_le = datetime.now(timezone.utc)
+        for ed in s.scalars(select(EnvoiDestinataire).where(EnvoiDestinataire.envoi_id == envoi.envoi_id)):
+            a = s.get(Adresse, ed.adresse_id).adresse_complete
+            if a in resultat["refuses"]:
+                r = resultat["refuses"][a]
+                ed.etat = "rejete"                      # 5xx du relais : refusé pour CE destinataire (D099)
+                ed.code = ("%s %s" % (r[0], r[1].decode("utf-8", "replace") if isinstance(r[1], bytes) else r[1]))[:200] if isinstance(r, tuple) else str(r)[:200]
+            else: ed.etat = "remis"
+            ed.mis_a_jour_le = datetime.now(timezone.utc)
+        events.emit(s, "message.envoye", {"comm_id": str(comm_id), "boite_id": str(boite_id), "refuses": list(resultat["refuses"])}, module=self.nom)
+        log.info("envoi %s de %s remis (%d destinataire(s))", envoi.envoi_id, expediteur, len(dest))

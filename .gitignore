@@ -1,4 +1,5 @@
 dist/
 logs/
 magasin/
-serveur/.venv
+server/.venv
+.units-pending

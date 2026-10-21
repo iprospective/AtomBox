@@ -1,0 +1,294 @@
+"""LES DOUBLURES RÉSEAU des tests de bout en bout (RM3188) : un serveur IMAP et un relais SMTP, sur
+127.0.0.1, dans le processus du test — pour que les VRAIS démons (ingestion, tâches) tournent contre
+eux, en sous-processus.
+
+Pourquoi un IMAP simulé, alors que `test_sync.py` s'y refusait (« un serveur simulé mentirait sur
+le seul point qui compte, le protocole ») : ce que les tests de bout en bout cherchent n'est pas le
+dialogue IMAP, c'est la CHAÎNE — un message qui arrive, un démon qui se réveille, un ordre qui
+remonte. Le NOTIFY muet a survécu des semaines parce que personne ne faisait tourner la boucle. Le
+protocole, lui, reste validé sur le pilote, contre un vrai Dovecot.
+
+Ce que le faux IMAP reproduit FIDÈLEMENT, parce que le client en dépend :
+  - `UID SEARCH UID n:*` rend le DERNIER message même quand n le dépasse (RFC 3501 § 6.4.8 : « * »
+    est le plus grand UID) — un client qui l'ignore réingère le dernier message à chaque relève ;
+  - IDLE ne rend la main que sur un événement ou un DONE ;
+  - STORE .SILENT ne renvoie pas de FETCH.
+Ce qu'il ne fait PAS : TLS, littéraux dans les commandes, recherche autre que par UID, sous-dossiers.
+"""
+from __future__ import annotations
+import re, select, socket, threading, time
+
+
+class FauxImap(threading.Thread):
+    SEP = "/"
+
+    def __init__(self, dossiers=("INBOX", "Sent", "Drafts", "Trash", "Junk")):
+        super().__init__(daemon=True)
+        self.sock = socket.socket(); self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.bind(("127.0.0.1", 0)); self.sock.listen(16)
+        self.port = self.sock.getsockname()[1]
+        self.verrou = threading.Condition()
+        self.boites = {d: {"validity": 1000 + i, "suivant": 1, "messages": []} for i, d in enumerate(dossiers)}
+        self.journal: list[str] = []              # les commandes reçues, pour les assertions
+        self.changes: list[tuple[str, int]] = []  # (dossier, uid) dont les drapeaux ont bougé — pour IDLE
+        self.arret = False
+
+    # ---- ce que le TEST fait sur la boîte -------------------------------------------------------
+    def put(self, raw_bytes: bytes, dossier: str = "INBOX", drapeaux=(), date: str = "18-Sep-2026 10:00:00 +0200") -> int:
+        """un message arrive, comme si le MTA venait de le livrer ; réveille les IDLE"""
+        with self.verrou:
+            b = self.boites[dossier]
+            uid = b["suivant"]; b["suivant"] += 1
+            b["messages"].append({"uid": uid, "octets": raw_bytes, "flags": set(drapeaux), "date": date})
+            self.verrou.notify_all()
+            return uid
+
+    def flags(self, dossier: str, uid: int) -> set:
+        with self.verrou:
+            return set(next(m["flags"] for m in self.boites[dossier]["messages"] if m["uid"] == uid))
+
+    def add(self, dossier: str, uid: int, *flags):
+        """un AUTRE client (Thunderbird, le téléphone) change un état — pour la synchro descendante"""
+        with self.verrou:
+            next(m for m in self.boites[dossier]["messages"] if m["uid"] == uid)["flags"].update(flags)
+            self.changes.append((dossier, uid))
+            self.verrou.notify_all()
+
+    def remove(self, dossier: str, uid: int, *flags):
+        with self.verrou:
+            next(m for m in self.boites[dossier]["messages"] if m["uid"] == uid)["flags"].difference_update(flags)
+            self.changes.append((dossier, uid))
+            self.verrou.notify_all()
+
+    def arreter(self):
+        self.arret = True
+        try: self.sock.close()
+        except Exception: pass
+
+    # ---- le serveur ------------------------------------------------------------------------------
+    def run(self):
+        while not self.arret:
+            try: c, _ = self.sock.accept()
+            except OSError: return
+            threading.Thread(target=self._session, args=(c,), daemon=True).start()
+
+    def _session(self, c: socket.socket):
+        f = c.makefile("rwb", buffering=0)
+        write = lambda s: f.write((s + "\r\n").encode() if isinstance(s, str) else s)
+        write("* OK [CAPABILITY IMAP4rev1 IDLE MOVE UIDPLUS] faux IMAP prêt")
+        current = None
+        # ce que la SESSION a déjà appris : un serveur réel signale tout changement survenu depuis,
+        # dès la commande suivante — IDLE comprise (RFC 3501 § 5.2). Partir de l'état à l'entrée en
+        # IDLE, c'était taire un message arrivé entre le SELECT et l'IDLE.
+        annonce = {"n": 0, "ch": 0}
+        try:
+            for raw in f:
+                litteral = None
+                lit = re.search(rb"\{(\d+)\+?\}\r?\n$", raw)
+                if lit:                          # un littéral : « + » puis exactement n octets (RFC 3501 § 4.3)
+                    write("+ prêt")
+                    litteral = f.read(int(lit.group(1))); f.readline()
+                    raw = raw[:lit.start()] + b"\r\n"
+                line = raw.decode("utf-8", "replace").rstrip("\r\n")
+                if not line: continue
+                tag, _, reste = line.partition(" ")
+                cmd, _, args = reste.partition(" ")
+                cmd = cmd.upper()
+                with self.verrou: self.journal.append(reste)
+                if cmd == "UID":
+                    sous, _, args = args.partition(" ")
+                    current = self._uid(write, tag, sous.upper(), args, current); continue
+                if cmd == "CAPABILITY": write("* CAPABILITY IMAP4rev1 IDLE MOVE UIDPLUS"); write(tag + " OK fait")
+                elif cmd == "LOGIN": write(tag + " OK connecté")
+                elif cmd == "LIST":
+                    for d in self.boites: write('* LIST (\\HasNoChildren) "%s" "%s"' % (self.SEP, d))
+                    write(tag + " OK fait")
+                elif cmd in ("SELECT", "EXAMINE"):
+                    nom = self._mailbox_name(args)
+                    if nom not in self.boites: write(tag + " NO dossier inconnu"); continue
+                    current = nom
+                    with self.verrou:
+                        b = self.boites[nom]
+                        annonce.update(n=len(b["messages"]), ch=len(self.changes))
+                        write("* %d EXISTS" % len(b["messages"]))
+                        write("* OK [UIDVALIDITY %d] ok" % b["validity"])
+                        write("* OK [UIDNEXT %d] ok" % b["suivant"])
+                    write(tag + " OK [%s] ok" % ("READ-WRITE" if cmd == "SELECT" else "READ-ONLY"))
+                elif cmd == "IDLE": self._idle(c, f, write, tag, current, annonce)
+                elif cmd == "APPEND":
+                    m = re.match(r'\s*("([^"]*)"|\S+)\s*(\(([^)]*)\))?', args)
+                    nom = (m.group(2) if m.group(2) is not None else m.group(1)).strip('"')
+                    if nom not in self.boites or litteral is None: write(tag + " NO [TRYCREATE] dossier inconnu"); continue
+                    flags = set((m.group(4) or "").split())
+                    with self.verrou:
+                        b = self.boites[nom]; uid = b["suivant"]; b["suivant"] += 1
+                        b["messages"].append({"uid": uid, "octets": litteral, "flags": flags, "date": "19-Sep-2026 10:00:00 +0200"})
+                        self.verrou.notify_all()
+                    write(tag + " OK [APPENDUID %d %d] APPEND terminé" % (b["validity"], uid))
+                elif cmd == "LOGOUT": write("* BYE"); write(tag + " OK fait"); break
+                elif cmd in ("NOOP", "CHECK", "CLOSE", "EXPUNGE", "SUBSCRIBE", "UNSUBSCRIBE", "CREATE"): write(tag + " OK fait")
+                else: write(tag + " BAD commande inconnue du faux IMAP : " + cmd)
+        except (OSError, ValueError):
+            pass
+        finally:
+            try: c.close()
+            except Exception: pass
+
+    @staticmethod
+    def _mailbox_name(args: str) -> str:
+        return args.strip().strip('"')
+
+    def _uids(self, ensemble: str, messages) -> list[int]:
+        """« 3 », « 1,4 », « 2:* » — avec la sémantique réelle de « * » (le plus grand UID)"""
+        tous = [m["uid"] for m in messages]
+        if not tous: return []
+        plus_grand, out = max(tous), set()
+        for morceau in ensemble.split(","):
+            if ":" in morceau:
+                a, b = morceau.split(":")
+                a = plus_grand if a == "*" else int(a); b = plus_grand if b == "*" else int(b)
+                lo, hi = min(a, b), max(a, b)
+                out.update(u for u in tous if lo <= u <= hi)
+            else:
+                out.update(u for u in tous if u == (plus_grand if morceau == "*" else int(morceau)))
+        return sorted(out)
+
+    def _uid(self, write, tag, sous, args, current):
+        if current is None: write(tag + " NO aucun dossier sélectionné"); return current
+        with self.verrou:
+            msgs = self.boites[current]["messages"]
+            seq = {m["uid"]: i + 1 for i, m in enumerate(msgs)}
+            if sous == "SEARCH" and args.upper().startswith("HEADER"):
+                h = re.match(r'HEADER\s+(\S+)\s+"?([^"]*)"?', args, re.I)
+                cle, val = h.group(1).lower().encode(), h.group(2).encode()
+                found = [m["uid"] for m in msgs
+                           if any(l.lower().startswith(cle + b":") and val in l for l in m["octets"].split(b"\r\n\r\n")[0].split(b"\r\n"))]
+                write("* SEARCH" + "".join(" %d" % u for u in found)); write(tag + " OK fait")
+            elif sous == "SEARCH":
+                m = re.search(r"UID\s+(\S+)", args)
+                write("* SEARCH" + "".join(" %d" % u for u in self._uids(m.group(1) if m else "1:*", msgs)))
+                write(tag + " OK fait")
+            elif sous == "FETCH":
+                ensemble, _, quoi = args.partition(" ")
+                for u in self._uids(ensemble, msgs):
+                    m = next(x for x in msgs if x["uid"] == u)
+                    flags = " ".join(sorted(m["flags"]))
+                    if "BODY" in quoi.upper():
+                        tete = '* %d FETCH (UID %d INTERNALDATE "%s" FLAGS (%s) BODY[] {%d}\r\n' % (
+                            seq[u], u, m["date"], flags, len(m["octets"]))
+                        write(tete.encode() + m["octets"] + b")\r\n")
+                    else:
+                        write("* %d FETCH (UID %d FLAGS (%s))" % (seq[u], u, flags))
+                write(tag + " OK fait")
+            elif sous == "STORE":
+                ensemble, mode, listing = args.split(" ", 2)
+                flags = set(listing.strip("()").split())
+                for u in self._uids(ensemble, msgs):
+                    m = next(x for x in msgs if x["uid"] == u)
+                    if mode.upper().startswith("+"): m["flags"] |= flags
+                    elif mode.upper().startswith("-"): m["flags"] -= flags
+                    else: m["flags"] = set(flags)
+                    self.changes.append((current, u))
+                    if not mode.upper().endswith(".SILENT"):
+                        write("* %d FETCH (UID %d FLAGS (%s))" % (seq[u], u, " ".join(sorted(m["flags"]))))
+                self.verrou.notify_all()
+                write(tag + " OK fait")
+            elif sous == "MOVE":
+                ensemble, _, to_folder = args.partition(" ")
+                to_folder = self._mailbox_name(to_folder); cible = self.boites.get(to_folder)
+                if cible is None: write(tag + " NO dossier inconnu"); return current
+                for u in self._uids(ensemble, msgs):
+                    m = next(x for x in msgs if x["uid"] == u)
+                    neuf = cible["suivant"]; cible["suivant"] += 1
+                    cible["messages"].append(dict(m, uid=neuf, flags=set(m["flags"])))
+                    msgs.remove(m)
+                    write("* OK [COPYUID %d %d %d] déplacé" % (cible["validity"], u, neuf))
+                self.verrou.notify_all()
+                write(tag + " OK fait")
+            else:
+                write(tag + " BAD UID " + sous + " inconnu du faux IMAP")
+        return current
+
+    def _idle(self, c, f, write, tag, current, annonce):
+        """RFC 2177 : on signale tout changement depuis ce que la session sait déjà, puis on attend
+        un changement du dossier sélectionné, ou DONE"""
+        write("+ idling")
+        seen, vu_ch = annonce["n"], annonce["ch"]
+        while not self.arret:
+            with self.verrou:
+                self.verrou.wait(timeout=0.05)
+                msgs = self.boites[current]["messages"] if current else []
+                n, neufs = len(msgs), self.changes[vu_ch:]
+                vu_ch = len(self.changes)
+                fetch = [(i + 1, m) for d, u in neufs if d == current
+                         for i, m in enumerate(msgs) if m["uid"] == u]
+            if n != seen:
+                write("* %d EXISTS" % n); seen = n; annonce["n"] = n
+            annonce["ch"] = vu_ch
+            for seq, m in fetch:        # un autre client a changé un drapeau : Dovecot le dit pendant IDLE
+                write("* %d FETCH (UID %d FLAGS (%s))" % (seq, m["uid"], " ".join(sorted(m["flags"]))))
+            prets, _, _ = select.select([c], [], [], 0)
+            if prets:
+                line = f.readline()
+                if not line or line.strip().upper() == b"DONE": break
+        write(tag + " OK IDLE terminé")
+
+
+class FauxRelais(threading.Thread):
+    """un relais SMTP qui accepte PLUSIEURS connexions (le RelaisFactice de test_emission n'en prend
+    qu'une) et garde chaque remise : enveloppe et octets. Refuse toute adresse en @refuse.example."""
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self.sock = socket.socket(); self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.bind(("127.0.0.1", 0)); self.sock.listen(8)
+        self.port = self.sock.getsockname()[1]
+        self.remises: list[dict] = []; self.verrou = threading.Lock(); self.arret = False
+
+    def arreter(self):
+        self.arret = True
+        try: self.sock.close()
+        except Exception: pass
+
+    def wait(self, n: int, delay: float) -> list[dict]:
+        fin = time.monotonic() + delay
+        while time.monotonic() < fin:
+            with self.verrou:
+                if len(self.remises) >= n: return list(self.remises)
+            time.sleep(0.05)
+        with self.verrou: return list(self.remises)
+
+    def run(self):
+        while not self.arret:
+            try: c, _ = self.sock.accept()
+            except OSError: return
+            threading.Thread(target=self._session, args=(c,), daemon=True).start()
+
+    def _session(self, c):
+        f = c.makefile("rwb", buffering=0)
+        rep = lambda x: f.write((x + "\r\n").encode())
+        rep("220 faux relais"); de, for_type, data, corps = None, [], False, []
+        try:
+            for raw in f:
+                if data:
+                    if raw in (b".\r\n", b".\n"):
+                        with self.verrou:
+                            self.remises.append({"de": de, "pour": list(for_type), "octets": b"".join(corps)})
+                        data, corps, for_type = False, [], []; rep("250 OK remis")
+                    else: corps.append(raw[1:] if raw.startswith(b"..") else raw)
+                    continue
+                l = raw.decode("utf-8", "replace").rstrip("\r\n"); cmd = l.split(" ")[0].upper()
+                if cmd in ("EHLO", "HELO"): rep("250-faux relais"); rep("250 8BITMIME")
+                elif cmd == "MAIL": de = re.search(r"<([^>]*)>", l).group(1); rep("250 OK")
+                elif cmd == "RCPT":
+                    a = re.search(r"<([^>]*)>", l).group(1)
+                    if a.endswith("@refuse.example"): rep("550 5.1.1 inconnu")
+                    else: for_type.append(a); rep("250 OK")
+                elif cmd == "DATA": data = True; rep("354 allez-y")
+                elif cmd == "QUIT": rep("221 au revoir"); break
+                else: rep("250 OK")
+        except OSError:
+            pass
+        finally:
+            try: c.close()
+            except Exception: pass

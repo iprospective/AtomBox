@@ -15,17 +15,17 @@ Un seul dépôt pour le produit (**D156**) :
 | Dossier | Contenu |
 |---|---|
 | `webmail/` | l'interface — un seul `index.html` (D157) ; `src/noyau`, `src/modules/<nom>/` (vue, contrôleur, service, style SCSS), `src/poc` ; `css/app.css` compilé par `npm run css` — **D141**, **D160** |
-| `serveur/` | le serveur, en Python (**D154**) : schéma, magasin d'octets, démon d'ingestion, moteur de filtres, API, page d'état — découpé par fonctionnalité de V0 |
-| `outils/` | ce qui sert aux deux : `gen-dict.py` (le chapitre 16 depuis `dict/*.yml`), `gen-cdc-index.py` (l'index du CDC lisible dans le webmail), `gen-schema.py` (le DDL PostgreSQL depuis le dictionnaire), et le vérificateur de contrat à venir |
+| `server/` | le serveur, en Python (**D154**) : schéma, magasin d'octets, démon d'ingestion, moteur de filtres, API, page d'état — découpé par fonctionnalité de V0 |
+| `tools/` | ce qui sert aux deux : `gen-dict.py` (le chapitre 16 depuis `dict/*.yml`), `gen-cdc-index.py` (l'index du CDC lisible dans le webmail), `gen-schema.py` (le DDL PostgreSQL depuis le dictionnaire), et le vérificateur de contrat à venir |
 
 Le cahier des charges et le dictionnaire des données **ne sont pas ici** : ils vivent dans le dépôt
 PM (`.mmi-pm/docs`, ticket RM2881). Le code les lit, il ne les possède pas.
 
 ```
-python3 outils/gen-dict.py            # régénère le chapitre 16 du CDC
-python3 outils/gen-cdc-index.py       # régénère webmail/src/poc/cdc-index.js
-python3 outils/gen-schema.py          # régénère serveur/atombox/schema/schema.sql (F114) — rapport vide exigé
-cd webmail && python3 outils/bundle.py && node test/smoke.js   # le POC (voir webmail/README.md)
+python3 tools/gen-dict.py            # régénère le chapitre 16 du CDC
+python3 tools/gen-cdc-index.py       # régénère webmail/src/poc/cdc-index.js
+python3 tools/gen-schema.py          # régénère server/atombox/schema/schema.sql (F114) — rapport vide exigé
+cd webmail && python3 tools/bundle.py && node test/smoke.js   # le POC (voir webmail/README.md)
 bash webmail/outils/deploy.sh         # mise en ligne du webmail
 ```
 
@@ -37,10 +37,10 @@ fonctionnalité — `v0/F114-schema`, `v0/F001-ingestion`… — fusionnée dans
 | Barrière | Où elle tourne | Ce qu'elle refuse |
 |---|---|---|
 | **`.gitlab-ci.yml`** | à chaque MR et sur `dev`/`main` | une fusion dont la suite serveur (83 tests, PostgreSQL réel) ou les quatre harnais du webmail (494 assertions) sont rouges |
-| **`outils/verifier-engendre.sh`** | avant le push, sur le poste (hook `pre-push`) | un schéma, des modèles ou un contrat d'API qui ne correspondent plus au dictionnaire — leur source vit dans le dépôt de données, absent de la CI |
+| **`tools/check-generated.sh`** | avant le push, sur le poste (hook `pre-push`) | un schéma, des modèles ou un contrat d'API qui ne correspondent plus au dictionnaire — leur source vit dans le dépôt de données, absent de la CI |
 | **`webmail/outils/deploy.sh`** | à chaque déploiement | une interface mise en ligne alors que l'API qui tourne est plus ancienne : elle proposerait des gestes que le serveur refuse |
 
-Poser le hook sur un poste neuf : `bash outils/verifier-engendre.sh --installer`.
+Poser le hook sur un poste neuf : `bash tools/check-generated.sh --install`.
 
 Ces trois barrières ont la même règle : **elles refusent, elles n'avertissent pas**. Un contrôle
 qu'on peut ignorer n'est pas une barrière, c'est une opinion — et les fichiers engendrés ne
@@ -51,7 +51,7 @@ cesserait d'être lu.
 
 Le CDC, le registre des décisions et le dictionnaire des données **ne sont pas dans ce dépôt** :
 ils vivent dans le dépôt de données du projet (`.mmi-pm/docs`, ticket RM2881), et ce dépôt les
-**lit** — `outils/gen-cdc-index.py` en tire `webmail/src/poc/cdc-index.js`, que la maquette
+**lit** — `tools/gen-cdc-index.py` en tire `webmail/src/poc/cdc-index.js`, que la maquette
 affiche. Rien n'est recopié à la main : une décision s'écrit une fois, au registre.
 
 Les mêmes pages, dans la maquette (barre du haut, en session `poc`/`poc`) :
