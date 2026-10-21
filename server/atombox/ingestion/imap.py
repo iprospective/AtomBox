@@ -36,11 +36,33 @@ class Poller:
             if self.cnx: self.cnx.logout()
         finally: self.cnx = None
 
+    # ── LE SÉPARATEUR DE HIÉRARCHIE du fournisseur (RFC 3501 § 6.3.8) ────────────────────────────
+    # Chez nous, un dossier se range sous un autre avec « / » : c'est le séparateur qu'on SERT, et
+    # celui de `dossier.alias_imap`. Le fournisseur a le sien — un point chez Dovecot (mesuré le 21/10
+    # sur la machine servie). La relève traduit ICI, à la frontière, comme pour le modified UTF-7 :
+    # le reste d'AtomBox ne connaît qu'une convention. Sans cette traduction, `CREATE INBOX/truc`
+    # partait tel quel et le fournisseur refusait ; et ses sous-dossiers (« Projets.Dupont »)
+    # arrivaient chez nous comme UN nom contenant un point, pas comme une hiérarchie.
+    def delimiter(self) -> str:
+        if getattr(self, "_sep", None) is None:
+            sep = "/"
+            typ, lines = self.cnx.list('""', '""')
+            for l in lines or []:
+                m = re.match(rb'\([^)]*\) (?:"([^"]*)"|NIL)', l if isinstance(l, bytes) else l[0])
+                if m:
+                    sep = (m.group(1) or b"").decode("ascii", "replace") or "/"     # NIL : pas de hiérarchie
+                    break
+            self._sep = sep
+            log.debug("séparateur de hiérarchie du fournisseur : %r", sep)
+        return self._sep
+
     def folders(self) -> list[str]:
+        """les dossiers du fournisseur, dans NOTRE convention (« / »)"""
         typ, lines = self.cnx.list()
+        sep = self.delimiter()
         out = []
         for l in lines or []:
-            m = re.match(rb'\((?P<flags>[^)]*)\) "(?P<sep>[^"]*)" (?P<nom>.+)$', l if isinstance(l, bytes) else l[0])
+            m = re.match(rb'\((?P<flags>[^)]*)\) (?:"(?P<sep>[^"]*)"|NIL) (?P<nom>.+)$', l if isinstance(l, bytes) else l[0])
             if not m: continue
             if b"\\Noselect" in m.group("flags"): continue
             # LE NOM DU FIL, tel quel : c'est lui qu'on renvoie au fournisseur (D043), et un nom IMAP
@@ -50,7 +72,15 @@ class Poller:
             nom = m.group("nom").strip().strip(b'"').decode("ascii", "replace")
             # les dossiers virtuels de Dovecot (virtual.All, virtual.Flagged…) sont des vues, pas des boîtes ;
             # et LIST peut renvoyer un nom deux fois (abonnement + hiérarchie)
-            if nom.lower().startswith("virtual.") or nom in out: continue
+            if nom.lower().startswith("virtual" + sep) or nom.lower().startswith("virtual."): continue
+            if sep != "/":
+                if "/" in nom:
+                    # un « / » DANS un nom, chez un fournisseur dont le séparateur est autre : on ne saurait
+                    # pas le lui renvoyer. On le dit, plutôt que de le confondre avec un sous-dossier.
+                    log.warning("dossier « %s » ignoré : il contient « / », qui est NOTRE séparateur", nom)
+                    continue
+                nom = nom.replace(sep, "/")
+            if nom in out: continue
             out.append(nom)
         return out
 
@@ -195,6 +225,8 @@ class Poller:
         log.debug("IDLE terminé : %s", "du nouveau" if arrive else "rien")
         return arrive
 
-    @staticmethod
-    def _quote(nom: str) -> str:
+    def _quote(self, nom: str) -> str:
+        """un nom de NOTRE convention → le nom sur le fil du fournisseur, entre guillemets"""
+        sep = self.delimiter()
+        if sep != "/": nom = nom.replace("/", sep)
         return '"%s"' % nom.replace('"', '\\"')

@@ -37,8 +37,14 @@ def _mirror(adresse: str, action: str, *args) -> None:
     refuse, on ne crée rien ici non plus — sinon les deux côtés divergent dès le premier geste."""
     rel = _poller_for(adresse)
     if rel is None: return
-    try: getattr(rel, action)(*args)
-    finally: rel.close()
+    try:
+        getattr(rel, action)(*args)
+    except RuntimeError as e:
+        # LE REFUS DU FOURNISSEUR EST UNE RÉPONSE, pas une panne : le client doit en lire la raison.
+        # Il recevait « erreur interne » (21/10, `CREATE INBOX/truc`), et ne pouvait rien en conclure.
+        raise FolderRefused("le fournisseur refuse : %s" % e, "CANNOT")
+    finally:
+        rel.close()
 
 
 def serialize_folder(d: Dossier) -> dict:
