@@ -56,6 +56,17 @@ class FolderRefused(ValueError):
         super().__init__(message); self.code = code
 
 
+def wire(nom: str) -> str:
+    """le nom LISIBLE d'un segment → son nom sur le FIL (modified UTF-7, RFC 3501 § 5.1.3)"""
+    from ..imap import mutf7
+    return mutf7.encode(nom)
+
+
+def readable(segment: str) -> str:
+    from ..imap import mutf7
+    return mutf7.decode(segment)
+
+
 def check_name(nom: str) -> str:
     nom = (nom or "").strip().strip("/")
     if not nom: raise FolderRefused("un nom", "CANNOT")
@@ -97,7 +108,9 @@ def renamed_alias(old: str, new_parent: str, nom: str) -> str:
 # ── le chemin du webmail (asynchrone) ────────────────────────────────────────────────────────────
 async def create_folder(s: AsyncSession, boite: Boite, nom: str, parent: Dossier | None = None) -> dict:
     nom = check_name(nom)
-    alias = ((parent.alias_imap + "/") if parent and parent.alias_imap else "") + nom
+    # « Pièces » tapé dans le webmail : le nom LISIBLE reste `nom`, le nom du FIL part chez le
+    # fournisseur. Sans ce codage, imaplib refusait d'envoyer un nom non ASCII.
+    alias = ((parent.alias_imap + "/") if parent and parent.alias_imap else "") + wire(nom)
     if await s.scalar(select(Dossier).where(Dossier.boite_id == boite.boite_id, Dossier.alias_imap == alias)):
         raise ValueError("ce dossier existe déjà")
     _mirror((await s.get(Adresse, boite.adresse_id)).adresse_complete, "create_folder", alias)
@@ -112,7 +125,7 @@ async def rename_folder(s: AsyncSession, boite: Boite, d: Dossier, nom: str) -> 
     nom = check_name(nom)
     old = d.alias_imap or ""
     parent = old.rsplit("/", 1)[0] if "/" in old else ""
-    alias = renamed_alias(old, parent, nom)
+    alias = renamed_alias(old, parent, wire(nom))
     _mirror((await s.get(Adresse, boite.adresse_id)).adresse_complete, "rename_folder", old, alias)
     d.nom, d.alias_imap = nom, alias
     # LES SOUS-DOSSIERS SUIVENT. Le fournisseur les renomme de lui-même (RFC 3501 § 6.3.5) ; ici,
@@ -147,7 +160,7 @@ def create_folder_sync(s, boite: Boite, alias: str) -> Dossier:
         d = s.scalar(select(Dossier).where(Dossier.boite_id == boite.boite_id, Dossier.alias_imap == a))
         if d is None:
             _mirror(adresse, "create_folder", a)
-            d = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom=parts[i], alias_imap=a,
+            d = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom=readable(parts[i]), alias_imap=a,
                         parent_id=parent.dossier_id if parent else None, protege=False)
             s.add(d); s.flush()
             log.info("dossier « %s » créé dans %s (IMAP)", a, boite.boite_id)
@@ -181,7 +194,7 @@ def rename_folder_sync(s, boite: Boite, d: Dossier, new_alias: str) -> Dossier:
             parent = create_folder_sync(s, boite, "/".join(parts[:-1]))
     adresse = s.get(Adresse, boite.adresse_id).adresse_complete
     _mirror(adresse, "rename_folder", old, new)
-    d.nom, d.alias_imap, d.parent_id = parts[-1], new, parent.dossier_id if parent else None
+    d.nom, d.alias_imap, d.parent_id = readable(parts[-1]), new, parent.dossier_id if parent else None
     for enfant in s.scalars(select(Dossier).where(Dossier.boite_id == boite.boite_id,
                                                   Dossier.alias_imap.like(old + "/%"))):
         enfant.alias_imap = new + enfant.alias_imap[len(old):]

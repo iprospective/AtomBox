@@ -687,3 +687,27 @@ def test_l_internaldate_est_au_format_imap(serveur_imap):
         assert imaplib.Internaldate2tuple(r[0]) is not None, "imaplib sait la lire"
     finally:
         c.logout()
+
+
+def test_un_dossier_accentue_voyage_en_modified_utf7(serveur_imap):
+    """Thunderbird crée « Pièces jointes » : il envoie `Pi&AOg-ces jointes` (RFC 3501 § 5.1.3). On le
+    garde tel quel pour le FIL — c'est ce qu'on renverra au fournisseur — et on LIT « Pièces jointes »."""
+    from sqlalchemy import select
+    from atombox.schema.models import Dossier
+    s = serveur_imap["session"]
+    c = _connecte(serveur_imap)
+    try:
+        # imaplib n'entoure PAS de guillemets un nom qui contient une espace ; un vrai client, si. Sans
+        # eux, le serveur refuse au lieu de créer « Pi&AOg-ces » en jetant la fin du nom.
+        with pytest.raises(imaplib.IMAP4.error):
+            c.create("Pi&AOg-ces jointes")
+        assert c.create('"Pi&AOg-ces jointes"')[0] == "OK"
+        assert "Pi&AOg-ces jointes" in _noms(c), "LIST le rend codé, comme il est arrivé"
+        assert c.select('"Pi&AOg-ces jointes"')[0] == "OK"
+        s.expire_all()
+        d = s.scalar(select(Dossier).where(Dossier.alias_imap == "Pi&AOg-ces jointes"))
+        assert d is not None and d.nom == "Pièces jointes", "le webmail affiche le nom LISIBLE"
+        c.select("INBOX")
+        assert c.delete('"Pi&AOg-ces jointes"')[0] == "OK"
+    finally:
+        c.logout()

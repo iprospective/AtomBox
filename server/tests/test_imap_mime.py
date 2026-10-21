@@ -143,3 +143,33 @@ def test_un_message_d_une_seule_partie():
     assert mime.section(r, simple, "TEXT") == b"Une ligne.\r\nDeux.\r\n"
     s = parse_line(mime.structure(r, extended=False))[0]
     assert s[:2] == ["text", "plain"] and int(s[6]) == len(b"Une ligne.\r\nDeux.\r\n") and int(s[7]) == 2, "deux sauts de ligne"
+
+
+# ── le modified UTF-7 des noms de dossiers (RM3499, RFC 3501 § 5.1.3) ───────────────────────────
+from atombox.imap import mutf7
+
+NOMS = [("Pièces", "Pi&AOg-ces"), ("Prêts & avances", "Pr&AOo-ts &- avances"), ("R+D", "R+D"),
+        ("~peter/mail/台北/日本語", "~peter/mail/&U,BTFw-/&ZeVnLIqe-"),   # l'exemple de la RFC elle-même
+        ("Été/Réunions", "&AMk-t&AOk-/R&AOk-unions"), ("INBOX", "INBOX"), ("", "")]
+
+
+def test_le_codage_des_noms_est_celui_de_la_rfc():
+    """les paires viennent de `doveadm mailbox mutf7` ; l'exemple « ~peter » est celui de la RFC"""
+    for lisible, fil in NOMS:
+        assert mutf7.encode(lisible) == fil, lisible
+        assert mutf7.decode(fil) == lisible, fil
+
+
+def test_ce_n_est_pas_l_utf7_de_python():
+    """le codec `utf-7` lisait « R+D » comme une séquence codée — et ne décodait pas « &…- »"""
+    # ce que faisait la relève : `decode("utf-7", "replace")` dès qu'un « & » apparaissait
+    relu = "R+D &- co".encode("ascii").decode("utf-7", "replace")
+    assert relu != "R+D & co", "Python prend « + » pour une bascule : %r" % relu
+    assert mutf7.decode("R+D &- co") == "R+D & co"
+    assert "Pi&AOg-ces".encode("ascii").decode("utf-7", "replace") == "Pi&AOg-ces", "Python ne le décode pas"
+    assert mutf7.decode("Pi&AOg-ces") == "Pièces"
+
+
+def test_un_nom_mal_code_n_efface_pas_le_dossier():
+    assert mutf7.decode("Pi&AOg") == "Pi&AOg"          # séquence non fermée : rendue telle quelle
+    assert mutf7.decode("A&!!!-B") == "A&!!!-B"

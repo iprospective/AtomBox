@@ -183,3 +183,20 @@ def test_la_recherche_trouve_ce_que_trouve_dovecot():
         ours = [u for u in uids if S.matches(tree, S.Message(u, uids, raws[u - 1], (), interne, len(raws[u - 1])))]
         if ours != theirs[c]: ecarts.append("%-40s Dovecot %s | nous %s" % (c, theirs[c], ours))
     assert not ecarts, "la recherche diffère de Dovecot :\n" + "\n".join(ecarts)
+
+
+def test_le_codage_des_noms_est_celui_de_doveadm():
+    """`doveadm mailbox mutf7` comme juge, sur des noms qu'on tape vraiment"""
+    from atombox.imap import mutf7
+    if not shutil.which("doveadm"): pytest.skip("doveadm absent")
+    d = tempfile.mkdtemp(prefix="dva", dir="/tmp")
+    try:
+        conf = pathlib.Path(d, "c.conf"); conf.write_text("base_dir = %s\nstate_dir = %s\nlog_path = /dev/null\n" % (d, d))
+        for nom in ("Pièces jointes", "Prêts & avances", "Comptabilité/2026/Déclarations", "R+D",
+                    "Ølsen & Søn", "Réunions — compte rendu", "Ça & là", "日本語", "😀 Emoji"):
+            r = subprocess.run(["doveadm", "-c", str(conf), "mailbox", "mutf7", nom], capture_output=True, text=True, timeout=10)
+            attendu = [l for l in r.stdout.splitlines() if l][0]
+            assert mutf7.encode(nom) == attendu, nom
+            assert mutf7.decode(attendu) == nom, attendu
+    finally:
+        shutil.rmtree(d, ignore_errors=True)

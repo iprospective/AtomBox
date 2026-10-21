@@ -28,7 +28,9 @@ log = journal("daemon")
 def _folder(s, boite_id, alias: str) -> Dossier:
     d = s.scalar(select(Dossier).where(Dossier.boite_id == boite_id, Dossier.alias_imap == alias))
     if d: return d
-    d = Dossier(dossier_id=uuid7(), boite_id=boite_id, nom=alias.split("/")[-1], alias_imap=alias,
+    from ..imap import mutf7
+    # `alias_imap` : le nom du FIL (modified UTF-7) ; `nom` : ce qu'on LIT (« Pièces », pas « Pi&AOg-ces »)
+    d = Dossier(dossier_id=uuid7(), boite_id=boite_id, nom=mutf7.decode(alias.split("/")[-1]), alias_imap=alias,
                 protege=alias.upper() in ("INBOX", "SENT", "DRAFTS", "TRASH", "JUNK"))
     s.add(d); s.commit()
     return d

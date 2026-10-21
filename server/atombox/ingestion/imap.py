@@ -43,7 +43,11 @@ class Poller:
             m = re.match(rb'\((?P<flags>[^)]*)\) "(?P<sep>[^"]*)" (?P<nom>.+)$', l if isinstance(l, bytes) else l[0])
             if not m: continue
             if b"\\Noselect" in m.group("flags"): continue
-            nom = m.group("nom").strip().strip(b'"').decode("utf-7" if b"&" in m.group("nom") else "ascii", "replace")
+            # LE NOM DU FIL, tel quel : c'est lui qu'on renvoie au fournisseur (D043), et un nom IMAP
+            # est de l'ASCII par construction (modified UTF-7, RFC 3501 § 5.1.3). L'ancienne version
+            # le décodait avec l'UTF-7 de PYTHON, qui n'est pas le même codage : « R+D & co »
+            # devenait illisible, et le nom renvoyé au fournisseur n'était plus le sien.
+            nom = m.group("nom").strip().strip(b'"').decode("ascii", "replace")
             # les dossiers virtuels de Dovecot (virtual.All, virtual.Flagged…) sont des vues, pas des boîtes ;
             # et LIST peut renvoyer un nom deux fois (abonnement + hiérarchie)
             if nom.lower().startswith("virtual.") or nom in out: continue

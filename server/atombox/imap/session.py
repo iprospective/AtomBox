@@ -440,13 +440,15 @@ class Session:
 
     @authenticated
     def _c_create(self, tag, args):
-        if not args: return ["%s BAD CREATE demande un nom" % tag]
+        # UN SEUL nom : `CREATE Pi&AOg-ces jointes` sans guillemets créait « Pi&AOg-ces » et jetait
+        # « jointes » en silence — un dossier au nom tronqué, sans un mot (RFC 3501 : erreur de syntaxe)
+        if len(args) != 1: return ["%s BAD CREATE demande UN nom (entre guillemets s'il contient une espace)" % tag]
         if str(args[0]).strip("/").upper() == "INBOX": return ["%s NO [ALREADYEXISTS] INBOX existe toujours" % tag]
         return self._folder_cmd(tag, "CREATE", self.view.create, args[0])
 
     @authenticated
     def _c_rename(self, tag, args):
-        if len(args) < 2: return ["%s BAD RENAME demande un ancien et un nouveau nom" % tag]
+        if len(args) != 2: return ["%s BAD RENAME demande un ancien et un nouveau nom (entre guillemets s'ils contiennent une espace)" % tag]
         r = self._folder_cmd(tag, "RENAME", self.view.rename, args[0], args[1])
         # la boîte ouverte a changé de nom : la session doit la suivre, sinon le prochain NOOP la
         # croirait disparue et annoncerait l'EXPUNGE de chacun de ses messages
@@ -456,7 +458,7 @@ class Session:
 
     @authenticated
     def _c_delete(self, tag, args):
-        if not args: return ["%s BAD DELETE demande un nom" % tag]
+        if len(args) != 1: return ["%s BAD DELETE demande UN nom (entre guillemets s'il contient une espace)" % tag]
         if self.mailbox is not None and self.mailbox.name.lower() == str(args[0]).lower():
             return ["%s NO [INUSE] la boîte est ouverte — la fermer d'abord" % tag]
         return self._folder_cmd(tag, "DELETE", self.view.delete, args[0])
