@@ -67,6 +67,20 @@ class Listener:
                         if len(rest) > LINE_LIMIT:
                             await self._send(writer, ["* BYE ligne trop longue"]); break
                         responses = session.literal(data, rest.decode("utf-8", "replace").rstrip("\r\n"))
+                    elif session.idling is not None:
+                        # IDLE : on attend le DONE du client, et pendant ce temps on interroge la base
+                        # à intervalle court pour lui pousser ce qui a changé. Le réglage est relu à
+                        # chaque attente : il se change sans redémarrer.
+                        pause = float(settings.read("ATOMBOX_IMAPD_IDLE_POLL", "3"))
+                        try:
+                            line = await asyncio.wait_for(reader.readline(), timeout=pause)
+                        except asyncio.TimeoutError:
+                            pushed = session.idle_poll()
+                            session.view.release()
+                            if pushed: await self._send(writer, pushed)
+                            continue
+                        if not line: break
+                        responses = session.line(line.decode("utf-8", "replace").rstrip("\r\n"))
                     else:
                         line = await reader.readline()
                         if not line: break
@@ -76,6 +90,8 @@ class Listener:
                     if responses and responses[0].startswith("+ "):
                         expected = session.awaiting_literal[1] if session.awaiting_literal else 0
                     await self._send(writer, responses)
+                    if not expected:
+                        session.view.release()      # pas de transaction ouverte pendant que le client réfléchit
             except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
                 log.info("client %s parti", peer)
             except Exception:

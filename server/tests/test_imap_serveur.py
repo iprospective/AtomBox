@@ -68,7 +68,7 @@ def test_la_capability_n_annonce_que_ce_qu_on_sert():
     Ce test tient donc les deux bouts, et il se maintient seul : il lit la liste annoncée."""
     s = Session(FausseVue(), store=None)
     annonce = " ".join(s.greeting())
-    for jamais in ("CONDSTORE", "QRESYNC", "IDLE", "NOTIFY", "APPENDLIMIT"):
+    for jamais in ("CONDSTORE", "QRESYNC", "NOTIFY", "APPENDLIMIT"):     # IDLE : servi depuis RM3499
         assert jamais not in annonce, "%s est annoncé alors qu'on ne le sert pas" % jamais
     assert "IMAP4rev1" in annonce
     servies = {n[3:].upper().replace("_", ".") for n in dir(Session) if n.startswith("_c_")}
@@ -287,3 +287,25 @@ def test_un_message_de_la_corbeille_n_est_pas_masque():
     from atombox.imap.session import WRITABLE_FLAGS, FLAGS
     assert "\\Deleted" in WRITABLE_FLAGS and "\\Deleted" in FLAGS, \
         "le client doit pouvoir poser \\Deleted : c'est ce STORE qui déplace vers la corbeille"
+
+
+# ── IDLE (RFC 2177, RM3499) ─────────────────────────────────────────────────────────────────────
+def test_idle_attend_et_sort_sur_done():
+    s = Session(FausseVue(), store=None)
+    assert s.line("a0 IDLE")[0].startswith("a0 NO"), "IDLE avant connexion est refusé"
+    s.line("a1 LOGIN mathieu secret"); s.line("a2 SELECT INBOX")
+    r = s.line("a3 IDLE")
+    assert r == [r[0]] and r[0].startswith("+ "), r
+    assert s.idling == "a3"
+    r = s.line("done")
+    assert r[-1] == "a3 OK IDLE terminé" and s.idling is None, r
+    assert s.line("a4 NOOP")[-1].startswith("a4 OK"), "le dialogue reprend normalement"
+
+
+def test_idle_n_avale_pas_une_commande_comme_si_de_rien_n_etait():
+    """Une ligne autre que DONE pendant IDLE est une faute du client : on le lui dit, on ne l'exécute
+    pas sous une étiquette qu'on ignorerait."""
+    s = Session(FausseVue(), store=None)
+    s.line("a1 LOGIN mathieu secret"); s.line("a2 SELECT INBOX"); s.line("a3 IDLE")
+    r = s.line("a4 LOGOUT")
+    assert r == ["a3 BAD IDLE attendait DONE"] and s.idling is None and not s.done, r

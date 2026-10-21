@@ -215,6 +215,20 @@ class View:
             return needle in " ".join(roles).lower()
         return needle in (ou.get(field, "")).lower()
 
+    def release(self):
+        """termine la transaction de LECTURE en cours, sans rien perdre — les écritures ont été validées.
+
+        Une session SQLAlchemy ouvre une transaction à la première requête et la garde jusqu'au commit.
+        Un client IMAP qui lit puis attend — entre deux commandes, et surtout pendant IDLE, jusqu'à
+        29 minutes — laissait donc une connexion « idle in transaction ». C'est elle qui, le 19/09, a
+        fait attendre une migration onze minutes en bloquant les lectures. Une lecture finie se
+        relâche."""
+        if self.s is None: return
+        try:
+            self.s.rollback()
+        except Exception:
+            log.exception("relâchement de la transaction en échec")
+
     def rollback(self):
         """rend la session utilisable après une écriture refusée — appelée par la session IMAP.
 

@@ -463,3 +463,76 @@ def test_append_dans_la_boite_ouverte_annonce_exists(serveur_imap):
         assert exists and exists[-1] is not None and int(exists[-1]) == n + 1, exists
     finally:
         c.logout()
+
+
+# ── IDLE (RM3499) : le message qui arrive s'annonce tout seul ───────────────────────────────────
+class _Fil:
+    """un client IMAP à la main : imaplib (3.12) ne sait pas faire IDLE"""
+    def __init__(self, port):
+        self.s = socket.create_connection(("127.0.0.1", port), timeout=10); self.f = self.s.makefile("rb")
+        self.ligne()                                           # l'accueil
+    def ligne(self, timeout=10):
+        self.s.settimeout(timeout); return self.f.readline().decode("latin-1").rstrip("\r\n")
+    def cmd(self, texte, tag=None):
+        # DONE ne porte pas d'étiquette : la réponse est celle de l'IDLE qu'il termine
+        tag = tag or texte.split(" ", 1)[0]; self.s.sendall((texte + "\r\n").encode())
+        out = []
+        while True:
+            l = self.ligne(); out.append(l)
+            if l.startswith(tag + " ") or l.startswith("+ "): return out
+    def close(self):
+        try: self.s.sendall(b"zz LOGOUT\r\n")
+        except OSError: pass
+        self.s.close()
+
+
+def test_idle_annonce_le_message_qui_arrive(serveur_imap, monkeypatch):
+    """Sans IDLE, Thunderbird interroge toutes les dix minutes : un message arrivé attendait jusqu'à
+    dix minutes pour s'afficher. Avec IDLE, l'EXISTS arrive dans les secondes."""
+    import time
+    from atombox.ingestion.ingestion import ingest
+    from atombox.schema.models import Dossier
+    from sqlalchemy import select
+    monkeypatch.setenv("ATOMBOX_IMAPD_IDLE_POLL", "0.2")
+    s = serveur_imap["session"]
+    c = _Fil(serveur_imap["port"])
+    try:
+        c.cmd("a1 LOGIN mathieu secret")
+        sel = c.cmd("a2 SELECT INBOX")
+        n = int(next(l.split()[1] for l in sel if l.endswith(" EXISTS")))
+        assert c.cmd("a3 IDLE")[-1].startswith("+ ")
+        # un message arrive par la relève, PENDANT que le client attend
+        inbox = s.scalar(select(Dossier).where(Dossier.alias_imap == "INBOX"))
+        ingest(s, serveur_imap["magasin"], inbox.boite_id,
+               MESSAGE.replace(b"<c4412@", b"<idle-1@").replace(b"Commande 4412", b"Pendant IDLE"),
+               dossier_id=inbox.dossier_id)
+        t0 = time.monotonic()
+        l = c.ligne(timeout=5)
+        assert l == "* %d EXISTS" % (n + 1), "le client apprend le message SANS rien demander : %r" % l
+        assert time.monotonic() - t0 < 3, "et dans les secondes, pas à la prochaine interrogation"
+        fin = c.cmd("DONE", tag="a3")
+        assert fin[-1] == "a3 OK IDLE terminé", fin
+    finally:
+        c.close()
+
+
+def test_idle_ne_garde_pas_de_transaction_ouverte(serveur_imap, monkeypatch):
+    """Le 19/09, une migration a attendu ONZE MINUTES derrière des connexions « idle in transaction »,
+    en bloquant les lectures. Un client en IDLE attend jusqu'à 29 minutes : s'il gardait sa
+    transaction de lecture, chaque client de bureau ouvert rejouerait l'incident."""
+    import time, psycopg
+    monkeypatch.setenv("ATOMBOX_IMAPD_IDLE_POLL", "0.2")
+    s = serveur_imap["session"]; s.rollback()                  # le harnais lui-même ne doit rien tenir
+    base = s.get_bind().url.database
+    c = _Fil(serveur_imap["port"])
+    try:
+        c.cmd("a1 LOGIN mathieu secret"); c.cmd("a2 SELECT INBOX"); c.cmd("a3 IDLE")
+        time.sleep(1.0)                                         # plusieurs interrogations ont eu lieu
+        url = os.environ["DATABASE_URL"]
+        with psycopg.connect(url, autocommit=True) as admin:
+            tenues = admin.execute("select count(*) from pg_stat_activity where datname = %s "
+                                   "and state like 'idle in transaction%%'", (base,)).fetchone()[0]
+        assert tenues == 0, "%d connexion(s) « idle in transaction » pendant IDLE" % tenues
+        assert c.cmd("DONE", tag="a3")[-1] == "a3 OK IDLE terminé"
+    finally:
+        c.close()

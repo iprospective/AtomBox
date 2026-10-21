@@ -25,7 +25,7 @@ log = journal("imap")
 # DÉMARRER en clair ailleurs que sur la boucle locale (voir `server.check_transport`). Une session
 # n'a donc jamais à négocier quoi que ce soit. Elle annonçait `STARTTLS` hors TLS — sans qu'aucune
 # commande le serve : la règle d'au-dessus, contredite trois lignes plus bas.
-CAPABILITIES = ["IMAP4rev1", "AUTH=PLAIN", "UIDPLUS", "MOVE", "SPECIAL-USE", "NAMESPACE"]
+CAPABILITIES = ["IMAP4rev1", "AUTH=PLAIN", "UIDPLUS", "MOVE", "SPECIAL-USE", "NAMESPACE", "IDLE"]
 
 # Les drapeaux qu'un message peut porter chez nous. `\\Seen` et `\\Flagged` sont PERSONNELS depuis
 # D175 ; `\\Deleted` n'est pas un drapeau posé à côté mais une TRANSITION vers la corbeille (D183) —
@@ -73,6 +73,7 @@ class Session:
         self.read_only = True     # SELECT ouvre en écriture, EXAMINE non (RFC 3501 § 6.3.2)
         self.awaiting_literal = None  # (ligne_partielle, octets_attendus) quand un littéral est en cours
         self._literals: list[bytes] = []   # les littéraux de la commande en cours, octets intacts
+        self.idling = None            # l'étiquette de l'IDLE en cours, ou None (RFC 2177)
 
     # ── entrée ──────────────────────────────────────────────────────────────────────────────────
     def greeting(self) -> list[str]:
@@ -83,6 +84,8 @@ class Session:
 
     def line(self, text: str) -> list[str]:
         """traite une ligne du client et rend les lignes à lui renvoyer"""
+        if self.idling is not None:
+            return self.idle_line(text)
         if self.awaiting_literal is not None:
             # l'ancienne interface : un littéral passé comme TEXTE. Gardée pour les doubles de test ;
             # l'écouteur, lui, passe les octets par `literal()`.
@@ -343,6 +346,34 @@ class Session:
         requested = args[1] if isinstance(args[1], list) else [args[1]]
         returned = " ".join("%s %d" % (d.upper(), state.get(d.upper(), 0)) for d in requested)
         return ["* STATUS %s (%s)" % (quote(args[0]), returned), "%s OK STATUS" % tag]
+
+    # ── IDLE (RFC 2177) : le serveur PARLE le premier ───────────────────────────────────────────
+    @authenticated
+    def _c_idle(self, tag, args):
+        """le client se tait et écoute ; c'est l'écouteur qui interroge la base pendant ce temps et
+        lui pousse ce qui a changé (`idle_poll`), jusqu'à ce qu'il dise DONE (`idle_line`).
+
+        Sans IDLE, un client interroge à intervalle fixe — Thunderbird toutes les dix minutes par
+        défaut : un message arrivé attendait jusqu'à dix minutes pour s'afficher."""
+        self.idling = tag
+        return ["+ en attente — DONE pour reprendre"]
+
+    def idle_poll(self) -> list[str]:
+        """ce qui a changé depuis la dernière fois — appelé par l'écouteur pendant l'attente.
+
+        Les mêmes lignes que NOOP, et le même calcul : un EXPUNGE ou un EXISTS annoncé pendant IDLE
+        doit dire exactement ce qu'aurait dit NOOP, sinon le client se désynchronise selon la
+        façon dont il a appris la nouvelle."""
+        return self._refresh() if self.idling is not None else []
+
+    def idle_line(self, text: str) -> list[str]:
+        tag, self.idling = self.idling, None
+        if text.strip().upper() == "DONE":
+            return self._refresh() + ["%s OK IDLE terminé" % tag]
+        # La RFC n'admet que DONE. Tout autre chose est une faute du client : on sort de l'attente
+        # en le lui disant, plutôt que de lire sa ligne comme une commande dont on ignorerait l'étiquette.
+        log.info("IDLE interrompu par autre chose que DONE : %.40r", text)
+        return ["%s BAD IDLE attendait DONE" % tag]
 
     @authenticated
     def _c_append(self, tag, args):
