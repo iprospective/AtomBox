@@ -18,9 +18,13 @@ log = journal("imap")
 # CE QU'ON ANNONCE, ON LE TIENT. `MOVE` (RFC 6851) parce qu'un déplacement est UNE écriture chez
 # nous et qu'un client qui l'a préfère toujours à COPY+STORE+EXPUNGE ; `SPECIAL-USE` (RFC 6154)
 # parce que sans lui le client ne sait pas laquelle de nos boîtes est la corbeille, et s'en crée une.
-# Toujours ni APPEND ni CONDSTORE/QRESYNC : on ne les annonce pas, donc on ne les sert pas.
-# `LOGINDISABLED` n'y est pas car le transport est chiffré par le serveur qui nous précède ; hors
-# TLS, l'écouteur l'ajoute.
+# Toujours ni CONDSTORE ni QRESYNC : on ne les annonce pas, donc on ne les sert pas.
+#
+# NI `STARTTLS`, NI `LOGINDISABLED`. Le chiffrement est IMPLICITE (RFC 8314, qui le préfère à
+# STARTTLS) : l'écouteur parle TLS dès le premier octet quand il a un certificat, et il REFUSE DE
+# DÉMARRER en clair ailleurs que sur la boucle locale (voir `server.check_transport`). Une session
+# n'a donc jamais à négocier quoi que ce soit. Elle annonçait `STARTTLS` hors TLS — sans qu'aucune
+# commande le serve : la règle d'au-dessus, contredite trois lignes plus bas.
 CAPABILITIES = ["IMAP4rev1", "AUTH=PLAIN", "UIDPLUS", "MOVE", "SPECIAL-USE", "NAMESPACE"]
 
 # Les drapeaux qu'un message peut porter chez nous. `\\Seen` et `\\Flagged` sont PERSONNELS depuis
@@ -42,8 +46,8 @@ class Session:
     Les deux sont injectés : le harnais en pose des doubles, et la session ne sait pas qu'ils sont
     doubles — c'est la seule façon d'éprouver le protocole sans base ni disque."""
 
-    def __init__(self, view, store, tls: bool = True):
-        self.view, self.store, self.tls = view, store, tls
+    def __init__(self, view, store):
+        self.view, self.store = view, store
         self.compte = None            # None = pas encore authentifié
         self.mailbox = None             # la boîte aux lettres sélectionnée
         self.uids: list[int] = []     # ses UID, dans l'ordre — l'index+1 est le numéro de séquence
@@ -56,9 +60,7 @@ class Session:
         return ["* OK [CAPABILITY %s] AtomBox prêt" % " ".join(self._capabilities())]
 
     def _capabilities(self) -> list[str]:
-        caps = list(CAPABILITIES)
-        if not self.tls: caps.insert(1, "STARTTLS")
-        return caps
+        return list(CAPABILITIES)
 
     def line(self, text: str) -> list[str]:
         """traite une ligne du client et rend les lignes à lui renvoyer"""

@@ -1,4 +1,4 @@
-"""L'ÉCOUTEUR IMAP (D180) — asyncio, une tâche par client, lecture seule.
+"""L'ÉCOUTEUR IMAP (D180, D183) — asyncio, une tâche par client.
 
     python3 -m atombox.imap.server
 
@@ -8,9 +8,10 @@ sur les UID ; on ne la refait pas :
 
 | Réglage | Défaut | Rôle |
 |---|---|---|
-| `ATOMBOX_IMAPD_LISTEN` | `127.0.0.1` | l'interface. Locale par défaut : sans TLS, ce service n'a rien à faire sur un réseau. **En conteneur, cette boucle locale est celle DU CONTENEUR** — un client sur la machine hôte ne voit rien ; il faut alors écouter sur l'adresse du conteneur, et tout passe en clair |
-| `ATOMBOX_IMAPD_PORT` | `1143` | **pas 143** : un Dovecot tourne déjà sur cette machine, et deux serveurs sur le même port, c'est le second qui ne démarre pas |
-| `ATOMBOX_IMAPD_CERT` / `_CLE` | — | si les deux sont donnés, le port sert du TLS implicite (à mettre alors sur 1993) |
+| `ATOMBOX_IMAPD_LISTEN` | `127.0.0.1` | l'interface. **En conteneur, cette boucle locale est celle DU CONTENEUR** — un client sur la machine hôte ne voit rien ; il faut alors écouter sur l'adresse du conteneur, ce qui exige TLS |
+| `ATOMBOX_IMAPD_PORT` | `1143` | **pas 143** : un Dovecot tourne déjà sur cette machine. Avec TLS, l'usage est **1993** |
+| `ATOMBOX_IMAPD_CERT` / `_KEY` | — | si les deux sont donnés, le port sert du TLS IMPLICITE dès le premier octet. Un certificat auto-signé se pose avec `tools/make-imapd-cert.sh` |
+| `ATOMBOX_IMAPD_ALLOW_CLEAR` | — | `1` pour accepter le clair HORS de la boucle locale. Sans lui, l'écouteur refuse de démarrer : les mots de passe passeraient en clair sur le réseau |
 | `ATOMBOX_IMAPD_MAX` | `20` | connexions simultanées ; au-delà, on refuse proprement au lieu de s'effondrer |
 
 Une tâche par client, et une session de base par tâche : un client qui télécharge un gros message
@@ -31,8 +32,8 @@ LINE_LIMIT = 64 * 1024        # une commande IMAP raisonnable ; au-delà, on cou
 
 
 class Listener:
-    def __init__(self, db_session_factory, store, maximum: int | None = None):
-        self.factory, self.store = db_session_factory, store
+    def __init__(self, db_session_factory, store, maximum: int | None = None, tls: bool = False):
+        self.factory, self.store, self.tls = db_session_factory, store, tls
         self.slots = asyncio.Semaphore(maximum or int(settings.read("ATOMBOX_IMAPD_MAX", "20")))
         self.live = 0
 
@@ -50,7 +51,7 @@ class Listener:
             self.live += 1
             db = self.factory()
             session = Session(View(db, self.store), self.store)
-            log.info("connexion IMAP de %s (%d vivante(s))", peer, self.live)
+            log.info("connexion IMAP de %s (%d vivante(s), %s)", peer, self.live, "TLS" if self.tls else "clair")
             try:
                 await self._send(writer, session.greeting())
                 expected = 0
@@ -103,12 +104,41 @@ class Listener:
         await writer.drain()
 
 
-def tls_context():
-    cert, key = settings.read("ATOMBOX_IMAPD_CERT"), settings.read("ATOMBOX_IMAPD_KEY")
-    if not (cert and key): return None
+def tls_context(cert: str | None = None, key: str | None = None):
+    """le contexte TLS du serveur, ou None s'il n'a pas de certificat.
+
+    UN SEUL DES DEUX EST UNE ERREUR, pas un repli sur le clair : qui a posé un certificat croit
+    avoir chiffré, et le découvrirait chez le client — ou jamais."""
+    cert = cert if cert is not None else settings.read("ATOMBOX_IMAPD_CERT")
+    key = key if key is not None else settings.read("ATOMBOX_IMAPD_KEY")
+    if not cert and not key: return None
+    if not (cert and key):
+        raise SystemExit("ATOMBOX_IMAPD_CERT et ATOMBOX_IMAPD_KEY vont ensemble : un seul est donné")
     ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.load_cert_chain(cert, key)
     return ctx
+
+
+def check_transport(host: str, tls: bool, allow_clear: bool = False) -> None:
+    """REFUSER DE DÉMARRER plutôt que d'exposer des mots de passe.
+
+    Le 20/10, mesuré : l'écouteur servait 10.0.3.11:1143 en clair, et la session — qui se croyait
+    sous TLS — acceptait LOGIN et AUTH=PLAIN sans rien annoncer. Rien n'était faux dans chaque
+    morceau ; c'est l'assemblage qui l'était, et personne ne le voyait. On tranche donc ici, au
+    seul endroit qui connaît à la fois l'adresse et le transport : en clair, la boucle locale
+    seulement (le développement, les tests) — sauf décision explicite."""
+    import ipaddress
+    if tls: return
+    try:
+        locale = host in ("localhost",) or ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        locale = False
+    if locale or allow_clear: return
+    raise SystemExit(
+        "IMAP en CLAIR sur %s refusé : les mots de passe passeraient en clair sur le réseau. "
+        "Poser un certificat (tools/make-imapd-cert.sh, puis ATOMBOX_IMAPD_CERT/_KEY), ou "
+        "assumer le clair avec ATOMBOX_IMAPD_ALLOW_CLEAR=1." % host)
 
 
 async def main():
@@ -116,12 +146,16 @@ async def main():
     from ..store import Store
     url = os.environ["DATABASE_URL"]
     store = Store(settings.read("ATOMBOX_STORE", "./magasin"))
-    listener = Listener(lambda: open_db(url), store)
     host = settings.read("ATOMBOX_IMAPD_LISTEN", "127.0.0.1")
     port = int(settings.read("ATOMBOX_IMAPD_PORT", "1143"))
     tls = tls_context()
+    clair = settings.read("ATOMBOX_IMAPD_ALLOW_CLEAR", "") == "1"
+    check_transport(host, tls is not None, allow_clear=clair)
+    listener = Listener(lambda: open_db(url), store, tls=tls is not None)
     server = await asyncio.start_server(listener.client, host, port, ssl=tls)
-    log.info("IMAP en LECTURE SEULE sur %s:%d%s", host, port, " (TLS)" if tls else " (clair)")
+    if tls is None and clair:
+        log.warning("IMAP en CLAIR sur %s:%d, ASSUMÉ (ATOMBOX_IMAPD_ALLOW_CLEAR=1) : les mots de passe passent en clair", host, port)
+    log.info("IMAP sur %s:%d (%s)", host, port, "TLS implicite" if tls else "clair")
     async with server:
         await server.serve_forever()
 

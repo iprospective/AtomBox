@@ -32,7 +32,7 @@ def serveur_imap(tmp_path_factory):
     url = os.environ.get("DATABASE_URL")
     if not url: pytest.skip("DATABASE_URL absent")
     import psycopg, re as _re
-    from atombox.db import session as open_mailbox
+    from atombox.db import session as open_db
     from atombox.store import Store
     from atombox.api.security import hash_password
     from atombox.ingestion.ingestion import address_of, ingest
@@ -46,7 +46,7 @@ def serveur_imap(tmp_path_factory):
     with psycopg.connect(u) as c:
         c.execute(open(os.path.join(ici, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read()); c.commit()
     store = Store(str(tmp_path_factory.mktemp("magasin")))
-    s = open_mailbox(u)
+    s = open_db(u)
     a = address_of(s, "contact@exemple.fr")
     mailbox = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(mailbox)
     compte = Compte(compte_id=uuid7(), login="mathieu", nom="Mathieu", actif=True,
@@ -73,7 +73,7 @@ def serveur_imap(tmp_path_factory):
     def tourner():
         async def start():
             from atombox.imap.server import Listener
-            e = Listener(lambda: open_mailbox(u), store)
+            e = Listener(lambda: open_db(u), store)
             srv = await asyncio.start_server(e.client, "127.0.0.1", port)
             boucle["server"] = srv
             pret.set()
