@@ -1,0 +1,119 @@
+"""RM3499 — Dovecot comme JUGE de la structure MIME que l'on sert.
+
+La leçon du certificat (21/10) : un test éprouvé par un client plus tolérant que celui de
+l'utilisateur ne prouve rien. Pour la structure MIME, le juge le plus exigeant à portée de main est
+Dovecot — le serveur que rencontrent la plupart des clients IMAP, et dont Thunderbird a l'habitude.
+On lui donne les MÊMES octets dans une boîte jetable, et l'on compare ce qu'il sert à ce que nous
+servons : BODYSTRUCTURE, BODY, ENVELOPE et une série de sections, au caractère près.
+
+Le test s'ignore si le binaire de Dovecot est absent (en CI : l'image n'en a pas). Il tourne sur les
+postes et sur la machine servie, où il a été écrit.
+"""
+from __future__ import annotations
+import os
+import pathlib
+import re
+import shutil
+import subprocess
+import tempfile
+
+import pytest
+
+from atombox.imap import mime
+
+DOVECOT = "/usr/lib/dovecot/imap"
+ICI = pathlib.Path(__file__).resolve().parent
+
+SECTIONS = ["HEADER", "TEXT", "1", "1.MIME", "2", "2.MIME", "1.1", "1.2", "3", "3.HEADER", "3.TEXT",
+            "3.1", "HEADER.FIELDS (SUBJECT FROM)", "HEADER.FIELDS.NOT (SUBJECT)"]
+
+
+def _corpus():
+    import sys
+    sys.path.insert(0, str(ICI))
+    from test_imap_mime import MESSAGE
+    out = [("multipart-composite", MESSAGE)]
+    for f in sorted((ICI / "fixtures").glob("*.eml")):
+        out.append((f.name, f.read_bytes()))
+    return out
+
+
+def _dovecot(raw_messages: list[bytes], commands: list[str]) -> str:
+    """lance le binaire imap de Dovecot en PREAUTH sur une boîte maildir jetable"""
+    d = tempfile.mkdtemp(prefix="dvc", dir="/tmp")          # court : un socket Unix plafonne à 108 caractères
+    try:
+        for sub in ("mail/new", "mail/cur", "mail/tmp", "run", "state"):
+            os.makedirs(os.path.join(d, sub))
+        for i, raw in enumerate(raw_messages, 1):
+            pathlib.Path(d, "mail", "new", "%d.%d.local" % (1000 + i, i)).write_bytes(raw)
+        conf = pathlib.Path(d, "dovecot.conf")
+        conf.write_text("base_dir = %s/run\nstate_dir = %s/state\nlog_path = /dev/null\n"
+                        "mail_location = maildir:%s/mail\nssl = no\nprotocols = imap\n"
+                        "default_internal_user = %s\ndefault_login_user = %s\n"
+                        % (d, d, d, os.environ.get("USER") or "nobody", os.environ.get("USER") or "nobody"))
+        script = "".join("t%d %s\r\n" % (i, c) for i, c in enumerate(["SELECT INBOX"] + commands + ["LOGOUT"]))
+        r = subprocess.run([DOVECOT, "-c", str(conf)], input=script.encode(), capture_output=True,
+                           timeout=30, env={"HOME": d, "USER": os.environ.get("USER", "nobody"), "PATH": "/usr/bin:/bin"})
+        return r.stdout.decode("latin-1")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def _item(response: str, name: str):
+    """la valeur d'un élément de FETCH dans la réponse — parenthèses, chaînes et littéraux compris"""
+    i = response.find(name + " ")
+    if i < 0: return None
+    i += len(name) + 1
+    if response.startswith("{", i):
+        n = int(response[i + 1:response.index("}", i)])
+        start = response.index("\r\n", i) + 2
+        return response[start:start + n]
+    depth, j, q = 0, i, False
+    while j < len(response):
+        c = response[j]
+        if q:
+            if c == "\\": j += 1
+            elif c == '"': q = False
+        elif c == '"': q = True
+        elif c == "{":
+            n = int(response[j + 1:response.index("}", j)]); j = response.index("\r\n", j) + 1 + n
+        elif c == "(": depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0: return response[i:j + 1]
+        elif depth == 0 and c in " \r":
+            return response[i:j]
+        j += 1
+    return response[i:]
+
+
+pytestmark = pytest.mark.skipif(not os.access(DOVECOT, os.X_OK), reason="Dovecot absent : pas de juge ici")
+
+
+@pytest.mark.parametrize("nom,raw", _corpus(), ids=[n for n, _ in _corpus()])
+def test_la_structure_est_celle_que_sert_dovecot(nom, raw):
+    out = _dovecot([raw], ["FETCH 1 (BODYSTRUCTURE)", "FETCH 1 (BODY)"])
+    arbre = mime.Part(raw)
+    assert _item(out, "BODYSTRUCTURE") == mime.structure(arbre, True), nom
+    assert _item(out, "BODY") == mime.structure(arbre, False), nom
+
+
+@pytest.mark.parametrize("nom,raw", _corpus(), ids=[n for n, _ in _corpus()])
+def test_l_enveloppe_est_celle_que_sert_dovecot(nom, raw):
+    out = _dovecot([raw], ["FETCH 1 (ENVELOPE)"])
+    assert _item(out, "ENVELOPE") == mime.envelope(mime.Part(raw)), nom
+
+
+@pytest.mark.parametrize("nom,raw", _corpus(), ids=[n for n, _ in _corpus()])
+def test_chaque_section_rend_les_memes_octets_que_dovecot(nom, raw):
+    out = _dovecot([raw], ["FETCH 1 (BODY.PEEK[%s])" % s for s in SECTIONS])
+    arbre = mime.Part(raw)
+    for s in SECTIONS:
+        # Dovecot rend une section absente comme une chaîne VIDE ; nous ne la rendons pas du tout
+        # (None). Le client ne demande que ce que la structure annonce : on compare ce qui existe.
+        theirs = _item(out, "BODY[%s]" % s)
+        ours = mime.section(arbre, raw, s)
+        if ours is None:
+            assert theirs in (None, "", "NIL"), "%s : Dovecot sert %r, nous rien" % (s, (theirs or "")[:60])
+            continue
+        assert theirs == ours.decode("latin-1"), "%s / %s : les octets diffèrent" % (nom, s)

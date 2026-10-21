@@ -10,6 +10,7 @@ lui. D'où `CAPACITES`, et un test qui vérifie qu'on ne sert rien d'autre.
 """
 from __future__ import annotations
 import base64
+import re
 from .protocol import LiteralNeeded, quote, parse_line, sequence
 from ..journal import journal
 
@@ -192,16 +193,34 @@ class Session:
         if d == "FLAGS": return ["FLAGS", "(%s)" % " ".join(m.flags)]
         if d == "RFC822.SIZE": return ["RFC822.SIZE", str(m.size)]
         if d == "INTERNALDATE": return ["INTERNALDATE", quote(m.internal_date)]
-        if d == "ENVELOPE": return ["ENVELOPE", quote(m.envelope())]
-        if d in ("BODY", "BODYSTRUCTURE"): return [d, quote(m.structure())]
+        if d == "ENVELOPE": return ["ENVELOPE", _rendered(m.envelope())]
+        # BODY sans crochets : la structure SANS les données d'extension ; BODYSTRUCTURE : avec.
+        if d == "BODYSTRUCTURE": return [d, _rendered(m.structure(True))]
+        if d == "BODY": return [d, _rendered(m.structure(False))]
+        # les formes RFC822 sont des alias anciens, que des clients emploient encore
+        alias = {"RFC822": ("", "RFC822"), "RFC822.HEADER": ("HEADER", "RFC822.HEADER"), "RFC822.TEXT": ("TEXT", "RFC822.TEXT")}
+        if d in alias:
+            section, name = alias[d]
+            data = m.section_bytes(section)
+            return [] if data is None else [name, _literal(data)]
         if d.startswith("BODY.PEEK[") or d.startswith("BODY["):
             section = d[d.index("[") + 1:d.rindex("]")]
-            section_bytes = m.section_bytes(section)
-            if section_bytes is None: return []
+            data = m.section_bytes(section)
+            if data is None: return []
+            name = "BODY[%s]" % section
+            # UNE TRANCHE : `BODY[2]<0.4096>`. Thunderbird télécharge les grosses pièces par morceaux ;
+            # rendre le tout sous le nom `BODY[2]` quand il attend `BODY[2]<0>`, c'est une réponse
+            # qu'il ne sait pas rattacher à sa demande (RFC 3501 § 6.4.5 et § 7.4.2).
+            tail = d[d.rindex("]") + 1:]
+            pm = re.match(r"^<(\d+)(?:\.(\d+))?>$", tail)
+            if pm:
+                start = int(pm.group(1)); length = int(pm.group(2)) if pm.group(2) else None
+                data = data[start:start + length] if length is not None else data[start:]
+                name += "<%d>" % start
             # LE LITTÉRAL COMPTE DES OCTETS, PAS DES CARACTÈRES. Un accent dans un en-tête et un
             # compte fait sur la chaîne décalent tout ce qui suit : le client lit le début du
             # message suivant comme la fin de celui-ci.
-            return ["BODY[%s]" % section, "{%d}\r\n%s" % (len(section_bytes), section_bytes.decode("latin-1"))]
+            return [name, _literal(data)]
         log.info("élément de FETCH non servi : %s", d)
         return []
 
@@ -605,6 +624,15 @@ def _matches(name: str, pattern: str) -> bool:
     # remplacement de `\%` ne trouvait rien et le motif « % » ne correspondait à RIEN.
     exp = "".join(".*" if c == "*" else "[^/]*" if c == "%" else re.escape(c) for c in pattern)
     return re.match("^" + exp + "$", name, re.I) is not None
+
+
+def _literal(data: bytes) -> str:
+    return "{%d}\r\n%s" % (len(data), data.decode("latin-1"))
+
+
+def _rendered(v) -> str:
+    """déjà mis en forme (la vue lit l'octet) — ou une liste à mettre en forme (les doubles de test)"""
+    return v if isinstance(v, str) else quote(v)
 
 
 _MOIS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1)}

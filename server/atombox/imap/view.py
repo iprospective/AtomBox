@@ -83,44 +83,50 @@ class ServedMessage:
         # Le client peut toujours POSER `\\Deleted` (c'est sa façon de dire « supprime »), et
         # `PERMANENTFLAGS` l'annonce : c'est ce STORE qui déplace vers la corbeille.
 
+    # ── la structure MIME, lue sur l'OCTET stocké (RM3499, `imap/mime.py`) ──────────────────────
+    def _raw(self):
+        if not hasattr(self, "_raw_cache"):
+            self._raw_cache = self._store.read(self._blob) if (self._blob and self._store is not None) else None
+        return self._raw_cache
+
+    def _tree(self):
+        if not hasattr(self, "_tree_cache"):
+            from . import mime
+            raw = self._raw()
+            self._tree_cache = mime.Part(raw) if raw is not None else None
+        return self._tree_cache
+
     def envelope(self):
-        """ENVELOPPE au sens RFC 3501 § 7.4.2 — l'ordre des dix champs est imposé et ne se devine pas"""
+        """ENVELOPE au sens RFC 3501 § 7.4.2, construit sur les EN-TÊTES du message — tous les
+        destinataires compris. L'ancienne version partait des colonnes de la base et rendait
+        l'expéditeur pour From, Sender ET Reply-To, et NIL pour To et Cc."""
+        from . import mime
+        tree = self._tree()
+        if tree is not None: return mime.envelope(tree)
         c = self._c
         one = lambda adr, name: [[name, None, adr.split("@")[0], adr.split("@")[-1]]] if adr else None
         sender = one(c.from_adresse, c.from_nom)
         return [email.utils.format_datetime(c.date_recue) if c.date_recue else None,
                 c.sujet, sender, sender, sender, None, None, None, None, self._message_id]
 
-    def structure(self):
-        """BODYSTRUCTURE minimal : on annonce UNE partie texte de la bonne taille.
-
-        Décrire faux la structure interne serait pire que de ne rien dire : le client s'en sert
-        pour décider quoi télécharger, et irait chercher des parties qui n'existent pas. Tant qu'on
-        ne sait pas la rendre exactement, on annonce le message comme un tout — et `BODY[]` le
-        rend à l'octet."""
+    def structure(self, extended: bool = True):
+        """BODYSTRUCTURE (ou BODY) : la VRAIE arborescence — sans elle, le client ne sait pas qu'il y
+        a des pièces jointes avant d'avoir tout téléchargé."""
+        from . import mime
+        tree = self._tree()
+        if tree is not None: return mime.structure(tree, extended)
         return ["TEXT", "PLAIN", ["CHARSET", "UTF-8"], None, None, "8BIT", self.size,
                 max(1, (self._c.corps_texte or "").count("\n") + 1)]
 
     def section_bytes(self, section: str):
-        raw = self._store.read(self._blob) if self._blob else None
+        """les octets d'une section : `""`, HEADER, TEXT, HEADER.FIELDS (…), et les parties par
+        numéro (`2`, `1.2`, `2.MIME`, `3.HEADER`) — RFC 3501 § 6.4.5"""
+        from . import mime
+        raw = self._raw()
         if raw is None: return None
-        s = (section or "").upper()
-        if s in ("", "TEXT") and s != "TEXT": return raw
-        head, _, body = raw.partition(b"\r\n\r\n")
-        if s == "HEADER": return head + b"\r\n\r\n"
-        if s == "TEXT": return body
-        if s.startswith("HEADER.FIELDS"):
-            fields = {c.strip().lower() for c in s[s.index("(") + 1:s.rindex(")")].split()} if "(" in s else set()
-            kept, keep = [], False
-            for line in head.split(b"\r\n"):
-                if line[:1] in (b" ", b"\t"):                    # une suite de l'en-tête précédent
-                    if keep: kept.append(line)
-                    continue
-                keep = line.split(b":", 1)[0].decode("latin-1", "replace").strip().lower() in fields
-                if keep: kept.append(line)
-            return b"\r\n".join(kept) + b"\r\n\r\n"
-        log.info("section de corps non servie : %r", section)
-        return None
+        out = mime.section(self._tree(), raw, section)
+        if out is None: log.info("section de corps inexistante : %r", section)
+        return out
 
 
 class View:

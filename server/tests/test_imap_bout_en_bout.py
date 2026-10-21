@@ -615,3 +615,32 @@ def test_abonnements_dire_vrai(serveur_imap):
         assert c.unsubscribe("N-existe-pas")[0] == "OK"
     finally:
         c.logout()
+
+
+# ── la structure MIME sur le fil (RM3499) ──────────────────────────────────────────────────────
+def test_le_client_voit_la_piece_jointe_et_la_telecharge_par_tranches(serveur_imap):
+    """Un client affiche le trombone d'après BODYSTRUCTURE, puis télécharge la pièce par TRANCHES :
+    `BODY.PEEK[2]<0.10>` doit revenir sous le nom `BODY[2]<0>`, sinon il ne sait pas la rattacher à
+    sa demande. La structure attendue est celle que Dovecot sert pour les mêmes octets
+    (`test_imap_dovecot.py`)."""
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from test_imap_mime import MESSAGE as COMPOSITE, PDF
+    from atombox.imap import mime
+    c = _connecte(serveur_imap)
+    try:
+        typ, data = c.append("INBOX", None, None, COMPOSITE)
+        uid = re.search(rb"APPENDUID \d+ (\d+)", data[0]).group(1).decode()
+        c.select("INBOX")
+        typ, rendu = c.uid("FETCH", uid, "(BODYSTRUCTURE)")
+        assert typ == "OK"
+        recu = b"".join(x if isinstance(x, bytes) else x[0] + x[1] for x in rendu).decode("latin-1")
+        assert mime.structure(mime.Part(COMPOSITE), True) in recu, recu[:300]
+        assert '("attachment" ("filename" "devis.pdf"))' in recu, "le trombone"
+        typ, rendu = c.uid("FETCH", uid, "(BODY.PEEK[2]<0.10>)")
+        assert typ == "OK" and b"BODY[2]<0> {10}" in rendu[0][0], rendu
+        assert rendu[0][1] == PDF[:10], "la tranche demandée, à l'octet"
+        typ, rendu = c.uid("FETCH", uid, "(BODY.PEEK[2])")
+        assert rendu[0][1] == PDF, "la pièce entière : la tranche exacte des octets stockés"
+    finally:
+        c.logout()
