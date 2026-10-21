@@ -536,3 +536,82 @@ def test_idle_ne_garde_pas_de_transaction_ouverte(serveur_imap, monkeypatch):
         assert c.cmd("DONE", tag="a3")[-1] == "a3 OK IDLE terminé"
     finally:
         c.close()
+
+
+# ── les dossiers depuis le client (RM3499) ──────────────────────────────────────────────────────
+def _noms(c):
+    typ, rows = c.list()
+    assert typ == "OK"
+    return {r.decode("latin-1").rsplit(' "/" ', 1)[1].strip('"') for r in rows if r}
+
+
+def test_creer_renommer_supprimer_un_dossier_depuis_le_client(serveur_imap):
+    """Le geste complet d'un utilisateur de Thunderbird : créer « Projets/Dupont », y ranger un
+    message, renommer le parent — l'enfant et son message suivent —, puis supprimer une fois vidé."""
+    c = _connecte(serveur_imap)
+    try:
+        typ, data = c.create("Projets/Dupont")
+        assert typ == "OK", data
+        noms = _noms(c)
+        assert {"Projets", "Projets/Dupont"} <= noms, "le parent manquant est créé (RFC 3501 § 6.3.3) : %s" % noms
+        assert c.create("Projets/Dupont")[0] == "NO", "créer deux fois est refusé"
+
+        # y ranger un message
+        assert c.select("INBOX")[0] == "OK"
+        typ, d = c.uid("SEARCH", None, "ALL"); uid = d[0].split()[0].decode()
+        assert c.uid("MOVE", uid, "Projets/Dupont")[0] == "OK"
+
+        # renommer le PARENT : l'enfant suit, son message aussi
+        typ, data = c.rename("Projets", "Chantiers")
+        assert typ == "OK", data
+        noms = _noms(c)
+        assert {"Chantiers", "Chantiers/Dupont"} <= noms and "Projets/Dupont" not in noms, noms
+        typ, sel = c.select("Chantiers/Dupont")
+        assert typ == "OK" and int(sel[0]) == 1, "le message est toujours là, sous le nouveau nom : %r" % sel
+
+        # supprimer un dossier PLEIN est refusé (D118 : on ne détruit pas un rangement)
+        c.select("INBOX")
+        typ, data = c.delete("Chantiers/Dupont")
+        assert typ == "NO" and b"INUSE" in data[0], data
+        # le vider, puis supprimer : l'enfant d'abord, le parent ensuite
+        c.select("Chantiers/Dupont")
+        typ, d = c.uid("SEARCH", None, "ALL")
+        assert c.uid("MOVE", d[0].split()[0].decode(), "INBOX")[0] == "OK"
+        c.select("INBOX")
+        assert c.delete("Chantiers")[0] == "NO", "un parent qui a des enfants ne se supprime pas"
+        assert c.delete("Chantiers/Dupont")[0] == "OK"
+        assert c.delete("Chantiers")[0] == "OK"
+        assert not ({"Chantiers", "Chantiers/Dupont"} & _noms(c))
+    finally:
+        c.logout()
+
+
+def test_les_boites_protegees_et_les_boites_d_etat_restent_ce_qu_elles_sont(serveur_imap):
+    c = _connecte(serveur_imap)
+    try:
+        for nom in ("INBOX", "Trash", "Archive"):
+            assert c.delete(nom)[0] == "NO", "%s ne se supprime pas (D047, D183)" % nom
+            assert c.rename(nom, nom + "-bis")[0] == "NO", "%s ne se renomme pas" % nom
+        assert c.create("INBOX")[0] == "NO"
+        # Thunderbird « supprime » un dossier en le rangeant sous la Corbeille : chez nous la
+        # corbeille est un ÉTAT, pas un conteneur — refusé, et la raison est dite
+        assert c.create("Temporaire")[0] == "OK"
+        typ, data = c.rename("Temporaire", "Trash/Temporaire")
+        assert typ == "NO" and b"CANNOT" in data[0], data
+        assert c.delete("Temporaire")[0] == "OK"
+    finally:
+        c.logout()
+
+
+def test_abonnements_dire_vrai(serveur_imap):
+    """Tous les dossiers sont abonnés (LSUB = LIST). S'abonner est vrai ; se désabonner d'un dossier
+    qui existe serait un mensonge, puisque LSUB continuerait de le rendre — refusé ; se désabonner
+    d'un dossier supprimé (ce que fait Thunderbird après DELETE) est vrai."""
+    c = _connecte(serveur_imap)
+    try:
+        assert c.subscribe("INBOX")[0] == "OK"
+        assert c.subscribe("N-existe-pas")[0] == "NO"
+        assert c.unsubscribe("INBOX")[0] == "NO"
+        assert c.unsubscribe("N-existe-pas")[0] == "OK"
+    finally:
+        c.logout()

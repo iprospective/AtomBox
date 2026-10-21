@@ -144,10 +144,32 @@ class View:
         return c
 
     # ── que vois-tu ─────────────────────────────────────────────────────────────────────────────
+    def _boxes(self, compte):
+        """les boîtes du compte, la PRINCIPALE en tête — dans un ordre STABLE.
+
+        Sans ORDER BY, « la première » était celle que PostgreSQL rendait en premier : deux sessions
+        pouvaient ne pas s'accorder sur laquelle porte le nom nu `INBOX`, et un compte à deux boîtes
+        voyait ses dossiers changer de nom d'une connexion à l'autre. uuid v7 : l'ordre de création."""
+        return list(self.s.scalars(select(Boite).join(Acces, Acces.boite_id == Boite.boite_id)
+                                   .where(Acces.compte_id == compte.compte_id, Acces.fin.is_(None))
+                                   .order_by(Boite.boite_id)))
+
+    def _box_for(self, compte, name: str):
+        """(Boite, alias relatif) — à quelle boîte appartient un nom IMAP qu'on va CRÉER.
+
+        Le pendant de `_folders` : la principale porte des noms nus, les autres sont préfixées par
+        leur adresse (`contact@exemple.fr/Projets`)."""
+        boxes = self._boxes(compte)
+        if not boxes: return None, None
+        for b in boxes[1:]:
+            adresse = self.s.get(Adresse, b.adresse_id).adresse_complete
+            if (name or "").lower().startswith(adresse.lower() + "/"):
+                return b, name[len(adresse) + 1:]
+        return boxes[0], name
+
     def _folders(self, compte):
         """(nom IMAP, Dossier) pour tout ce que ce compte peut voir, la boîte principale en tête"""
-        boxes = list(self.s.scalars(select(Boite).join(Acces, Acces.boite_id == Boite.boite_id)
-                                     .where(Acces.compte_id == compte.compte_id, Acces.fin.is_(None))))
+        boxes = self._boxes(compte)
         out = []
         for i, b in enumerate(boxes):
             adresse = self.s.get(Adresse, b.adresse_id).adresse_complete
@@ -311,6 +333,32 @@ class View:
         log.info("APPEND dans « %s » : %s, uid %s%s", name, r.comm_id, r.uid_servi,
                  " (nouveau)" if res.get("nouveau") else " (déjà connu)")
         return (dest.uid_validity_servie or 1, r.uid_servi)
+
+    # ── les dossiers (RM3499) : les MÊMES règles que le webmail, dans `services.folders_util` ──────
+    def create(self, compte, name: str):
+        from ..services import folders_util as f
+        if self.folder_named(compte, name) is not None: raise f.FolderRefused("ce dossier existe déjà", "ALREADYEXISTS")
+        boite, alias = self._box_for(compte, name)
+        if boite is None: raise f.FolderRefused("aucune boîte", "NONEXISTENT")
+        f.create_folder_sync(self.s, boite, alias)
+
+    def rename(self, compte, old: str, new: str):
+        from ..services import folders_util as f
+        d = self.folder_named(compte, old)
+        if d is None: raise f.FolderRefused("boîte aux lettres inconnue : %s" % old, "NONEXISTENT")
+        boite, alias = self._box_for(compte, new)
+        if boite is None or boite.boite_id != d.boite_id:
+            raise f.FolderRefused("un dossier ne change pas d'adresse", "CANNOT")
+        f.rename_folder_sync(self.s, boite, d, alias)
+
+    def delete(self, compte, name: str):
+        from ..services import folders_util as f
+        d = self.folder_named(compte, name)
+        if d is None: raise f.FolderRefused("boîte aux lettres inconnue : %s" % name, "NONEXISTENT")
+        try:
+            f.delete_folder_sync(self.s, self.s.get(Boite, d.boite_id), d)
+        except PermissionError as e:
+            raise f.FolderRefused(str(e), "CANNOT")
 
     def store_flags(self, compte, mailbox, uids: list[int], to_add: list[str], to_remove: list[str]):
         """STORE — les drapeaux qu'on sait écrire, et rien d'autre.

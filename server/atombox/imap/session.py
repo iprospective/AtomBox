@@ -407,6 +407,59 @@ class Session:
             return lines + ["%s OK APPEND (déjà présent dans une autre boîte de cette adresse)" % tag]
         return lines + ["%s OK [APPENDUID %d %d] APPEND" % (tag, validity, uid)]
 
+    # ── les dossiers (RM3499) ───────────────────────────────────────────────────────────────────
+    def _folder_cmd(self, tag, what, fn, *names):
+        from ..services.folders_util import FolderRefused
+        try:
+            fn(self.compte, *[str(n) for n in names])
+        except FolderRefused as e:
+            self.view.rollback()
+            return ["%s NO [%s] %s" % (tag, e.code, e)]
+        return ["%s OK %s" % (tag, what)]
+
+    @authenticated
+    def _c_create(self, tag, args):
+        if not args: return ["%s BAD CREATE demande un nom" % tag]
+        if str(args[0]).strip("/").upper() == "INBOX": return ["%s NO [ALREADYEXISTS] INBOX existe toujours" % tag]
+        return self._folder_cmd(tag, "CREATE", self.view.create, args[0])
+
+    @authenticated
+    def _c_rename(self, tag, args):
+        if len(args) < 2: return ["%s BAD RENAME demande un ancien et un nouveau nom" % tag]
+        r = self._folder_cmd(tag, "RENAME", self.view.rename, args[0], args[1])
+        # la boîte ouverte a changé de nom : la session doit la suivre, sinon le prochain NOOP la
+        # croirait disparue et annoncerait l'EXPUNGE de chacun de ses messages
+        if r[-1].startswith(tag + " OK") and self.mailbox is not None and self.mailbox.name.lower() == str(args[0]).lower():
+            self.mailbox = self.view.open_mailbox(self.compte, str(args[1])) or self.mailbox
+        return r
+
+    @authenticated
+    def _c_delete(self, tag, args):
+        if not args: return ["%s BAD DELETE demande un nom" % tag]
+        if self.mailbox is not None and self.mailbox.name.lower() == str(args[0]).lower():
+            return ["%s NO [INUSE] la boîte est ouverte — la fermer d'abord" % tag]
+        return self._folder_cmd(tag, "DELETE", self.view.delete, args[0])
+
+    @authenticated
+    def _c_subscribe(self, tag, args):
+        """Tout dossier est ABONNÉ chez nous : LSUB rend ce que rend LIST. S'abonner est donc
+        toujours vrai — si le dossier existe."""
+        if not args: return ["%s BAD SUBSCRIBE demande un nom" % tag]
+        if self.view.folder_named(self.compte, str(args[0])) is None:
+            return ["%s NO [NONEXISTENT] boîte aux lettres inconnue" % tag]
+        return ["%s OK SUBSCRIBE" % tag]
+
+    @authenticated
+    def _c_unsubscribe(self, tag, args):
+        """Se désabonner d'un dossier qui EXISTE serait un mensonge : LSUB continuerait de le rendre,
+        puisque l'abonnement n'est pas conservé (il demanderait une colonne — à l'étage 3 de RM3351,
+        s'il le faut). On le dit. Se désabonner d'un dossier SUPPRIMÉ est le geste que fait
+        Thunderbird après un DELETE : là, c'est vrai, et on répond OK."""
+        if not args: return ["%s BAD UNSUBSCRIBE demande un nom" % tag]
+        if self.view.folder_named(self.compte, str(args[0])) is None:
+            return ["%s OK UNSUBSCRIBE" % tag]
+        return ["%s NO [CANNOT] les abonnements ne sont pas conservés : tous les dossiers restent affichés" % tag]
+
     @authenticated
     def _c_select(self, tag, args): return self._select(tag, args, "SELECT")
 
