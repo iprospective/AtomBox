@@ -272,6 +272,7 @@ class Rattachement(Base):
     __tablename__ = "rattachement"
     comm_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("comm.comm_id", name="fk_rattachement_comm_id"), nullable=False)
     boite_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("boite.boite_id", name="fk_rattachement_boite_id"), nullable=False)
+    sens: Mapped[str] = mapped_column(Text, nullable=False)
     compte_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("compte.compte_id", name="fk_rattachement_compte_id"), nullable=True)
     correspondant_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("correspondant.correspondant_id", name="fk_rattachement_correspondant_id"), nullable=True)
     repondu_le: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -302,7 +303,7 @@ class Rattachement(Base):
     correspondant: Mapped[Correspondant | None] = relationship("Correspondant", foreign_keys=[correspondant_id])
     dossier: Mapped[Dossier | None] = relationship("Dossier", foreign_keys=[dossier_id])
     dossier_origine: Mapped[Dossier | None] = relationship("Dossier", foreign_keys=[dossier_origine_id])
-    __table_args__ = (PrimaryKeyConstraint("comm_id", "boite_id", name="pk_rattachement"), CheckConstraint("\"status\" IN ('new', 'todo', 'doing', 'waiting', 'processed')", name="ck_rattachement_status"), CheckConstraint("\"exit_reason\" IN ('processed', 'archived', 'deleted', 'junk')", name="ck_rattachement_exit_reason"),)
+    __table_args__ = (PrimaryKeyConstraint("comm_id", "boite_id", "sens", name="pk_rattachement"), CheckConstraint("\"sens\" IN ('in', 'out')", name="ck_rattachement_sens"), CheckConstraint("\"status\" IN ('new', 'todo', 'doing', 'waiting', 'processed')", name="ck_rattachement_status"), CheckConstraint("\"exit_reason\" IN ('processed', 'archived', 'deleted', 'junk')", name="ck_rattachement_exit_reason"),)
 
 class ReadState(Base):
     """LES FAITS DE LECTURE, par personne (D175 § 1) : ouvert quand, revu quand, combien de fois, et le drapeau — personnel par"""

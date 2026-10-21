@@ -23,7 +23,7 @@ async def listing(s: AsyncSession, compte, limit: int = 100) -> list[dict]:
     if not boites: return []
     rows = (await s.execute(
         select(Comm).join(Rattachement, Rattachement.comm_id == Comm.comm_id)
-        .where(Rattachement.boite_id.in_(boites), Comm.sens == "out")
+        .where(Rattachement.boite_id.in_(boites), Rattachement.sens == "out")      # une place ÉMISE (D185)
         .order_by(Comm.date_recue.desc()).limit(limit))).scalars().all()
     out, seen = [], set()
     for c in rows:
@@ -43,7 +43,8 @@ async def listing(s: AsyncSession, compte, limit: int = 100) -> list[dict]:
 async def for_message(s: AsyncSession, compte, comm_id) -> dict | None:
     """le suivi d'UN message — ce que la vue du message affiche sous un message émis"""
     boites = [b.boite_id for b in await account_mailboxes(s, compte)]
-    r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, Rattachement.boite_id.in_(boites)).limit(1))
+    r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, Rattachement.boite_id.in_(boites),
+                                                  Rattachement.sens == "out").limit(1))
     if not r: return None
     e = await s.scalar(select(Envoi).where(Envoi.comm_id == comm_id))
     ev = await s.scalar(select(Evenement).where(Evenement.type == "message.a_envoyer",
@@ -92,10 +93,11 @@ async def follow_up(s: AsyncSession, compte, comm_id) -> dict | None:
     l'ancien a été purgé. Idempotent — relancer deux fois ne duplique pas l'envoi (le module
     d'émission réutilise la ligne `envoi` du message)."""
     boites = [b.boite_id for b in await account_mailboxes(s, compte)]
-    r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, Rattachement.boite_id.in_(boites)).limit(1))
+    r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, Rattachement.boite_id.in_(boites),
+                                                  Rattachement.sens == "out").limit(1))
     if not r: return None
     c = await s.get(Comm, comm_id)
-    if not c or c.sens != "out": return None
+    if not c: return None
     dest = [a for (a,) in (await s.execute(
         select(Adresse.adresse_complete).join(EnvoiDestinataire, EnvoiDestinataire.adresse_id == Adresse.adresse_id)
         .join(Envoi, Envoi.envoi_id == EnvoiDestinataire.envoi_id).where(Envoi.comm_id == comm_id))).all()]

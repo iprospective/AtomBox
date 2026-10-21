@@ -260,6 +260,7 @@ CREATE TABLE "boite" (
 CREATE TABLE "rattachement" (
   "comm_id" uuid NOT NULL,
   "boite_id" uuid NOT NULL,
+  "sens" text NOT NULL,
   "compte_id" uuid,
   "correspondant_id" uuid,
   "repondu_le" timestamptz,
@@ -284,7 +285,8 @@ CREATE TABLE "rattachement" (
   "personnel" boolean NOT NULL,
   "echeance_le" timestamptz,
   "gele" boolean NOT NULL,
-  CONSTRAINT "pk_rattachement" PRIMARY KEY ("comm_id", "boite_id"),
+  CONSTRAINT "pk_rattachement" PRIMARY KEY ("comm_id", "boite_id", "sens"),
+  CONSTRAINT "ck_rattachement_sens" CHECK ("sens" IN ('in', 'out')),
   CONSTRAINT "ck_rattachement_status" CHECK ("status" IN ('new', 'todo', 'doing', 'waiting', 'processed')),
   CONSTRAINT "ck_rattachement_exit_reason" CHECK ("exit_reason" IN ('processed', 'archived', 'deleted', 'junk'))
 );

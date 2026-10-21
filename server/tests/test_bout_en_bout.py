@@ -513,3 +513,25 @@ def test_5_les_uid_servis_tiennent_leurs_invariants(chaine):
                                   "corps": "sans passer par IMAP"}).json()["message"]
     assert uid(ecrit["id"]) == sent_avant, "un message écrit dans AtomBox reçoit un UID tout de suite"
     assert counters()["Sent"] == sent_avant + 1, "pris au compteur des envoyés, sans rien demander au fournisseur"
+
+
+def test_6_un_envoye_du_telephone_est_range_comme_emis(chaine):
+    """D185 (RM3504) — la relève décide du sens par le DOSSIER du fournisseur. Un message envoyé depuis
+    le téléphone arrive dans ses Envoyés : il est ÉMIS. Mesuré le 21/10 : la relève passait « reçu »
+    pour tout, et deux messages de nos Envoyés étaient marqués reçus."""
+    from sqlalchemy import select
+    from atombox.schema.models import CommEmail, Rattachement
+    ch = chaine
+    mid = "<telephone-%s@exemple.fr>" % uuid.uuid4().hex
+    ch.imap.put(message("Envoyé du téléphone", de="Mathieu <contact@exemple.fr>", mid=mid), dossier="Sent")
+    import atombox.db as db
+    s = db.session(os.environ["DATABASE_URL"])
+    try:
+        def place():
+            s.expire_all()
+            e = s.scalar(select(CommEmail).where(CommEmail.message_id == mid))
+            return e and s.scalar(select(Rattachement).where(Rattachement.comm_id == e.comm_id))
+        r = ch.wait(place, "la relève ingère l'envoyé du téléphone")
+        assert r.sens == "out", "un message des Envoyés du fournisseur est ÉMIS"
+    finally:
+        s.close()

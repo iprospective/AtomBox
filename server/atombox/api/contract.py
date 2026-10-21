@@ -211,6 +211,7 @@ class Rattachement(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     comm_id: uuid.UUID
     boite_id: uuid.UUID
+    sens: str
     compte_id: uuid.UUID | None = None
     correspondant_id: uuid.UUID | None = None
     repondu_le: datetime.datetime | None = None

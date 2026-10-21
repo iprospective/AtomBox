@@ -15,7 +15,7 @@ def test_serialisation_porte_le_contrat():
     did = uuid.uuid4(); inbox = Dossier(dossier_id=did, nom="INBOX", alias_imap="INBOX"); trash = Dossier(dossier_id=uuid.uuid4(), nom="Trash", alias_imap="Trash")
     ds = {did: inbox, trash.dossier_id: trash}
     c = Comm(comm_id=uuid.uuid4(), sujet="Devis 12", from_nom="Jean", from_adresse="jean@x.fr", date_recue=datetime(2026, 9, 4, 9, 12, tzinfo=timezone.utc), thread_id=None, nb_pieces_jointes=1, taille=2048, sens="in", nature="humain", snippet="Bonjour")
-    r = Rattachement(comm_id=c.comm_id, boite_id=uuid.uuid4(), status="new", dossier_id=trash.dossier_id, dossier_origine_id=did, exit_reason=None)
+    r = Rattachement(comm_id=c.comm_id, boite_id=uuid.uuid4(), sens="in", status="new", dossier_id=trash.dossier_id, dossier_origine_id=did, exit_reason=None)
     # `etat` non passé = personne n'y a touché : c'est le cas de la très grande majorité des lignes,
     # et c'est ce qui rend la table des faits de lecture CREUSE (D175 § 5).
     o = svc.serialize(r, c, ds, "contact@exemple.fr")
@@ -382,3 +382,55 @@ def test_parcours_du_webmail(monde):
     assert c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=h).json()["total"] == 2
     assert c.get("/api/v1/messages/" + str(uuid.uuid4()), headers=h).status_code == 404
     assert c.get("/api/v1/messages", headers={}).status_code == 401
+
+
+def test_un_message_envoye_a_soi_meme_apparait_aussi_en_reception(monde):
+    """D185 (RM3504) — envoyé de contact@exemple.fr à contact@exemple.fr, le message a DEUX places :
+    émise dans Envoyés, reçue dans la boîte de réception. Constaté le 21/10 en produit : l'exemplaire
+    livré était fusionné avec l'envoyé (même identité, D064) et n'apparaissait nulle part.
+
+    Arbitré : l'exemplaire reçu arrive LU (ce qu'on écrit, on l'a lu), et les deux places ont deux vies."""
+    from fastapi.testclient import TestClient
+    from atombox.api.app import create_app
+    from atombox.ingestion.ingestion import ingest
+    from atombox.schema.models import Boite, Dossier
+    from atombox.store import Store
+    from sqlalchemy import select
+    import atombox.db as db; db._async.clear(); db._sync.clear()
+    c = TestClient(create_app())
+    jeton = c.post("/api/v1/session", json={"utilisateur": "mathieu", "mot_de_passe": "secret"}).json()["jeton"]
+    h = {"Authorization": "Bearer " + jeton}
+
+    # 1. on s'écrit, depuis le webmail : une place ÉMISE, dans Envoyés
+    env = c.post("/api/v1/messages", json={"boite": "contact@exemple.fr", "a": "contact@exemple.fr",
+                                           "sujet": "Note pour moi", "corps": "à ne pas oublier"}, headers=h).json()
+    cid = env["message"]["id"]
+    assert not cid.endswith(".out"), "tant qu'il n'a qu'une place, l'identifiant ne change pas"
+
+    # 2. le fournisseur le LIVRE dans la boîte de réception, et la relève l'ingère — même message
+    s = monde["session"]; s.expire_all()
+    store = Store(os.environ["ATOMBOX_STORE"])
+    inbox = s.scalar(select(Dossier).where(Dossier.alias_imap == "INBOX"))
+    r = ingest(s, store, inbox.boite_id, store.read(cid), dossier_id=inbox.dossier_id, sens="in")
+    assert str(r["comm_id"]) == cid and r["nouveau"] is False, "le MÊME message (D064), pas un double"
+
+    # 3. il est dans la boîte de réception, LU, sous son identifiant nu…
+    recu = [m for m in c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=h).json()["messages"] if m["sujet"] == "Note pour moi"]
+    assert len(recu) == 1 and recu[0]["id"] == cid and recu[0]["sens"] == "in", recu
+    assert recu[0]["lu"] is True, "ce qu'on écrit, on l'a lu (D185 § 3, arbitré)"
+    # … ET toujours dans Envoyés, sous l'identifiant de sa place émise
+    envoye = [m for m in c.get("/api/v1/messages", params={"dossier": "sent"}, headers=h).json()["messages"] if m["sujet"] == "Note pour moi"]
+    assert len(envoye) == 1 and envoye[0]["id"] == cid + ".out" and envoye[0]["sens"] == "out", envoye
+
+    # 4. deux vies : mettre l'exemplaire REÇU à la corbeille laisse l'émis dans Envoyés
+    p = c.patch("/api/v1/messages/" + cid + "/rattachement", json={"dossier": "trash"}, headers=h).json()
+    assert p["ok"] and p["message"]["dossier"] == "trash"
+    assert [m for m in c.get("/api/v1/messages", params={"dossier": "sent"}, headers=h).json()["messages"]
+            if m["sujet"] == "Note pour moi"], "l'exemplaire émis n'a pas bougé"
+    # et l'inverse : archiver l'ÉMIS, par son identifiant, ne touche pas le reçu
+    p = c.patch("/api/v1/messages/" + cid + ".out/rattachement", json={"motif_sortie": "archived"}, headers=h).json()
+    assert p["ok"] and p["message"]["id"] == cid + ".out" and p["message"]["motif_sortie"] == "archived"
+    assert [m for m in c.get("/api/v1/messages", params={"dossier": "trash"}, headers=h).json()["messages"]
+            if m["sujet"] == "Note pour moi"], "l'exemplaire reçu est resté à la corbeille"
+    assert c.get("/api/v1/messages/" + cid + ".out", headers=h).json()["sens"] == "out"
+    assert c.get("/api/v1/messages/" + cid + ".nimporte", headers=h).status_code == 404

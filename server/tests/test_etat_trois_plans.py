@@ -70,7 +70,7 @@ def monde(tmp_path):
                date_ingestion=datetime.now(timezone.utc), sens="in", nature="humain",
                from_adresse="client@x.fr", sujet="Devis", taille=10, nb_pieces_jointes=0,
                est_chiffre=False, est_signe=False))
-    s.add(Rattachement(comm_id=cid, boite_id=boite.boite_id, status="new", personnel=False,
+    s.add(Rattachement(comm_id=cid, boite_id=boite.boite_id, sens="in", status="new", personnel=False,
                        gele=False, dossier_id=inbox.dossier_id, uid_servi=1))
     s.commit()
 
@@ -289,7 +289,7 @@ def test_deplacer_vers_une_boite_qui_utilise_deja_cet_uid(monde):
                date_ingestion=datetime.now(timezone.utc), sens="in", nature="humain",
                from_adresse="squat@x.fr", taille=1, nb_pieces_jointes=0,
                est_chiffre=False, est_signe=False))
-    s.add(Rattachement(comm_id=autre, boite_id=monde["boite_id"], status="new", personnel=False,
+    s.add(Rattachement(comm_id=autre, boite_id=monde["boite_id"], sens="in", status="new", personnel=False,
                        gele=False, dossier_id=corbeille.dossier_id, uid_servi=uid_occupe,
                        exit_reason="deleted"))
     corbeille.uid_servi_suivant = max(corbeille.uid_servi_suivant or 1, uid_occupe + 1)

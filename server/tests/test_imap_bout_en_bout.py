@@ -711,3 +711,31 @@ def test_un_dossier_accentue_voyage_en_modified_utf7(serveur_imap):
         assert c.delete('"Pi&AOg-ces jointes"')[0] == "OK"
     finally:
         c.logout()
+
+
+def test_un_message_envoye_a_soi_meme_est_dans_les_deux_boites(serveur_imap):
+    """D185 (RM3504) — côté Thunderbird : l'exemplaire émis dans Sent, l'exemplaire reçu dans INBOX,
+    chacun sous SON UID. Avant D185, le reçu était fusionné et n'apparaissait nulle part."""
+    from atombox.ingestion.ingestion import ingest
+    from atombox.schema.models import Dossier
+    from sqlalchemy import select
+    s = serveur_imap["session"]
+    soi = ENVOYE.replace(b"To: Client <client@client.example>", b"To: Mathieu <contact@exemple.fr>") \
+                .replace(b"<devis-118@", b"<soi-meme@").replace(b"Devis 2026-118", b"Note pour moi")
+    c = _connecte(serveur_imap)
+    try:
+        typ, data = c.append("Sent", "(\\Seen)", None, soi)
+        uid_sent = int(re.search(rb"APPENDUID \d+ (\d+)", data[0]).group(1))
+        # le fournisseur livre l'exemplaire dans INBOX, la relève l'ingère
+        s.expire_all()
+        inbox = s.scalar(select(Dossier).where(Dossier.alias_imap == "INBOX"))
+        ingest(s, serveur_imap["magasin"], inbox.boite_id, soi, dossier_id=inbox.dossier_id, sens="in")
+        for boite in ("INBOX", "Sent"):
+            c.select(boite)
+            typ, d = c.uid("SEARCH", None, "SUBJECT", '"Note pour moi"')
+            assert d[0].split(), "%s : le message envoyé à soi-même y est" % boite
+            if boite == "Sent": assert int(d[0].split()[0]) == uid_sent
+            typ, rendu = c.uid("FETCH", d[0].split()[0].decode(), "(BODY.PEEK[])")
+            assert rendu[0][1] == soi, "%s : l'octet exact" % boite
+    finally:
+        c.logout()

@@ -143,6 +143,27 @@ def _tag_condition(axe: str, val: str | None):
 def _scope(compte_boites):
     return Rattachement.boite_id.in_(compte_boites)
 
+
+def _place(comm_id, boites, sens=None):
+    """LA place d'un message pour ce compte (D185) : celle du sens demandé, sinon la REÇUE si elle
+    existe (`in` < `out`), sinon la seule — un ordre, jamais le hasard d'un `limit(1)`"""
+    q = select(Rattachement).where(Rattachement.comm_id == comm_id, _scope(boites))
+    if sens: q = q.where(Rattachement.sens == sens)
+    return q.order_by(Rattachement.sens).limit(1)
+
+
+async def twins(s: AsyncSession, places) -> set:
+    """les (message, boîte) qui ont DEUX places — reçue et émise : leur place émise prend « .out »"""
+    outs = [(r.comm_id, r.boite_id) for r in places if r.sens == "out"]
+    if not outs: return set()
+    rows = (await s.execute(select(Rattachement.comm_id, Rattachement.boite_id)
+                            .where(Rattachement.sens == "in", Rattachement.comm_id.in_([c for c, _ in outs])))).all()
+    return set(rows) & set(outs)
+
+
+def place_id(r: Rattachement, twin: bool = False) -> str:
+    return str(r.comm_id) + (".out" if twin and r.sens == "out" else "")
+
 async def _folders_by_id(s: AsyncSession, boites) -> dict:
     ds = list(await s.scalars(select(Dossier).where(Dossier.boite_id.in_(boites))))
     return {d.dossier_id: d for d in ds}
@@ -311,7 +332,7 @@ async def listing(s: AsyncSession, compte: Compte, dossier: str, kind: str | Non
         q = q.where(_folder_condition(dossier, kind, ds, compte))
     est_vue = dossier in VIEWS
     if not tout:
-        if sens in ("in", "out"): q = q.where(Comm.sens == sens)
+        if sens in ("in", "out"): q = q.where(Rattachement.sens == sens)      # le rôle de la PLACE (D185)
         if statut and statut != "tous": q = q.where(Rattachement.status == statut)
         # « tous » : en file, traités et archivés — c'est le défaut d'une branche de CLASSEMENT (D166).
         # La règle « traité sort de la file » (D014/D030) vaut pour une file de travail ; appliquée
@@ -340,19 +361,20 @@ async def listing(s: AsyncSession, compte: Compte, dossier: str, kind: str | Non
     from .tags import tags_of
     tags = await tags_of(s, [c.comm_id for _, c in lines])
     etats = await personal.states_of(s, compte.compte_id, [c.comm_id for _, c in lines])
+    deux = await twins(s, [r for r, _ in lines])
     return [serialize(r, c, ds, adresses.get(r.boite_id), extra={"tags": tags.get(c.comm_id, [])},
-                       etat=etats.get((r.comm_id, r.boite_id)))
+                       etat=etats.get((r.comm_id, r.boite_id)), twin=(r.comm_id, r.boite_id) in deux)
             for r, c in lines]
 
-def serialize(r: Rattachement, c: Comm, ds: dict, boite_adresse: str | None, complet: bool = False, extra: dict | None = None, etat: dict | None = None) -> dict:
+def serialize(r: Rattachement, c: Comm, ds: dict, boite_adresse: str | None, complet: bool = False, extra: dict | None = None, etat: dict | None = None, twin: bool = False) -> dict:
     """`etat` est l'état PERSONNEL du compte qui regarde (D175) : il ne se lit plus sur le
     rattachement, donc il ne peut plus être deviné ici — il se passe. Absent = personne n'y a
     touché, ce qui est le cas de la grande majorité des lignes."""
     origine = short_folder_id(ds.get(r.dossier_origine_id)) if r.dossier_origine_id else short_folder_id(ds.get(r.dossier_id))
     current = short_folder_id(ds.get(r.dossier_id))
-    o = { "id": str(c.comm_id), "sujet": c.sujet, "from_nom": c.from_nom, "from_adresse": c.from_adresse,
+    o = { "id": place_id(r, twin), "sujet": c.sujet, "from_nom": c.from_nom, "from_adresse": c.from_adresse,
           "date_recue": iso(c.date_recue), "thread_id": str(c.thread_id) if c.thread_id else None,
-          "nb_pieces_jointes": c.nb_pieces_jointes, "taille": c.taille, "sens": c.sens, "nature": c.nature, "snippet": c.snippet,
+          "nb_pieces_jointes": c.nb_pieces_jointes, "taille": c.taille, "sens": r.sens, "nature": c.nature, "snippet": c.snippet,
           "boite": boite_adresse, "statut": r.status, "sorti_le": iso(exit_date(r)), "motif_sortie": r.exit_reason,
           "statut_le": iso(r.status_at), "traite_le": iso(r.processed_at), "archive_le": iso(r.archived_at),
           **personal.serialize_state(etat),
@@ -375,9 +397,9 @@ def _composition(r: Rattachement, c: Comm, ds: dict, adresse: str, dest: list, c
             "a": ", ".join(dest), "cc": ", ".join(copies), "sujet": c.sujet or "",
             "corps": corps, "pieces_jointes": [], "reference": ref}
 
-async def detail(s: AsyncSession, compte: Compte, comm_id, store=None) -> dict | None:
+async def detail(s: AsyncSession, compte: Compte, comm_id, sens=None, store=None) -> dict | None:
     boites = [b.boite_id for b in await account_mailboxes(s, compte)]
-    r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, _scope(boites)).limit(1))
+    r = await s.scalar(_place(comm_id, boites, sens))
     if not r: return None
     c = await s.get(Comm, comm_id); e = await s.get(CommEmail, comm_id); ds = await _folders_by_id(s, boites)
     boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
@@ -398,7 +420,8 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, store=None) -> dict |
     ref = str(provenance) if provenance else None
     to_folder = await _encapsulated_messages(s, comm_id, boites, pjs)      # D168
     etats = await personal.states_of(s, compte.compte_id, [comm_id])
-    return serialize(r, c, ds, adresse, True, etat=etats.get((r.comm_id, r.boite_id)), extra={
+    twin = bool(await twins(s, [r]))
+    return serialize(r, c, ds, adresse, True, etat=etats.get((r.comm_id, r.boite_id)), twin=twin, extra={
         "tags": (await tags_of(s, [comm_id])).get(comm_id, []), "reference": ref,
         "destinataires": list(dest) + list(copies), "composition": _composition(r, c, ds, adresse, dest, copies, corps, ref),
         "corps": corps, "reponse_possible": e.reponse_possible if e else None, "list_id": e.list_id if e else None,
@@ -415,7 +438,7 @@ async def attachment(s: AsyncSession, compte: Compte, comm_id, pj_id, store=None
     qu'un exécutable nommé `facture.pdf` s'ouvre comme un PDF. Et le nom est nettoyé avant de partir
     dans un en-tête — un nom de fichier vient du message, donc de l'extérieur."""
     boites = [b.boite_id for b in await account_mailboxes(s, compte)]
-    r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, _scope(boites)).limit(1))
+    r = await s.scalar(_place(comm_id, boites))
     if not r: return None
     line = await s.scalar(select(CommPieceJointe).where(CommPieceJointe.comm_id == comm_id,
                                                         CommPieceJointe.piece_jointe_id == pj_id).limit(1))
@@ -481,7 +504,7 @@ async def thread(s: AsyncSession, compte: Compte, comm_id) -> list[dict]:
         out.append(serialize(r, cc, ds, adresses.get(r.boite_id), etat=etats.get((r.comm_id, r.boite_id))))
     return out
 
-async def patch(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict | None:
+async def patch(s: AsyncSession, compte: Compte, comm_id, patch: dict, sens=None) -> dict | None:
     """Le rattachement ET l'état personnel du compte — jamais le message.
 
     TROIS PLANS, TROIS ENDROITS (D175), et ce point de passage unique est le seul qui les connaisse
@@ -495,7 +518,7 @@ async def patch(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict |
         « traité le 3, puis archivé le 10 » ne serait lisible nulle part.
     """
     boites = [b.boite_id for b in await account_mailboxes(s, compte)]
-    r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, _scope(boites)).limit(1))
+    r = await s.scalar(_place(comm_id, boites, sens))
     if not r: return None
     ds = await _folders_by_id(s, boites)
     n = 0; dossier_avant = r.dossier_id
@@ -581,15 +604,16 @@ async def patch(s: AsyncSession, compte: Compte, comm_id, patch: dict) -> dict |
     if n and not sync.down_sync() and any(k in (patch or {}) for k in ("lu", "drapeau", "dossier", "suppr")):
         from ..modules import events
         await events.emit_async(s, "rattachement.change",
-                                       {"comm_id": str(comm_id), "boite_id": str(r.boite_id),
+                                       {"comm_id": str(comm_id), "boite_id": str(r.boite_id), "sens": r.sens,
                                         "dossier_avant": str(dossier_avant) if dossier_avant else None})
     await s.commit()
     c = await s.get(Comm, comm_id); boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
     etats = await personal.states_of(s, compte.compte_id, [comm_id])
-    return {"modifies": n, "message": serialize(r, c, ds, adresse, etat=etats.get((r.comm_id, r.boite_id)))}
+    return {"modifies": n, "message": serialize(r, c, ds, adresse, etat=etats.get((r.comm_id, r.boite_id)),
+                                                 twin=bool(await twins(s, [r])))}
 
-async def detach(s: AsyncSession, compte: Compte, comm_id) -> bool:
-    r = await patch(s, compte, comm_id, {"suppr": True})
+async def detach(s: AsyncSession, compte: Compte, comm_id, sens=None) -> bool:
+    r = await patch(s, compte, comm_id, {"suppr": True}, sens=sens)
     return r is not None
 
 def atombox_host() -> str:
@@ -785,10 +809,10 @@ async def replace_draft(s: AsyncSession, compte: Compte, comm_id, corps: dict, s
     `composition` : or un simple réenregistrement n'en envoie pas non plus, et il serait parti tout
     seul. Une action qui expédie du courrier ne se devine pas."""
     boites = [b.boite_id for b in await account_mailboxes(s, compte)]
-    r = await s.scalar(select(Rattachement).where(Rattachement.comm_id == comm_id, Rattachement.boite_id.in_(boites)).limit(1))
+    r = await s.scalar(_place(comm_id, boites, "out"))          # un brouillon est une place ÉMISE
     if not r: return None
     c = await s.get(Comm, comm_id); ds = await _folders_by_id(s, boites)
-    if c is None or c.sens != "out" or short_folder_id(ds.get(r.dossier_id)) != "drafts":
+    if c is None or r.sens != "out" or short_folder_id(ds.get(r.dossier_id)) != "drafts":
         return None                       # on ne réécrit QUE des brouillons : un message est un fait (D029)
     boite = await s.get(Boite, r.boite_id); adresse = (await s.get(Adresse, boite.adresse_id)).adresse_complete
     now = datetime.now(timezone.utc)
@@ -881,7 +905,7 @@ async def create(s: AsyncSession, compte: Compte, corps: dict, store=None, ip_cl
     s.add(c)
     s.add(CommEmail(comm_id=comm_id, message_id=a.message_id, headers=a.headers, blob_ref=raw, empreinte=identity_fingerprint(a), structure_mime=a.structure_mime, reponse_possible="oui"))
     from ..served_uid import assign_async as assign_uid
-    s.add(Rattachement(comm_id=comm_id, boite_id=boite.boite_id, compte_id=compte.compte_id,
+    s.add(Rattachement(comm_id=comm_id, boite_id=boite.boite_id, sens="out", compte_id=compte.compte_id,
                        status="new", personnel=False, gele=False,
                        dossier_id=cible.dossier_id if cible else None,
                        uid_servi=await assign_uid(s, cible.dossier_id if cible else None)))
@@ -902,6 +926,6 @@ async def create(s: AsyncSession, compte: Compte, corps: dict, store=None, ip_cl
             if role in ("to", "cc", "bcc") and adr and adr not in seen: seen.add(adr); enveloppe.append(adr)
         await events.emit_async(s, "message.a_envoyer", {"comm_id": str(comm_id), "boite_id": str(boite.boite_id), "destinataires": enveloppe})
     await s.commit()
-    r = await s.get(Rattachement, (comm_id, boite.boite_id))
+    r = await s.get(Rattachement, (comm_id, boite.boite_id, "out"))
     return serialize(r, c, ds, adresses[boite.boite_id], extra={"destinataires": corps.get("destinataires") or [], "corps": corps.get("corps") or "",
                                                                  "composition": corps.get("composition"), "reference": str(src_id) if src_id else None})
