@@ -76,10 +76,15 @@ etat() {
   bash "$SRV/tools/imapd.sh" status 2>/dev/null | sed 's/^/  imap  /'
   # « il tourne » ne veut pas dire « on peut lui parler ». Un serveur sur 127.0.0.1 dans un
   # conteneur est invisible depuis la machine hôte, et rien dans son état ne le laisse voir.
+  # Le port vient de l'environnement des services : il est 1993 avec TLS, 1143 sans.
+  local port; port="$(grep -m1 '^ATOMBOX_IMAPD_PORT=' /etc/atombox/env 2>/dev/null | cut -d= -f2 | tr -d "\"' ")"
+  port="${port:-1143}"
+  local tls="clair"; grep -q '^ATOMBOX_IMAPD_CERT=.' /etc/atombox/env 2>/dev/null && tls="TLS"
+  info "imap               port $port, $tls"
   local mienne; mienne="$(ip -4 addr show 2>/dev/null | grep -oE 'inet 10\.[0-9.]+|inet 192\.168\.[0-9.]+' | head -1 | awk '{print $2}')"
-  if [ -n "$mienne" ] && ! ss -ltn 2>/dev/null | grep -qE "(0\.0\.0\.0|\*|$mienne):1143"; then
-    info "⚠ le serveur IMAP n'écoute QUE la boucle locale du conteneur : un client sur la machine"
-    info "  hôte ne peut pas s'y connecter. Poser ATOMBOX_IMAPD_LISTEN=$mienne dans /etc/atombox/env."
+  if [ -n "$mienne" ] && ! ss -ltn 2>/dev/null | grep -qE "(0\.0\.0\.0|\*|$mienne):$port\b"; then
+    info "⚠ le serveur IMAP n'écoute pas $mienne:$port : un client sur la machine hôte ne peut pas"
+    info "  s'y connecter. ATOMBOX_IMAPD_LISTEN=$mienne dans /etc/atombox/env — avec un certificat."
   fi
 }
 

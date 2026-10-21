@@ -32,7 +32,7 @@ def serveur_imap(tmp_path_factory):
     url = os.environ.get("DATABASE_URL")
     if not url: pytest.skip("DATABASE_URL absent")
     import psycopg, re as _re
-    from atombox.db import session as open_mailbox
+    from atombox.db import session as open_db
     from atombox.store import Store
     from atombox.api.security import hash_password
     from atombox.ingestion.ingestion import address_of, ingest
@@ -46,7 +46,7 @@ def serveur_imap(tmp_path_factory):
     with psycopg.connect(u) as c:
         c.execute(open(os.path.join(ici, "..", "atombox", "schema", "schema.sql"), encoding="utf-8").read()); c.commit()
     store = Store(str(tmp_path_factory.mktemp("magasin")))
-    s = open_mailbox(u)
+    s = open_db(u)
     a = address_of(s, "contact@exemple.fr")
     mailbox = Boite(boite_id=uuid7(), adresse_id=a.adresse_id, domaine_id=a.domaine_id, type="partagee"); s.add(mailbox)
     compte = Compte(compte_id=uuid7(), login="mathieu", nom="Mathieu", actif=True,
@@ -73,7 +73,7 @@ def serveur_imap(tmp_path_factory):
     def tourner():
         async def start():
             from atombox.imap.server import Listener
-            e = Listener(lambda: open_mailbox(u), store)
+            e = Listener(lambda: open_db(u), store)
             srv = await asyncio.start_server(e.client, "127.0.0.1", port)
             boucle["server"] = srv
             pret.set()
@@ -175,13 +175,13 @@ def test_ce_qu_on_ne_sert_pas_est_refuse_franchement(serveur_imap):
     client, le serveur le jette, et les deux se désynchronisent : la commande suivante est lue comme
     le contenu du littéral.
 
-    On ne prend PAS de message par IMAP (D140b : la relève est notre entrée), donc APPEND reste
-    refusé, et le dialogue survit au refus."""
+    APPEND est servi depuis RM3499 ; le cas éprouvé ici est donc une commande INCONNUE qui porte un
+    littéral — la même désynchronisation, par un autre chemin."""
     c = imaplib.IMAP4("127.0.0.1", serveur_imap["port"], timeout=10)
     try:
         c.login("mathieu", "secret")
         assert c.select("INBOX")[0] == "OK"
-        for commande in ("APPEND INBOX {3}", "UID SORT (DATE) UTF-8 ALL", "GETQUOTAROOT INBOX"):
+        for commande in ("SETMETADATA INBOX {3}", "UID SORT (DATE) UTF-8 ALL", "GETQUOTAROOT INBOX"):
             tag = c._new_tag().decode()
             c.send(("%s %s\r\n" % (tag, commande)).encode())
             # latin-1 et non utf-8 : c'est l'encodage que le serveur pose sur le fil (RM3322), et
@@ -357,3 +357,357 @@ def test_retirer_seen_ne_detruit_pas_l_ouverture(serveur_imap):
     finally:
         try: c.logout()
         except Exception: pass
+
+
+# ── APPEND (RM3499) : ce que Thunderbird fait pour ranger un envoyé ou enregistrer un brouillon ──
+# Un message en ISO-8859-1, EXPRÈS : l'octet 0xE9 n'est pas de l'UTF-8 valide. L'écouteur décodait
+# autrefois les littéraux en UTF-8 avec remplacement — ce message serait ressorti avec « � » à
+# la place de chaque accent, et une taille fausse. L'ASCII, lui, survit à tout.
+ENVOYE = (b"From: Mathieu <contact@exemple.fr>\r\nTo: Client <client@client.example>\r\n"
+          b"Subject: Devis 2026-118\r\nDate: Wed, 21 Oct 2026 09:00:00 +0200\r\n"
+          b"Message-ID: <devis-118@exemple.fr>\r\nMIME-Version: 1.0\r\n"
+          b"Content-Type: text/plain; charset=iso-8859-1\r\nContent-Transfer-Encoding: 8bit\r\n\r\n"
+          b"Voici le devis d\xe9taill\xe9, \xe0 valider avant le 30.\r\n")
+
+
+def _connecte(serveur_imap):
+    c = imaplib.IMAP4("127.0.0.1", serveur_imap["port"], timeout=10)
+    c.login("mathieu", "secret")
+    return c
+
+
+def test_append_dans_envoyes_rend_l_octet_exact_et_son_uid(serveur_imap):
+    """Le message déposé est relu à l'OCTET près, sous l'UID que la réponse a promis."""
+    from sqlalchemy import select
+    from atombox.schema.models import Comm, CommEmail, Rattachement, Dossier
+    s = serveur_imap["session"]
+    c = _connecte(serveur_imap)
+    try:
+        typ, data = c.append("Sent", "(\\Seen)", None, ENVOYE)
+        assert typ == "OK", data
+        m = re.search(rb"\[APPENDUID (\d+) (\d+)\]", data[0])
+        assert m, "UIDPLUS est annoncé : la réponse DOIT porter APPENDUID — %r" % data
+        validity, uid = int(m.group(1)), int(m.group(2))
+        typ, sel = c.select("Sent")
+        assert typ == "OK"
+        assert c.response("UIDVALIDITY")[1][0] == str(validity).encode(), "l'UIDVALIDITY promise est celle de la boîte"
+        typ, rendu = c.uid("FETCH", str(uid), "(BODY.PEEK[] FLAGS)")
+        assert typ == "OK" and rendu[0] is not None, "l'UID promis désigne bien le message"
+        assert rendu[0][1] == ENVOYE, "l'octet servi est l'octet déposé — 0xE9 compris"
+        # les FLAGS viennent APRÈS le littéral, dans la partie suivante de la réponse d'imaplib
+        reste = b"".join(x if isinstance(x, bytes) else x[0] for x in rendu[1:])
+        assert b"\\Seen" in reste, ("le drapeau déposé est posé (sur le compte connecté, D175)", rendu)
+    finally:
+        c.logout()
+    s.expire_all()
+    e = s.scalar(select(CommEmail).where(CommEmail.message_id == "<devis-118@exemple.fr>"))
+    comm = s.get(Comm, e.comm_id)
+    assert comm.sens == "out", "déposé dans Envoyés : un message SORTANT"
+    r = s.scalar(select(Rattachement).where(Rattachement.comm_id == e.comm_id))
+    assert s.get(Dossier, r.dossier_id).alias_imap == "Sent" and r.uid_servi == uid
+
+
+def test_un_envoye_depose_remonte_chez_le_fournisseur(serveur_imap):
+    """D140c : le téléphone lit le FOURNISSEUR. Un envoyé rangé par Thunderbird chez nous doit y être
+    copié, sinon il n'existe pas pour le téléphone — c'est l'événement que la synchro écoute."""
+    from sqlalchemy import select
+    from atombox.schema.models import CommEmail, Evenement
+    s = serveur_imap["session"]
+    s.expire_all()
+    e = s.scalar(select(CommEmail).where(CommEmail.message_id == "<devis-118@exemple.fr>"))
+    assert e is not None, "dépend du dépôt du test précédent"
+    evs = [v for v in s.scalars(select(Evenement).where(Evenement.type == "message.envoye"))
+           if v.charge.get("comm_id") == str(e.comm_id)]
+    assert len(evs) == 1, "un événement message.envoye, un seul : %r" % evs
+
+
+def test_append_vers_une_boite_inconnue_dit_trycreate(serveur_imap):
+    c = _connecte(serveur_imap)
+    try:
+        typ, data = c.append("Projets/Inexistant", None, None, ENVOYE)
+        assert typ == "NO" and b"TRYCREATE" in data[0], data
+        assert c.noop()[0] == "OK", "le dialogue survit au refus — le littéral a été consommé"
+    finally:
+        c.logout()
+
+
+def test_deposer_deux_fois_ne_cree_pas_de_double(serveur_imap):
+    """Un client qui rejoue son APPEND (coupure réseau au mauvais moment) ne fabrique pas un second
+    message : l'identité (D064) le reconnaît, et l'UID rendu est celui du premier."""
+    from sqlalchemy import select, func
+    from atombox.schema.models import CommEmail, Rattachement
+    s = serveur_imap["session"]
+    c = _connecte(serveur_imap)
+    try:
+        typ, data = c.append("Sent", None, None, ENVOYE)
+        assert typ == "OK", data
+    finally:
+        c.logout()
+    s.expire_all()
+    e = s.scalar(select(CommEmail).where(CommEmail.message_id == "<devis-118@exemple.fr>"))
+    assert s.scalar(select(func.count()).select_from(CommEmail).where(CommEmail.message_id == "<devis-118@exemple.fr>")) == 1
+    assert s.scalar(select(func.count()).select_from(Rattachement).where(Rattachement.comm_id == e.comm_id)) == 1
+
+
+def test_append_dans_la_boite_ouverte_annonce_exists(serveur_imap):
+    """Le client a INBOX ouverte et y dépose : il doit apprendre le nouveau message dans la réponse
+    même (RFC 3501 § 6.3.11), sinon il ne le verra qu'au prochain NOOP."""
+    c = _connecte(serveur_imap)
+    try:
+        typ, avant = c.select("INBOX")
+        n = int(avant[0])
+        autre = ENVOYE.replace(b"<devis-118@", b"<note-inbox@").replace(b"Devis 2026-118", b"Note")
+        typ, data = c.append("INBOX", None, imaplib.Time2Internaldate(1761030000), autre)
+        assert typ == "OK", data
+        exists = c.response("EXISTS")[1]
+        assert exists and exists[-1] is not None and int(exists[-1]) == n + 1, exists
+    finally:
+        c.logout()
+
+
+# ── IDLE (RM3499) : le message qui arrive s'annonce tout seul ───────────────────────────────────
+class _Fil:
+    """un client IMAP à la main : imaplib (3.12) ne sait pas faire IDLE"""
+    def __init__(self, port):
+        self.s = socket.create_connection(("127.0.0.1", port), timeout=10); self.f = self.s.makefile("rb")
+        self.ligne()                                           # l'accueil
+    def ligne(self, timeout=10):
+        self.s.settimeout(timeout); return self.f.readline().decode("latin-1").rstrip("\r\n")
+    def cmd(self, texte, tag=None):
+        # DONE ne porte pas d'étiquette : la réponse est celle de l'IDLE qu'il termine
+        tag = tag or texte.split(" ", 1)[0]; self.s.sendall((texte + "\r\n").encode())
+        out = []
+        while True:
+            l = self.ligne(); out.append(l)
+            if l.startswith(tag + " ") or l.startswith("+ "): return out
+    def close(self):
+        try: self.s.sendall(b"zz LOGOUT\r\n")
+        except OSError: pass
+        self.s.close()
+
+
+def test_idle_annonce_le_message_qui_arrive(serveur_imap, monkeypatch):
+    """Sans IDLE, Thunderbird interroge toutes les dix minutes : un message arrivé attendait jusqu'à
+    dix minutes pour s'afficher. Avec IDLE, l'EXISTS arrive dans les secondes."""
+    import time
+    from atombox.ingestion.ingestion import ingest
+    from atombox.schema.models import Dossier
+    from sqlalchemy import select
+    monkeypatch.setenv("ATOMBOX_IMAPD_IDLE_POLL", "0.2")
+    s = serveur_imap["session"]
+    c = _Fil(serveur_imap["port"])
+    try:
+        c.cmd("a1 LOGIN mathieu secret")
+        sel = c.cmd("a2 SELECT INBOX")
+        n = int(next(l.split()[1] for l in sel if l.endswith(" EXISTS")))
+        assert c.cmd("a3 IDLE")[-1].startswith("+ ")
+        # un message arrive par la relève, PENDANT que le client attend
+        inbox = s.scalar(select(Dossier).where(Dossier.alias_imap == "INBOX"))
+        ingest(s, serveur_imap["magasin"], inbox.boite_id,
+               MESSAGE.replace(b"<c4412@", b"<idle-1@").replace(b"Commande 4412", b"Pendant IDLE"),
+               dossier_id=inbox.dossier_id)
+        t0 = time.monotonic()
+        l = c.ligne(timeout=5)
+        assert l == "* %d EXISTS" % (n + 1), "le client apprend le message SANS rien demander : %r" % l
+        assert time.monotonic() - t0 < 3, "et dans les secondes, pas à la prochaine interrogation"
+        fin = c.cmd("DONE", tag="a3")
+        assert fin[-1] == "a3 OK IDLE terminé", fin
+    finally:
+        c.close()
+
+
+def test_idle_ne_garde_pas_de_transaction_ouverte(serveur_imap, monkeypatch):
+    """Le 19/09, une migration a attendu ONZE MINUTES derrière des connexions « idle in transaction »,
+    en bloquant les lectures. Un client en IDLE attend jusqu'à 29 minutes : s'il gardait sa
+    transaction de lecture, chaque client de bureau ouvert rejouerait l'incident."""
+    import time, psycopg
+    monkeypatch.setenv("ATOMBOX_IMAPD_IDLE_POLL", "0.2")
+    s = serveur_imap["session"]; s.rollback()                  # le harnais lui-même ne doit rien tenir
+    base = s.get_bind().url.database
+    c = _Fil(serveur_imap["port"])
+    try:
+        c.cmd("a1 LOGIN mathieu secret"); c.cmd("a2 SELECT INBOX"); c.cmd("a3 IDLE")
+        time.sleep(1.0)                                         # plusieurs interrogations ont eu lieu
+        url = os.environ["DATABASE_URL"]
+        with psycopg.connect(url, autocommit=True) as admin:
+            tenues = admin.execute("select count(*) from pg_stat_activity where datname = %s "
+                                   "and state like 'idle in transaction%%'", (base,)).fetchone()[0]
+        assert tenues == 0, "%d connexion(s) « idle in transaction » pendant IDLE" % tenues
+        assert c.cmd("DONE", tag="a3")[-1] == "a3 OK IDLE terminé"
+    finally:
+        c.close()
+
+
+# ── les dossiers depuis le client (RM3499) ──────────────────────────────────────────────────────
+def _noms(c):
+    typ, rows = c.list()
+    assert typ == "OK"
+    return {r.decode("latin-1").rsplit(' "/" ', 1)[1].strip('"') for r in rows if r}
+
+
+def test_creer_renommer_supprimer_un_dossier_depuis_le_client(serveur_imap):
+    """Le geste complet d'un utilisateur de Thunderbird : créer « Projets/Dupont », y ranger un
+    message, renommer le parent — l'enfant et son message suivent —, puis supprimer une fois vidé."""
+    c = _connecte(serveur_imap)
+    try:
+        typ, data = c.create("Projets/Dupont")
+        assert typ == "OK", data
+        noms = _noms(c)
+        assert {"Projets", "Projets/Dupont"} <= noms, "le parent manquant est créé (RFC 3501 § 6.3.3) : %s" % noms
+        assert c.create("Projets/Dupont")[0] == "NO", "créer deux fois est refusé"
+
+        # y ranger un message
+        assert c.select("INBOX")[0] == "OK"
+        typ, d = c.uid("SEARCH", None, "ALL"); uid = d[0].split()[0].decode()
+        assert c.uid("MOVE", uid, "Projets/Dupont")[0] == "OK"
+
+        # renommer le PARENT : l'enfant suit, son message aussi
+        typ, data = c.rename("Projets", "Chantiers")
+        assert typ == "OK", data
+        noms = _noms(c)
+        assert {"Chantiers", "Chantiers/Dupont"} <= noms and "Projets/Dupont" not in noms, noms
+        typ, sel = c.select("Chantiers/Dupont")
+        assert typ == "OK" and int(sel[0]) == 1, "le message est toujours là, sous le nouveau nom : %r" % sel
+
+        # supprimer un dossier PLEIN est refusé (D118 : on ne détruit pas un rangement)
+        c.select("INBOX")
+        typ, data = c.delete("Chantiers/Dupont")
+        assert typ == "NO" and b"INUSE" in data[0], data
+        # le vider, puis supprimer : l'enfant d'abord, le parent ensuite
+        c.select("Chantiers/Dupont")
+        typ, d = c.uid("SEARCH", None, "ALL")
+        assert c.uid("MOVE", d[0].split()[0].decode(), "INBOX")[0] == "OK"
+        c.select("INBOX")
+        assert c.delete("Chantiers")[0] == "NO", "un parent qui a des enfants ne se supprime pas"
+        assert c.delete("Chantiers/Dupont")[0] == "OK"
+        assert c.delete("Chantiers")[0] == "OK"
+        assert not ({"Chantiers", "Chantiers/Dupont"} & _noms(c))
+    finally:
+        c.logout()
+
+
+def test_les_boites_protegees_et_les_boites_d_etat_restent_ce_qu_elles_sont(serveur_imap):
+    c = _connecte(serveur_imap)
+    try:
+        for nom in ("INBOX", "Trash", "Archive"):
+            assert c.delete(nom)[0] == "NO", "%s ne se supprime pas (D047, D183)" % nom
+            assert c.rename(nom, nom + "-bis")[0] == "NO", "%s ne se renomme pas" % nom
+        assert c.create("INBOX")[0] == "NO"
+        # Thunderbird « supprime » un dossier en le rangeant sous la Corbeille : chez nous la
+        # corbeille est un ÉTAT, pas un conteneur — refusé, et la raison est dite
+        assert c.create("Temporaire")[0] == "OK"
+        typ, data = c.rename("Temporaire", "Trash/Temporaire")
+        assert typ == "NO" and b"CANNOT" in data[0], data
+        assert c.delete("Temporaire")[0] == "OK"
+    finally:
+        c.logout()
+
+
+def test_abonnements_dire_vrai(serveur_imap):
+    """Tous les dossiers sont abonnés (LSUB = LIST). S'abonner est vrai ; se désabonner d'un dossier
+    qui existe serait un mensonge, puisque LSUB continuerait de le rendre — refusé ; se désabonner
+    d'un dossier supprimé (ce que fait Thunderbird après DELETE) est vrai."""
+    c = _connecte(serveur_imap)
+    try:
+        assert c.subscribe("INBOX")[0] == "OK"
+        assert c.subscribe("N-existe-pas")[0] == "NO"
+        assert c.unsubscribe("INBOX")[0] == "NO"
+        assert c.unsubscribe("N-existe-pas")[0] == "OK"
+    finally:
+        c.logout()
+
+
+# ── la structure MIME sur le fil (RM3499) ──────────────────────────────────────────────────────
+def test_le_client_voit_la_piece_jointe_et_la_telecharge_par_tranches(serveur_imap):
+    """Un client affiche le trombone d'après BODYSTRUCTURE, puis télécharge la pièce par TRANCHES :
+    `BODY.PEEK[2]<0.10>` doit revenir sous le nom `BODY[2]<0>`, sinon il ne sait pas la rattacher à
+    sa demande. La structure attendue est celle que Dovecot sert pour les mêmes octets
+    (`test_imap_dovecot.py`)."""
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from test_imap_mime import MESSAGE as COMPOSITE, PDF
+    from atombox.imap import mime
+    c = _connecte(serveur_imap)
+    try:
+        typ, data = c.append("INBOX", None, None, COMPOSITE)
+        uid = re.search(rb"APPENDUID \d+ (\d+)", data[0]).group(1).decode()
+        c.select("INBOX")
+        typ, rendu = c.uid("FETCH", uid, "(BODYSTRUCTURE)")
+        assert typ == "OK"
+        recu = b"".join(x if isinstance(x, bytes) else x[0] + x[1] for x in rendu).decode("latin-1")
+        assert mime.structure(mime.Part(COMPOSITE), True) in recu, recu[:300]
+        assert '("attachment" ("filename" "devis.pdf"))' in recu, "le trombone"
+        typ, rendu = c.uid("FETCH", uid, "(BODY.PEEK[2]<0.10>)")
+        assert typ == "OK" and b"BODY[2]<0> {10}" in rendu[0][0], rendu
+        assert rendu[0][1] == PDF[:10], "la tranche demandée, à l'octet"
+        typ, rendu = c.uid("FETCH", uid, "(BODY.PEEK[2])")
+        assert rendu[0][1] == PDF, "la pièce entière : la tranche exacte des octets stockés"
+    finally:
+        c.logout()
+
+
+# ── SEARCH et INTERNALDATE sur le fil (RM3499) ──────────────────────────────────────────────────
+def test_la_recherche_complete_sur_le_vrai_serveur(serveur_imap):
+    """OR, NOT, dates, tailles, en-têtes, et un critère en LITTÉRAL (accentué) : ce qu'un client
+    envoie vraiment. La sémantique de chaque critère est éprouvée contre Dovecot ailleurs ; ici, le
+    chemin complet — analyse, base, magasin."""
+    c = _connecte(serveur_imap)
+    try:
+        c.select("INBOX")
+        typ, tous = c.uid("SEARCH", None, "ALL")
+        tous = tous[0].split()
+        assert tous, "la boîte a des messages"
+        typ, r = c.uid("SEARCH", None, "OR", "SUBJECT", "Commande", "NOT", "ALL")
+        assert typ == "OK" and r[0].split(), r
+        typ, r = c.uid("SEARCH", None, "SINCE", "1-Jan-2000", "LARGER", "10")
+        assert typ == "OK" and r[0].split() == tous, "tout est arrivé après l'an 2000 et pèse plus de 10 octets"
+        typ, r = c.uid("SEARCH", None, "HEADER", "Message-ID", "fournisseur.example")
+        assert typ == "OK" and r[0].split(), r
+        # un littéral : « Développement » est dans le corps des messages du banc
+        c.literal = "Développement".encode("utf-8")
+        typ, r = c.uid("SEARCH", "CHARSET", "UTF-8", "BODY")
+        assert typ == "OK" and r[0].split(), ("la recherche décode le corps (UTF-8) et lit le littéral", r)
+        # imaplib LÈVE sur un BAD : c'est précisément ce qu'on veut — une erreur, jamais une liste vide
+        with pytest.raises(imaplib.IMAP4.error, match="inconnu"):
+            c.uid("SEARCH", None, "YOUNGER", "60")
+        assert c.noop()[0] == "OK", "et le dialogue continue"
+    finally:
+        c.logout()
+
+
+def test_l_internaldate_est_au_format_imap(serveur_imap):
+    """« 21-Oct-2026 07:00:00 +0000 » (RFC 3501 § 9). Le serveur rendait « Wed 21 Oct 2026 07:00:00 + »
+    — une date RFC 2822 tronquée, que les clients ne savent pas lire."""
+    c = _connecte(serveur_imap)
+    try:
+        c.select("INBOX")
+        typ, r = c.fetch("1", "(INTERNALDATE)")
+        assert typ == "OK"
+        assert re.search(rb'INTERNALDATE "[ \d]\d-[A-Z][a-z]{2}-\d{4} \d\d:\d\d:\d\d [+-]\d{4}"', r[0]), r
+        assert imaplib.Internaldate2tuple(r[0]) is not None, "imaplib sait la lire"
+    finally:
+        c.logout()
+
+
+def test_un_dossier_accentue_voyage_en_modified_utf7(serveur_imap):
+    """Thunderbird crée « Pièces jointes » : il envoie `Pi&AOg-ces jointes` (RFC 3501 § 5.1.3). On le
+    garde tel quel pour le FIL — c'est ce qu'on renverra au fournisseur — et on LIT « Pièces jointes »."""
+    from sqlalchemy import select
+    from atombox.schema.models import Dossier
+    s = serveur_imap["session"]
+    c = _connecte(serveur_imap)
+    try:
+        # imaplib n'entoure PAS de guillemets un nom qui contient une espace ; un vrai client, si. Sans
+        # eux, le serveur refuse au lieu de créer « Pi&AOg-ces » en jetant la fin du nom.
+        with pytest.raises(imaplib.IMAP4.error):
+            c.create("Pi&AOg-ces jointes")
+        assert c.create('"Pi&AOg-ces jointes"')[0] == "OK"
+        assert "Pi&AOg-ces jointes" in _noms(c), "LIST le rend codé, comme il est arrivé"
+        assert c.select('"Pi&AOg-ces jointes"')[0] == "OK"
+        s.expire_all()
+        d = s.scalar(select(Dossier).where(Dossier.alias_imap == "Pi&AOg-ces jointes"))
+        assert d is not None and d.nom == "Pièces jointes", "le webmail affiche le nom LISIBLE"
+        c.select("INBOX")
+        assert c.delete('"Pi&AOg-ces jointes"')[0] == "OK"
+    finally:
+        c.logout()

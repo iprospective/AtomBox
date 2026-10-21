@@ -57,8 +57,10 @@ class ServedMessage:
         self.uid, self._c, self._r = uid, comm, rattachement
         self._store, self._blob, self._message_id = store, blob_ref, message_id
         self.size = comm.taille or 0
-        self.internal_date = email.utils.format_datetime(comm.date_recue).replace(",", "")[:26] \
-            if comm.date_recue else "01-Jan-1970 00:00:00 +0000"
+        # INTERNALDATE : « 21-Oct-2026 07:00:00 +0000 » (RFC 3501 § 9, date-time). L'ancienne forme
+        # tronquait une date RFC 2822 — « Wed 21 Oct 2026 07:00:00 + » —, que rien ne savait lire.
+        self.internal = comm.date_recue
+        self.internal_date = internal_date(comm.date_recue)
         # DEUX ORIGINES, ET C'EST LE FOND DE D175 : `\\Seen` et `\\Flagged` viennent de l'état
         # PERSONNEL du compte connecté (`etat` absent = il n'y a jamais touché) ; `\\Answered` et
         # `\\Deleted` viennent du rattachement, parce que répondre et supprimer sont des actes
@@ -83,44 +85,62 @@ class ServedMessage:
         # Le client peut toujours POSER `\\Deleted` (c'est sa façon de dire « supprime »), et
         # `PERMANENTFLAGS` l'annonce : c'est ce STORE qui déplace vers la corbeille.
 
+    # ── la structure MIME, lue sur l'OCTET stocké (RM3499, `imap/mime.py`) ──────────────────────
+    def _raw(self):
+        if not hasattr(self, "_raw_cache"):
+            self._raw_cache = self._store.read(self._blob) if (self._blob and self._store is not None) else None
+        return self._raw_cache
+
+    def _tree(self):
+        if not hasattr(self, "_tree_cache"):
+            from . import mime
+            raw = self._raw()
+            self._tree_cache = mime.Part(raw) if raw is not None else None
+        return self._tree_cache
+
     def envelope(self):
-        """ENVELOPPE au sens RFC 3501 § 7.4.2 — l'ordre des dix champs est imposé et ne se devine pas"""
+        """ENVELOPE au sens RFC 3501 § 7.4.2, construit sur les EN-TÊTES du message — tous les
+        destinataires compris. L'ancienne version partait des colonnes de la base et rendait
+        l'expéditeur pour From, Sender ET Reply-To, et NIL pour To et Cc."""
+        from . import mime
+        tree = self._tree()
+        if tree is not None: return mime.envelope(tree)
         c = self._c
         one = lambda adr, name: [[name, None, adr.split("@")[0], adr.split("@")[-1]]] if adr else None
         sender = one(c.from_adresse, c.from_nom)
         return [email.utils.format_datetime(c.date_recue) if c.date_recue else None,
                 c.sujet, sender, sender, sender, None, None, None, None, self._message_id]
 
-    def structure(self):
-        """BODYSTRUCTURE minimal : on annonce UNE partie texte de la bonne taille.
-
-        Décrire faux la structure interne serait pire que de ne rien dire : le client s'en sert
-        pour décider quoi télécharger, et irait chercher des parties qui n'existent pas. Tant qu'on
-        ne sait pas la rendre exactement, on annonce le message comme un tout — et `BODY[]` le
-        rend à l'octet."""
+    def structure(self, extended: bool = True):
+        """BODYSTRUCTURE (ou BODY) : la VRAIE arborescence — sans elle, le client ne sait pas qu'il y
+        a des pièces jointes avant d'avoir tout téléchargé."""
+        from . import mime
+        tree = self._tree()
+        if tree is not None: return mime.structure(tree, extended)
         return ["TEXT", "PLAIN", ["CHARSET", "UTF-8"], None, None, "8BIT", self.size,
                 max(1, (self._c.corps_texte or "").count("\n") + 1)]
 
     def section_bytes(self, section: str):
-        raw = self._store.read(self._blob) if self._blob else None
+        """les octets d'une section : `""`, HEADER, TEXT, HEADER.FIELDS (…), et les parties par
+        numéro (`2`, `1.2`, `2.MIME`, `3.HEADER`) — RFC 3501 § 6.4.5"""
+        from . import mime
+        raw = self._raw()
         if raw is None: return None
-        s = (section or "").upper()
-        if s in ("", "TEXT") and s != "TEXT": return raw
-        head, _, body = raw.partition(b"\r\n\r\n")
-        if s == "HEADER": return head + b"\r\n\r\n"
-        if s == "TEXT": return body
-        if s.startswith("HEADER.FIELDS"):
-            fields = {c.strip().lower() for c in s[s.index("(") + 1:s.rindex(")")].split()} if "(" in s else set()
-            kept, keep = [], False
-            for line in head.split(b"\r\n"):
-                if line[:1] in (b" ", b"\t"):                    # une suite de l'en-tête précédent
-                    if keep: kept.append(line)
-                    continue
-                keep = line.split(b":", 1)[0].decode("latin-1", "replace").strip().lower() in fields
-                if keep: kept.append(line)
-            return b"\r\n".join(kept) + b"\r\n\r\n"
-        log.info("section de corps non servie : %r", section)
-        return None
+        out = mime.section(self._tree(), raw, section)
+        if out is None: log.info("section de corps inexistante : %r", section)
+        return out
+
+
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def internal_date(d) -> str:
+    """date-time IMAP, à la main : `strftime("%b")` suit la LOCALE du processus"""
+    if d is None: return "01-Jan-1970 00:00:00 +0000"
+    if d.tzinfo is None: d = d.replace(tzinfo=timezone.utc)
+    off = int(d.utcoffset().total_seconds() // 60)
+    return "%2d-%s-%04d %02d:%02d:%02d %s%02d%02d" % (d.day, _MONTHS[d.month - 1], d.year, d.hour, d.minute,
+                                                        d.second, "+" if off >= 0 else "-", abs(off) // 60, abs(off) % 60)
 
 
 class View:
@@ -144,10 +164,32 @@ class View:
         return c
 
     # ── que vois-tu ─────────────────────────────────────────────────────────────────────────────
+    def _boxes(self, compte):
+        """les boîtes du compte, la PRINCIPALE en tête — dans un ordre STABLE.
+
+        Sans ORDER BY, « la première » était celle que PostgreSQL rendait en premier : deux sessions
+        pouvaient ne pas s'accorder sur laquelle porte le nom nu `INBOX`, et un compte à deux boîtes
+        voyait ses dossiers changer de nom d'une connexion à l'autre. uuid v7 : l'ordre de création."""
+        return list(self.s.scalars(select(Boite).join(Acces, Acces.boite_id == Boite.boite_id)
+                                   .where(Acces.compte_id == compte.compte_id, Acces.fin.is_(None))
+                                   .order_by(Boite.boite_id)))
+
+    def _box_for(self, compte, name: str):
+        """(Boite, alias relatif) — à quelle boîte appartient un nom IMAP qu'on va CRÉER.
+
+        Le pendant de `_folders` : la principale porte des noms nus, les autres sont préfixées par
+        leur adresse (`contact@exemple.fr/Projets`)."""
+        boxes = self._boxes(compte)
+        if not boxes: return None, None
+        for b in boxes[1:]:
+            adresse = self.s.get(Adresse, b.adresse_id).adresse_complete
+            if (name or "").lower().startswith(adresse.lower() + "/"):
+                return b, name[len(adresse) + 1:]
+        return boxes[0], name
+
     def _folders(self, compte):
         """(nom IMAP, Dossier) pour tout ce que ce compte peut voir, la boîte principale en tête"""
-        boxes = list(self.s.scalars(select(Boite).join(Acces, Acces.boite_id == Boite.boite_id)
-                                     .where(Acces.compte_id == compte.compte_id, Acces.fin.is_(None))))
+        boxes = self._boxes(compte)
         out = []
         for i, b in enumerate(boxes):
             adresse = self.s.get(Adresse, b.adresse_id).adresse_complete
@@ -202,6 +244,14 @@ class View:
         return ServedMessage(uid, c, r, self.store, e.blob_ref if e else None,
                             message_id=e.message_id if e else None, state=state)
 
+    def search_message(self, mailbox, uid: int, all_uids: list[int]):
+        """la façade de recherche d'un message : ses drapeaux tels qu'on les SERT (personnels, D175),
+        sa date interne, sa taille — et ses octets, lus seulement si un critère les demande"""
+        from . import search as S
+        m = self.message(mailbox, uid)
+        if m is None: return S.Message(uid, all_uids, b"", (), None, 0)
+        return S.Message(uid, all_uids, m._raw, m.flags, m.internal, m.size)
+
     def contains(self, mailbox, uid: int, field: str, needle: str) -> bool:
         m = self.message(mailbox, uid)
         if m is None: return False
@@ -214,6 +264,20 @@ class View:
                 select(Participant).where(Participant.comm_id == c.comm_id, Participant.role == field.lower()))]
             return needle in " ".join(roles).lower()
         return needle in (ou.get(field, "")).lower()
+
+    def release(self):
+        """termine la transaction de LECTURE en cours, sans rien perdre — les écritures ont été validées.
+
+        Une session SQLAlchemy ouvre une transaction à la première requête et la garde jusqu'au commit.
+        Un client IMAP qui lit puis attend — entre deux commandes, et surtout pendant IDLE, jusqu'à
+        29 minutes — laissait donc une connexion « idle in transaction ». C'est elle qui, le 19/09, a
+        fait attendre une migration onze minutes en bloquant les lectures. Une lecture finie se
+        relâche."""
+        if self.s is None: return
+        try:
+            self.s.rollback()
+        except Exception:
+            log.exception("relâchement de la transaction en échec")
 
     def rollback(self):
         """rend la session utilisable après une écriture refusée — appelée par la session IMAP.
@@ -255,6 +319,74 @@ class View:
         if pairs: log.info("MOVE de %d message(s) vers « %s » (état %s)",
                              len(pairs), dest_name, dest.exit_reason or "aucun")
         return pairs
+
+    def append(self, compte, name: str, raw: bytes, flags: list[str], when):
+        """APPEND — dépose un message dans une boîte aux lettres, et rend (UIDVALIDITY, UID).
+
+        Rend None si la boîte n'existe pas (la session répond TRYCREATE), et un UID None si le message
+        était déjà rangé ailleurs dans cette adresse : un rattachement est UNE boîte aux lettres
+        (D175 § 4), et le déplacer en douce déferait le rangement de quelqu'un.
+
+        DEUX TRADUCTIONS, comme pour MOVE :
+
+        - **le sens suit la boîte** : déposé dans Envoyés ou Brouillons, c'est un message SORTANT —
+          Thunderbird a envoyé par son propre SMTP et range sa copie ; ailleurs, un message reçu ;
+        - **un envoyé déposé est un envoi** : on émet `message.envoye`, dont l'abonné copie le message
+          dans les Envoyés du FOURNISSEUR (D140c). Sans ça, le téléphone — qui lit le fournisseur —
+          ne verrait jamais ce que l'on a envoyé depuis Thunderbird. L'abonné est idempotent : il
+          retrouve sa copie par le Message-ID au lieu d'en faire une seconde."""
+        dest = self.folder_named(compte, name)
+        if dest is None: return None
+        from ..ingestion.ingestion import ingest
+        from ..services.messages import special_of
+        special = None if dest.exit_reason else special_of(dest.alias_imap)
+        res = ingest(self.s, self.store, dest.boite_id, raw, dossier_id=dest.dossier_id, date_recue=when,
+                     sens="out" if special in ("sent", "drafts") else "in", apply_rules=False)
+        if res.get("comm_id") is None:
+            log.info("APPEND vers « %s » : ignoré par un module", name); return (dest.uid_validity_servie or 1, None)
+        r = self.s.get(Rattachement, (res["comm_id"], dest.boite_id))
+        if r is None or r.dossier_id != dest.dossier_id:
+            log.info("APPEND vers « %s » : %s est déjà rangé ailleurs dans cette adresse", name, res["comm_id"])
+            return (dest.uid_validity_servie or 1, None)
+        from ..services import personal_state as personal
+        if "\\Seen" in flags: self.s.execute(personal.open_stmt(compte.compte_id, r.comm_id, r.boite_id))
+        if "\\Flagged" in flags: self.s.execute(personal.flag_stmt(compte.compte_id, r.comm_id, r.boite_id, True))
+        if "\\Answered" in flags: r.repondu_le = r.repondu_le or datetime.now(timezone.utc)
+        if special == "sent":
+            from ..modules import events
+            events.emit(self.s, "message.envoye", {"comm_id": str(r.comm_id), "boite_id": str(r.boite_id), "refuses": []},
+                        module="imap")
+        self.s.commit()
+        self.s.refresh(dest)
+        log.info("APPEND dans « %s » : %s, uid %s%s", name, r.comm_id, r.uid_servi,
+                 " (nouveau)" if res.get("nouveau") else " (déjà connu)")
+        return (dest.uid_validity_servie or 1, r.uid_servi)
+
+    # ── les dossiers (RM3499) : les MÊMES règles que le webmail, dans `services.folders_util` ──────
+    def create(self, compte, name: str):
+        from ..services import folders_util as f
+        if self.folder_named(compte, name) is not None: raise f.FolderRefused("ce dossier existe déjà", "ALREADYEXISTS")
+        boite, alias = self._box_for(compte, name)
+        if boite is None: raise f.FolderRefused("aucune boîte", "NONEXISTENT")
+        f.create_folder_sync(self.s, boite, alias)
+
+    def rename(self, compte, old: str, new: str):
+        from ..services import folders_util as f
+        d = self.folder_named(compte, old)
+        if d is None: raise f.FolderRefused("boîte aux lettres inconnue : %s" % old, "NONEXISTENT")
+        boite, alias = self._box_for(compte, new)
+        if boite is None or boite.boite_id != d.boite_id:
+            raise f.FolderRefused("un dossier ne change pas d'adresse", "CANNOT")
+        f.rename_folder_sync(self.s, boite, d, alias)
+
+    def delete(self, compte, name: str):
+        from ..services import folders_util as f
+        d = self.folder_named(compte, name)
+        if d is None: raise f.FolderRefused("boîte aux lettres inconnue : %s" % name, "NONEXISTENT")
+        try:
+            f.delete_folder_sync(self.s, self.s.get(Boite, d.boite_id), d)
+        except PermissionError as e:
+            raise f.FolderRefused(str(e), "CANNOT")
 
     def store_flags(self, compte, mailbox, uids: list[int], to_add: list[str], to_remove: list[str]):
         """STORE — les drapeaux qu'on sait écrire, et rien d'autre.

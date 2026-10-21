@@ -68,7 +68,7 @@ def test_la_capability_n_annonce_que_ce_qu_on_sert():
     Ce test tient donc les deux bouts, et il se maintient seul : il lit la liste annoncée."""
     s = Session(FausseVue(), store=None)
     annonce = " ".join(s.greeting())
-    for jamais in ("CONDSTORE", "QRESYNC", "IDLE", "NOTIFY", "APPENDLIMIT"):
+    for jamais in ("CONDSTORE", "QRESYNC", "NOTIFY", "APPENDLIMIT"):     # IDLE : servi depuis RM3499
         assert jamais not in annonce, "%s est annoncé alors qu'on ne le sert pas" % jamais
     assert "IMAP4rev1" in annonce
     servies = {n[3:].upper().replace("_", ".") for n in dir(Session) if n.startswith("_c_")}
@@ -76,8 +76,10 @@ def test_la_capability_n_annonce_que_ce_qu_on_sert():
     # ce qu'on annonce et qui est une COMMANDE doit exister
     for cap in ("MOVE",):
         assert cap in annonce and cap in servies, "%s est annoncé mais pas servi" % cap
-    # APPEND n'est pas annoncé, donc pas servi : on ne prend pas de message par IMAP (D140b)
-    assert "APPEND" not in servies, "APPEND existe alors qu'on n'accepte pas de dépôt par IMAP"
+    # APPEND est une commande de BASE d'IMAP4rev1 (RFC 3501 § 6.3.11) : il n'a pas de capacité à
+    # lui, l'annoncer c'est annoncer rev1. Il est servi depuis RM3499 — c'est par lui que Thunderbird
+    # enregistre un brouillon et range un envoyé.
+    assert "APPEND" in servies
 
 
 def test_rien_avant_de_s_etre_connecte():
@@ -182,8 +184,9 @@ def test_aucun_expunge_pendant_un_fetch_ou_un_search():
 
 def test_un_critere_de_recherche_inconnu_est_une_ERREUR_pas_une_liste_vide():
     """Rendre « rien trouvé » ferait conclure à l'utilisateur que son message a disparu."""
+    # YOUNGER est de la RFC 5032 (WITHIN), que nous n'annonçons pas : une erreur de syntaxe, BAD
     _, (_, r) = dialogue("a1 SELECT INBOX", "a2 UID SEARCH YOUNGER 3600")
-    assert r[0].startswith("a2 NO"), r
+    assert r[0].startswith("a2 BAD"), r
     _, (_, ok) = dialogue("a1 SELECT INBOX", "a2 UID SEARCH FROM a@x.fr")
     assert ok[0].startswith("* SEARCH 1 4 9"), ok
 
@@ -204,14 +207,21 @@ def test_un_litteral_suspend_l_analyse():
 
 
 def test_on_ne_demande_pas_de_donnees_pour_une_commande_refusee():
-    """`APPEND INBOX {3}` obtenait un « + » : le client envoyait son message, le serveur le jetait,
-    et les deux se désynchronisaient — la commande suivante était lue comme le contenu du littéral.
-    Sur un serveur en lecture seule, c'est aussi accepter un téléversement de taille arbitraire."""
+    """Une commande refusée qui obtient un « + » fait envoyer le littéral au client, le serveur le
+    jette, et les deux se désynchronisent : la commande suivante est lue comme le contenu du
+    littéral. C'était `APPEND INBOX {3}` quand APPEND n'était pas servi ; c'est aujourd'hui toute
+    commande inconnue — et APPEND AVANT connexion, qui ferait téléverser 25 Mo pour un NO."""
     s = Session(FausseVue(), store=None)
+    r = s.line("a6 APPEND INBOX {3}")
+    assert r[0].startswith("a6 NO") and s.awaiting_literal is None, ("APPEND avant connexion : refus "
+                                                                     "SANS demande de données", r)
     s.line("a0 LOGIN mathieu secret")
-    r = s.line("a7 APPEND INBOX {3}")
+    r = s.line("a7 SETMETADATA INBOX {3}")
     assert r[0].startswith("a7 BAD"), r
     assert s.awaiting_literal is None, "le serveur n'attend RIEN : la commande est refusée séance tenante"
+    r = s.line("a9 APPEND INBOX {%d}" % (60 * 1024 * 1024))
+    assert r[0].startswith("a9 NO") and "TOOBIG" in r[0] and s.awaiting_literal is None, \
+        ("un littéral au-delà du plafond est refusé AVANT d'être lu", r)
     assert s.line("a8 NOOP")[0].startswith("a8 OK"), "et le dialogue continue, non désynchronisé"
 
 
@@ -278,3 +288,25 @@ def test_un_message_de_la_corbeille_n_est_pas_masque():
     from atombox.imap.session import WRITABLE_FLAGS, FLAGS
     assert "\\Deleted" in WRITABLE_FLAGS and "\\Deleted" in FLAGS, \
         "le client doit pouvoir poser \\Deleted : c'est ce STORE qui déplace vers la corbeille"
+
+
+# ── IDLE (RFC 2177, RM3499) ─────────────────────────────────────────────────────────────────────
+def test_idle_attend_et_sort_sur_done():
+    s = Session(FausseVue(), store=None)
+    assert s.line("a0 IDLE")[0].startswith("a0 NO"), "IDLE avant connexion est refusé"
+    s.line("a1 LOGIN mathieu secret"); s.line("a2 SELECT INBOX")
+    r = s.line("a3 IDLE")
+    assert r == [r[0]] and r[0].startswith("+ "), r
+    assert s.idling == "a3"
+    r = s.line("done")
+    assert r[-1] == "a3 OK IDLE terminé" and s.idling is None, r
+    assert s.line("a4 NOOP")[-1].startswith("a4 OK"), "le dialogue reprend normalement"
+
+
+def test_idle_n_avale_pas_une_commande_comme_si_de_rien_n_etait():
+    """Une ligne autre que DONE pendant IDLE est une faute du client : on le lui dit, on ne l'exécute
+    pas sous une étiquette qu'on ignorerait."""
+    s = Session(FausseVue(), store=None)
+    s.line("a1 LOGIN mathieu secret"); s.line("a2 SELECT INBOX"); s.line("a3 IDLE")
+    r = s.line("a4 LOGOUT")
+    assert r == ["a3 BAD IDLE attendait DONE"] and s.idling is None and not s.done, r

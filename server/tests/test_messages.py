@@ -236,7 +236,19 @@ def test_parcours_du_webmail(monde):
     assert c.get("/api/v1/referentiels", headers=h).json()["util"][0]["label"] == "Devis", "il apparaît dans l'arborescence"
     proteges = [x for x in c.get("/api/v1/referentiels", headers=h).json()["speciaux"]]
     assert proteges, "les spéciaux restent"
-    assert c.delete("/api/v1/dossiers/" + did, headers=h).json()["supprimes"] == 1
+    # D088 — un message PASSÉ par le dossier s'en souvient comme origine. Le supprimer, vide, rendait
+    # une erreur interne (clé étrangère) : le message oublie l'origine, et reviendra dans INBOX.
+    assert c.patch("/api/v1/messages/" + mid + "/rattachement", json={"dossier": did}, headers=h).json()["ok"]
+    assert c.patch("/api/v1/messages/" + mid + "/rattachement", json={"dossier": None}, headers=h).json()["ok"]
+    sup = c.delete("/api/v1/dossiers/" + did, headers=h)
+    assert sup.status_code == 200 and sup.json()["supprimes"] == 1, (sup.status_code, sup.text[:200])
+
+    # RM3499 — un nom accentué tapé dans le webmail part chez le fournisseur en modified UTF-7
+    # (RFC 3501 § 5.1.3) : imaplib refusait d'envoyer un nom non ASCII, et un client IMAP ne l'aurait
+    # pas reconnu. Le nom LISIBLE reste celui qu'on a tapé.
+    acc = c.post("/api/v1/dossiers", json={"nom": "Comptabilité"}, headers=h).json()
+    assert acc["ok"] and acc["dossier"]["nom"] == "Comptabilité" and acc["dossier"]["alias_imap"] == "Comptabilit&AOk-", acc
+    assert c.delete("/api/v1/dossiers/" + acc["dossier"]["id"], headers=h).json()["supprimes"] == 1
 
     # F032 — les identités d'expédition
     premiere = c.post("/api/v1/identites", json={"nom_affiche": "Mathieu", "par_defaut": True}, headers=h).json()
