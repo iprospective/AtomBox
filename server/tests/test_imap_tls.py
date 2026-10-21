@@ -151,7 +151,7 @@ CE_QUI_LES_TIENT = {
 
 # CE QUI MANQUE, ÉCRIT. Un cliquet : servir une de ces commandes sans la retirer d'ici fait rougir,
 # donc la liste ne peut que décroître, et elle dit à tout moment où en est RM3499.
-MANQUES_CONNUS = {"_c_append", "_c_create", "_c_delete", "_c_rename", "_c_subscribe", "_c_unsubscribe"}
+MANQUES_CONNUS = {"_c_create", "_c_delete", "_c_rename", "_c_subscribe", "_c_unsubscribe"}
 
 
 def test_chaque_capacite_annoncee_a_son_code():

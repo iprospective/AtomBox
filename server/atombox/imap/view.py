@@ -256,6 +256,48 @@ class View:
                              len(pairs), dest_name, dest.exit_reason or "aucun")
         return pairs
 
+    def append(self, compte, name: str, raw: bytes, flags: list[str], when):
+        """APPEND — dépose un message dans une boîte aux lettres, et rend (UIDVALIDITY, UID).
+
+        Rend None si la boîte n'existe pas (la session répond TRYCREATE), et un UID None si le message
+        était déjà rangé ailleurs dans cette adresse : un rattachement est UNE boîte aux lettres
+        (D175 § 4), et le déplacer en douce déferait le rangement de quelqu'un.
+
+        DEUX TRADUCTIONS, comme pour MOVE :
+
+        - **le sens suit la boîte** : déposé dans Envoyés ou Brouillons, c'est un message SORTANT —
+          Thunderbird a envoyé par son propre SMTP et range sa copie ; ailleurs, un message reçu ;
+        - **un envoyé déposé est un envoi** : on émet `message.envoye`, dont l'abonné copie le message
+          dans les Envoyés du FOURNISSEUR (D140c). Sans ça, le téléphone — qui lit le fournisseur —
+          ne verrait jamais ce que l'on a envoyé depuis Thunderbird. L'abonné est idempotent : il
+          retrouve sa copie par le Message-ID au lieu d'en faire une seconde."""
+        dest = self.folder_named(compte, name)
+        if dest is None: return None
+        from ..ingestion.ingestion import ingest
+        from ..services.messages import special_of
+        special = None if dest.exit_reason else special_of(dest.alias_imap)
+        res = ingest(self.s, self.store, dest.boite_id, raw, dossier_id=dest.dossier_id, date_recue=when,
+                     sens="out" if special in ("sent", "drafts") else "in", apply_rules=False)
+        if res.get("comm_id") is None:
+            log.info("APPEND vers « %s » : ignoré par un module", name); return (dest.uid_validity_servie or 1, None)
+        r = self.s.get(Rattachement, (res["comm_id"], dest.boite_id))
+        if r is None or r.dossier_id != dest.dossier_id:
+            log.info("APPEND vers « %s » : %s est déjà rangé ailleurs dans cette adresse", name, res["comm_id"])
+            return (dest.uid_validity_servie or 1, None)
+        from ..services import personal_state as personal
+        if "\\Seen" in flags: self.s.execute(personal.open_stmt(compte.compte_id, r.comm_id, r.boite_id))
+        if "\\Flagged" in flags: self.s.execute(personal.flag_stmt(compte.compte_id, r.comm_id, r.boite_id, True))
+        if "\\Answered" in flags: r.repondu_le = r.repondu_le or datetime.now(timezone.utc)
+        if special == "sent":
+            from ..modules import events
+            events.emit(self.s, "message.envoye", {"comm_id": str(r.comm_id), "boite_id": str(r.boite_id), "refuses": []},
+                        module="imap")
+        self.s.commit()
+        self.s.refresh(dest)
+        log.info("APPEND dans « %s » : %s, uid %s%s", name, r.comm_id, r.uid_servi,
+                 " (nouveau)" if res.get("nouveau") else " (déjà connu)")
+        return (dest.uid_validity_servie or 1, r.uid_servi)
+
     def store_flags(self, compte, mailbox, uids: list[int], to_add: list[str], to_remove: list[str]):
         """STORE — les drapeaux qu'on sait écrire, et rien d'autre.
 

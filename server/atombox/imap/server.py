@@ -57,10 +57,16 @@ class Listener:
                 expected = 0
                 while not session.done:
                     if expected:
+                        # LES OCTETS DU LITTÉRAL, INTACTS, puis la FIN DE LIGNE qui le suit. Elle
+                        # n'est pas un CRLF à jeter : elle porte la suite de la commande, parfois un
+                        # second littéral. Et les octets ne passent plus par un décodage UTF-8 avec
+                        # remplacement, qui aurait corrompu tout message 8 bits déposé par APPEND.
                         data = await reader.readexactly(expected)
                         expected = 0
-                        await reader.readline()                 # le CRLF qui suit le littéral
-                        responses = session.line(data.decode("utf-8", "replace"))
+                        rest = await reader.readline()
+                        if len(rest) > LINE_LIMIT:
+                            await self._send(writer, ["* BYE ligne trop longue"]); break
+                        responses = session.literal(data, rest.decode("utf-8", "replace").rstrip("\r\n"))
                     else:
                         line = await reader.readline()
                         if not line: break

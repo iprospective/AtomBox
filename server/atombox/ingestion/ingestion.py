@@ -16,7 +16,7 @@ from .identity import identity_fingerprint
 from ..journal import journal
 from ..modules.hooks import hooks
 from ..modules import events
-from ..filters import apply as apply_rules, rules_for
+from ..filters import apply as apply_rules_to, rules_for
 
 log = journal("ingestion")
 
@@ -62,7 +62,11 @@ def blob_of(s: Session, store: Store, raw_bytes: bytes) -> Blob:
     return b
 
 def ingest(s: Session, store: Store, boite_id, raw_bytes: bytes, *, uid=None, uid_validity=None, dossier_id=None,
-            date_recue: datetime | None = None, sens: str = "in", dossier_alias: str | None = None) -> dict:
+            date_recue: datetime | None = None, sens: str = "in", dossier_alias: str | None = None,
+            apply_rules: bool = True) -> dict:
+    """`apply_rules=False` : le message est DÉPOSÉ là où il doit être (un APPEND IMAP, RM3499).
+    Les règles trient ce qui ARRIVE ; rejouer « factures → corbeille » sur un envoyé que le client
+    range lui-même dans Sent le ferait disparaître sous ses yeux."""
     a = analyze(raw_bytes)
     ctx = hooks.emit("message.avant_ingestion", analyse=a, boite_id=boite_id, raw_bytes=raw_bytes, tags=[])
     if ctx.get("ignorer"):
@@ -110,7 +114,8 @@ def ingest(s: Session, store: Store, boite_id, raw_bytes: bytes, *, uid=None, ui
         # LE MOTEUR DE FILTRES (F016, D074) : il décide du dossier et de l'état d'arrivée. Il ne
         # tourne qu'à la PREMIÈRE arrivée dans une boîte : rejouer les règles sur un message déjà
         # rattaché défferait ce que l'utilisateur a fait depuis.
-        rules = apply_rules(s, rules_for(s, boite_id), a, {"dossier": dossier_alias or ""})
+        rules = (apply_rules_to(s, rules_for(s, boite_id), a, {"dossier": dossier_alias or ""}) if apply_rules
+                 else {"ignorer": False, "patch": {}, "dossier": None, "regles": []})
         if rules["ignorer"]:
             log.info("ignoré par une règle (%s) : %s", ", ".join(rules["regles"]), a.message_id)
             s.commit(); return {"comm_id": comm_id, "nouveau": fresh, "ignore": True, "identite": identite, "nature": a.nature, "pieces": len(a.pieces)}

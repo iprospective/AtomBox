@@ -175,13 +175,13 @@ def test_ce_qu_on_ne_sert_pas_est_refuse_franchement(serveur_imap):
     client, le serveur le jette, et les deux se désynchronisent : la commande suivante est lue comme
     le contenu du littéral.
 
-    On ne prend PAS de message par IMAP (D140b : la relève est notre entrée), donc APPEND reste
-    refusé, et le dialogue survit au refus."""
+    APPEND est servi depuis RM3499 ; le cas éprouvé ici est donc une commande INCONNUE qui porte un
+    littéral — la même désynchronisation, par un autre chemin."""
     c = imaplib.IMAP4("127.0.0.1", serveur_imap["port"], timeout=10)
     try:
         c.login("mathieu", "secret")
         assert c.select("INBOX")[0] == "OK"
-        for commande in ("APPEND INBOX {3}", "UID SORT (DATE) UTF-8 ALL", "GETQUOTAROOT INBOX"):
+        for commande in ("SETMETADATA INBOX {3}", "UID SORT (DATE) UTF-8 ALL", "GETQUOTAROOT INBOX"):
             tag = c._new_tag().decode()
             c.send(("%s %s\r\n" % (tag, commande)).encode())
             # latin-1 et non utf-8 : c'est l'encodage que le serveur pose sur le fil (RM3322), et
@@ -357,3 +357,109 @@ def test_retirer_seen_ne_detruit_pas_l_ouverture(serveur_imap):
     finally:
         try: c.logout()
         except Exception: pass
+
+
+# ── APPEND (RM3499) : ce que Thunderbird fait pour ranger un envoyé ou enregistrer un brouillon ──
+# Un message en ISO-8859-1, EXPRÈS : l'octet 0xE9 n'est pas de l'UTF-8 valide. L'écouteur décodait
+# autrefois les littéraux en UTF-8 avec remplacement — ce message serait ressorti avec « � » à
+# la place de chaque accent, et une taille fausse. L'ASCII, lui, survit à tout.
+ENVOYE = (b"From: Mathieu <contact@exemple.fr>\r\nTo: Client <client@client.example>\r\n"
+          b"Subject: Devis 2026-118\r\nDate: Wed, 21 Oct 2026 09:00:00 +0200\r\n"
+          b"Message-ID: <devis-118@exemple.fr>\r\nMIME-Version: 1.0\r\n"
+          b"Content-Type: text/plain; charset=iso-8859-1\r\nContent-Transfer-Encoding: 8bit\r\n\r\n"
+          b"Voici le devis d\xe9taill\xe9, \xe0 valider avant le 30.\r\n")
+
+
+def _connecte(serveur_imap):
+    c = imaplib.IMAP4("127.0.0.1", serveur_imap["port"], timeout=10)
+    c.login("mathieu", "secret")
+    return c
+
+
+def test_append_dans_envoyes_rend_l_octet_exact_et_son_uid(serveur_imap):
+    """Le message déposé est relu à l'OCTET près, sous l'UID que la réponse a promis."""
+    from sqlalchemy import select
+    from atombox.schema.models import Comm, CommEmail, Rattachement, Dossier
+    s = serveur_imap["session"]
+    c = _connecte(serveur_imap)
+    try:
+        typ, data = c.append("Sent", "(\\Seen)", None, ENVOYE)
+        assert typ == "OK", data
+        m = re.search(rb"\[APPENDUID (\d+) (\d+)\]", data[0])
+        assert m, "UIDPLUS est annoncé : la réponse DOIT porter APPENDUID — %r" % data
+        validity, uid = int(m.group(1)), int(m.group(2))
+        typ, sel = c.select("Sent")
+        assert typ == "OK"
+        assert c.response("UIDVALIDITY")[1][0] == str(validity).encode(), "l'UIDVALIDITY promise est celle de la boîte"
+        typ, rendu = c.uid("FETCH", str(uid), "(BODY.PEEK[] FLAGS)")
+        assert typ == "OK" and rendu[0] is not None, "l'UID promis désigne bien le message"
+        assert rendu[0][1] == ENVOYE, "l'octet servi est l'octet déposé — 0xE9 compris"
+        # les FLAGS viennent APRÈS le littéral, dans la partie suivante de la réponse d'imaplib
+        reste = b"".join(x if isinstance(x, bytes) else x[0] for x in rendu[1:])
+        assert b"\\Seen" in reste, ("le drapeau déposé est posé (sur le compte connecté, D175)", rendu)
+    finally:
+        c.logout()
+    s.expire_all()
+    e = s.scalar(select(CommEmail).where(CommEmail.message_id == "<devis-118@exemple.fr>"))
+    comm = s.get(Comm, e.comm_id)
+    assert comm.sens == "out", "déposé dans Envoyés : un message SORTANT"
+    r = s.scalar(select(Rattachement).where(Rattachement.comm_id == e.comm_id))
+    assert s.get(Dossier, r.dossier_id).alias_imap == "Sent" and r.uid_servi == uid
+
+
+def test_un_envoye_depose_remonte_chez_le_fournisseur(serveur_imap):
+    """D140c : le téléphone lit le FOURNISSEUR. Un envoyé rangé par Thunderbird chez nous doit y être
+    copié, sinon il n'existe pas pour le téléphone — c'est l'événement que la synchro écoute."""
+    from sqlalchemy import select
+    from atombox.schema.models import CommEmail, Evenement
+    s = serveur_imap["session"]
+    s.expire_all()
+    e = s.scalar(select(CommEmail).where(CommEmail.message_id == "<devis-118@exemple.fr>"))
+    assert e is not None, "dépend du dépôt du test précédent"
+    evs = [v for v in s.scalars(select(Evenement).where(Evenement.type == "message.envoye"))
+           if v.charge.get("comm_id") == str(e.comm_id)]
+    assert len(evs) == 1, "un événement message.envoye, un seul : %r" % evs
+
+
+def test_append_vers_une_boite_inconnue_dit_trycreate(serveur_imap):
+    c = _connecte(serveur_imap)
+    try:
+        typ, data = c.append("Projets/Inexistant", None, None, ENVOYE)
+        assert typ == "NO" and b"TRYCREATE" in data[0], data
+        assert c.noop()[0] == "OK", "le dialogue survit au refus — le littéral a été consommé"
+    finally:
+        c.logout()
+
+
+def test_deposer_deux_fois_ne_cree_pas_de_double(serveur_imap):
+    """Un client qui rejoue son APPEND (coupure réseau au mauvais moment) ne fabrique pas un second
+    message : l'identité (D064) le reconnaît, et l'UID rendu est celui du premier."""
+    from sqlalchemy import select, func
+    from atombox.schema.models import CommEmail, Rattachement
+    s = serveur_imap["session"]
+    c = _connecte(serveur_imap)
+    try:
+        typ, data = c.append("Sent", None, None, ENVOYE)
+        assert typ == "OK", data
+    finally:
+        c.logout()
+    s.expire_all()
+    e = s.scalar(select(CommEmail).where(CommEmail.message_id == "<devis-118@exemple.fr>"))
+    assert s.scalar(select(func.count()).select_from(CommEmail).where(CommEmail.message_id == "<devis-118@exemple.fr>")) == 1
+    assert s.scalar(select(func.count()).select_from(Rattachement).where(Rattachement.comm_id == e.comm_id)) == 1
+
+
+def test_append_dans_la_boite_ouverte_annonce_exists(serveur_imap):
+    """Le client a INBOX ouverte et y dépose : il doit apprendre le nouveau message dans la réponse
+    même (RFC 3501 § 6.3.11), sinon il ne le verra qu'au prochain NOOP."""
+    c = _connecte(serveur_imap)
+    try:
+        typ, avant = c.select("INBOX")
+        n = int(avant[0])
+        autre = ENVOYE.replace(b"<devis-118@", b"<note-inbox@").replace(b"Devis 2026-118", b"Note")
+        typ, data = c.append("INBOX", None, imaplib.Time2Internaldate(1761030000), autre)
+        assert typ == "OK", data
+        exists = c.response("EXISTS")[1]
+        assert exists and exists[-1] is not None and int(exists[-1]) == n + 1, exists
+    finally:
+        c.logout()

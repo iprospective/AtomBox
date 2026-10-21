@@ -76,8 +76,10 @@ def test_la_capability_n_annonce_que_ce_qu_on_sert():
     # ce qu'on annonce et qui est une COMMANDE doit exister
     for cap in ("MOVE",):
         assert cap in annonce and cap in servies, "%s est annoncé mais pas servi" % cap
-    # APPEND n'est pas annoncé, donc pas servi : on ne prend pas de message par IMAP (D140b)
-    assert "APPEND" not in servies, "APPEND existe alors qu'on n'accepte pas de dépôt par IMAP"
+    # APPEND est une commande de BASE d'IMAP4rev1 (RFC 3501 § 6.3.11) : il n'a pas de capacité à
+    # lui, l'annoncer c'est annoncer rev1. Il est servi depuis RM3499 — c'est par lui que Thunderbird
+    # enregistre un brouillon et range un envoyé.
+    assert "APPEND" in servies
 
 
 def test_rien_avant_de_s_etre_connecte():
@@ -204,14 +206,21 @@ def test_un_litteral_suspend_l_analyse():
 
 
 def test_on_ne_demande_pas_de_donnees_pour_une_commande_refusee():
-    """`APPEND INBOX {3}` obtenait un « + » : le client envoyait son message, le serveur le jetait,
-    et les deux se désynchronisaient — la commande suivante était lue comme le contenu du littéral.
-    Sur un serveur en lecture seule, c'est aussi accepter un téléversement de taille arbitraire."""
+    """Une commande refusée qui obtient un « + » fait envoyer le littéral au client, le serveur le
+    jette, et les deux se désynchronisent : la commande suivante est lue comme le contenu du
+    littéral. C'était `APPEND INBOX {3}` quand APPEND n'était pas servi ; c'est aujourd'hui toute
+    commande inconnue — et APPEND AVANT connexion, qui ferait téléverser 25 Mo pour un NO."""
     s = Session(FausseVue(), store=None)
+    r = s.line("a6 APPEND INBOX {3}")
+    assert r[0].startswith("a6 NO") and s.awaiting_literal is None, ("APPEND avant connexion : refus "
+                                                                     "SANS demande de données", r)
     s.line("a0 LOGIN mathieu secret")
-    r = s.line("a7 APPEND INBOX {3}")
+    r = s.line("a7 SETMETADATA INBOX {3}")
     assert r[0].startswith("a7 BAD"), r
     assert s.awaiting_literal is None, "le serveur n'attend RIEN : la commande est refusée séance tenante"
+    r = s.line("a9 APPEND INBOX {%d}" % (60 * 1024 * 1024))
+    assert r[0].startswith("a9 NO") and "TOOBIG" in r[0] and s.awaiting_literal is None, \
+        ("un littéral au-delà du plafond est refusé AVANT d'être lu", r)
     assert s.line("a8 NOOP")[0].startswith("a8 OK"), "et le dialogue continue, non désynchronisé"
 
 

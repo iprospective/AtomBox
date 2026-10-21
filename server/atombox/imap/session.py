@@ -36,6 +36,24 @@ FLAGS = ["\\Seen", "\\Flagged", "\\Answered", "\\Deleted"]
 WRITABLE_FLAGS = ["\\Seen", "\\Flagged", "\\Answered", "\\Deleted"]
 
 
+# Le plus gros littéral accepté — un message de 50 Mo, pièces jointes comprises. Au-delà, on répond
+# NO AVANT le « + » : le client n'envoie rien, et l'on n'a pas lu cinquante mégaoctets pour les jeter.
+MAX_LITERAL = 50 * 1024 * 1024
+
+
+class Literal(str):
+    """un littéral IMAP : la chaîne que les commandes ordinaires lisent, ET les octets exacts.
+
+    LOGIN veut du texte ; APPEND veut les OCTETS, à l'octet près — c'est le message qu'on stocke
+    (D025). Le littéral était autrefois décodé en UTF-8 avec remplacement puis réinjecté dans la
+    ligne : tout message 8 bits qui n'était pas de l'UTF-8 aurait été corrompu en silence, et un
+    message de 25 Mo repassé caractère par caractère dans l'analyseur."""
+    def __new__(cls, raw: bytes):
+        v = super().__new__(cls, raw.decode("utf-8", "replace"))
+        v.raw = raw
+        return v
+
+
 def authenticated(fn): fn._authenticated = True; return fn
 def selected(fn): fn._authenticated = fn._selected = True; return fn
 
@@ -54,6 +72,7 @@ class Session:
         self.done = False
         self.read_only = True     # SELECT ouvre en écriture, EXAMINE non (RFC 3501 § 6.3.2)
         self.awaiting_literal = None  # (ligne_partielle, octets_attendus) quand un littéral est en cours
+        self._literals: list[bytes] = []   # les littéraux de la commande en cours, octets intacts
 
     # ── entrée ──────────────────────────────────────────────────────────────────────────────────
     def greeting(self) -> list[str]:
@@ -65,9 +84,32 @@ class Session:
     def line(self, text: str) -> list[str]:
         """traite une ligne du client et rend les lignes à lui renvoyer"""
         if self.awaiting_literal is not None:
-            prefix, _ = self.awaiting_literal
-            self.awaiting_literal = None
-            text = prefix + '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+            # l'ancienne interface : un littéral passé comme TEXTE. Gardée pour les doubles de test ;
+            # l'écouteur, lui, passe les octets par `literal()`.
+            return self.literal(text.encode("utf-8"), "")
+        self._literals = []
+        return self._process(text)
+
+    def literal(self, data: bytes, rest: str) -> list[str]:
+        """les octets d'un littéral, puis la FIN de la ligne qui le suit.
+
+        La fin de ligne n'est pas un CRLF à jeter : `LOGIN {6}\r\nmathieu {6}\r\nsecret` porte un
+        second littéral après le premier. L'écouteur la jetait, et toute commande à deux littéraux
+        perdait sa seconde moitié."""
+        prefix, _ = self.awaiting_literal
+        self.awaiting_literal = None
+        self._literals.append(data)
+        # un repère court à la place des octets : l'analyseur n'a pas à parcourir 25 Mo caractère par
+        # caractère, et il ne peut pas les mal lire — il ne les voit pas
+        return self._process(prefix + "\x00%d\x00" % (len(self._literals) - 1) + rest)
+
+    def _resolve(self, v):
+        if isinstance(v, list): return [self._resolve(x) for x in v]
+        if isinstance(v, str) and len(v) > 2 and v[0] == "\x00" and v[-1] == "\x00" and v[1:-1].isdigit():
+            return Literal(self._literals[int(v[1:-1])])
+        return v
+
+    def _process(self, text: str) -> list[str]:
         try:
             elements = parse_line(text)
         except LiteralNeeded as e:
@@ -76,13 +118,20 @@ class Session:
             # jetait, et les deux se désynchronisaient — la commande suivante était lue comme le
             # contenu du littéral. Sur un serveur en LECTURE SEULE, c'est aussi accepter un
             # téléversement de taille arbitraire pour rien.
+            tag0 = text.split(" ", 1)[0] or "*"
             if not self._is_served(text):
-                return ["%s BAD commande inconnue ou non servie" % (text.split(" ", 1)[0] or "*")]
+                return ["%s BAD commande inconnue ou non servie" % tag0]
+            if self._needs_login(text) and self.compte is None:
+                return ["%s NO connectez-vous d'abord" % tag0]
+            if e.n > MAX_LITERAL:
+                log.info("littéral de %d octets refusé (plafond %d)", e.n, MAX_LITERAL)
+                return ["%s NO [TOOBIG] littéral trop gros (%d octets, plafond %d)" % (tag0, e.n, MAX_LITERAL)]
             self.awaiting_literal = (text[:text.rindex("{")], e.n)
             return ["+ envoyez %d octets" % e.n]
         except ValueError as e:
             return ["* BAD %s" % e]
         if not elements: return ["* BAD commande vide"]
+        elements = self._resolve(elements)
         tag = elements[0]
         cmd = (elements[1] if len(elements) > 1 else "").upper()
         args = elements[2:]
@@ -180,6 +229,13 @@ class Session:
         if by_uid: returned = found
         else: returned = [self.uids.index(u) + 1 for u in found]
         return ["* SEARCH" + ("".join(" %d" % n for n in returned)), "%s OK SEARCH" % tag]
+
+    def _needs_login(self, text: str) -> bool:
+        """la commande exige-t-elle d'être connecté ? — pour ne pas lire un littéral qu'on refusera"""
+        chunks = text.split(" ", 2)
+        if len(chunks) < 2: return False
+        m = getattr(self, "_c_" + chunks[1].lower().replace(".", "_"), None)
+        return bool(m is not None and m.__dict__.get("_authenticated"))
 
     def _is_served(self, text: str) -> bool:
         """la commande est-elle connue ? — lu sur la ligne BRUTE, avant tout littéral"""
@@ -287,6 +343,38 @@ class Session:
         requested = args[1] if isinstance(args[1], list) else [args[1]]
         returned = " ".join("%s %d" % (d.upper(), state.get(d.upper(), 0)) for d in requested)
         return ["* STATUS %s (%s)" % (quote(args[0]), returned), "%s OK STATUS" % tag]
+
+    @authenticated
+    def _c_append(self, tag, args):
+        """APPEND boîte [(drapeaux)] [date] {littéral} — RFC 3501 § 6.3.11, avec APPENDUID (RFC 4315).
+
+        C'est par là que Thunderbird enregistre un BROUILLON et range un ENVOYÉ. Le message passe
+        par l'ingestion, comme un message relevé : stocké à l'octet (D025), dédoublonné (D064),
+        rangé avec un UID neuf de la boîte d'arrivée (D183) — un seul chemin, pas un second."""
+        if len(args) < 2: return ["%s BAD APPEND demande une boîte et un message" % tag]
+        name, rest = args[0], list(args[1:])
+        message = rest.pop() if rest else None
+        if not isinstance(message, Literal):
+            return ["%s BAD APPEND : le message doit être un littéral" % tag]
+        flags = [_normalize_flag(f) for f in (rest.pop(0) if rest and isinstance(rest[0], list) else [])]
+        when = None
+        if rest:
+            when = _internal_date(rest.pop(0))
+            if when is None: return ["%s BAD APPEND : date interne illisible" % tag]
+        res = self.view.append(self.compte, str(name), message.raw, flags, when)
+        if res is None:
+            # TRYCREATE : « crée-la puis recommence » (RFC 3501 § 6.3.11) — sans lui, le client
+            # abandonne en silence et l'utilisateur croit son brouillon enregistré
+            return ["%s NO [TRYCREATE] boîte aux lettres inconnue : %s" % (tag, name)]
+        validity, uid = res
+        lines = []
+        if self.mailbox is not None and str(name).lower() == self.mailbox.name.lower():
+            lines = self._refresh()          # le client doit apprendre le EXISTS de la boîte ouverte
+        if uid is None:
+            # le message était déjà rangé AILLEURS dans cette boîte (un rattachement = une boîte aux
+            # lettres, D175 § 4) : on ne le déplace pas en douce, et l'on ne promet pas d'UID
+            return lines + ["%s OK APPEND (déjà présent dans une autre boîte de cette adresse)" % tag]
+        return lines + ["%s OK [APPENDUID %d %d] APPEND" % (tag, validity, uid)]
 
     @authenticated
     def _c_select(self, tag, args): return self._select(tag, args, "SELECT")
@@ -433,6 +521,26 @@ def _matches(name: str, pattern: str) -> bool:
     # remplacement de `\%` ne trouvait rien et le motif « % » ne correspondait à RIEN.
     exp = "".join(".*" if c == "*" else "[^/]*" if c == "%" else re.escape(c) for c in pattern)
     return re.match("^" + exp + "$", name, re.I) is not None
+
+
+_MOIS = {m: i for i, m in enumerate(("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"), 1)}
+
+
+def _internal_date(v):
+    """« 17-Jul-1996 02:44:25 -0700 » (RFC 3501 § 9, date-time) → datetime, ou None.
+
+    À la main et non par `strptime("%b")` : `%b` suit la LOCALE du processus, et un serveur lancé
+    sous fr_FR attendrait « juil. »."""
+    import re
+    from datetime import datetime, timedelta, timezone
+    m = re.match(r"^\s?(\d{1,2})-([A-Za-z]{3})-(\d{4}) (\d\d):(\d\d):(\d\d) ([+-])(\d\d)(\d\d)$", str(v))
+    if not m or m.group(2).lower() not in _MOIS: return None
+    d, mo, y, hh, mi, ss, sg, zh, zm = m.groups()
+    tz = timezone((1 if sg == "+" else -1) * timedelta(hours=int(zh), minutes=int(zm)))
+    try:
+        return datetime(int(y), _MOIS[mo.lower()], int(d), int(hh), int(mi), int(ss), tzinfo=tz)
+    except ValueError:
+        return None
 
 
 def _normalize_flag(d) -> str:
