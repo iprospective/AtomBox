@@ -52,8 +52,21 @@ openssl req -x509 -newkey rsa:3072 -sha256 -nodes -days 825 \
   -keyout "$KEY.tmp" -out "$CERT.tmp" \
   -subj "/CN=AtomBox IMAP ($(hostname))" \
   -addext "subjectAltName=$SAN" \
+  -addext "basicConstraints=critical,CA:FALSE" \
   -addext "keyUsage=critical,digitalSignature,keyEncipherment" \
   -addext "extendedKeyUsage=serverAuth" 2>/dev/null
+
+# UN CERTIFICAT DE SERVEUR N'EST PAS UNE AUTORITÉ. Sans `CA:FALSE` explicite, `openssl req -x509`
+# applique la section `v3_ca` de sa configuration et pose `CA:TRUE` — un certificat qui se présente
+# comme une autorité de certification. OpenSSL et Python l'acceptent en serveur ; Thunderbird (NSS,
+# mozilla::pkix) le REFUSE (CA_CERT_USED_AS_END_ENTITY), et sa demande d'exception tournait dans le
+# vide sans rien dire. Constaté le 21/10. On le vérifie donc sur le fichier produit, pas sur
+# l'intention de la commande.
+if ! openssl x509 -in "$CERT.tmp" -noout -text | grep -q 'CA:FALSE'; then
+  rm -f "$KEY.tmp" "$CERT.tmp"
+  echo "✗ le certificat produit n'a pas CA:FALSE — Thunderbird le refuserait. Rien n'a été remplacé."
+  exit 3
+fi
 mv "$KEY.tmp" "$KEY"; mv "$CERT.tmp" "$CERT"
 chmod 600 "$KEY"; chmod 644 "$CERT"
 

@@ -163,3 +163,28 @@ def test_chaque_capacite_annoncee_a_son_code():
     assert not imprevues, "annoncé, et rien ne le sert : " + ", ".join(sorted(imprevues))
     servies = MANQUES_CONNUS - manquantes
     assert not servies, ("désormais servies — à retirer de MANQUES_CONNUS : " + ", ".join(sorted(servies)))
+
+
+def test_l_outil_pose_un_certificat_de_serveur_et_pas_une_autorite(tmp_path):
+    """Le 21/10, la demande d'exception de Thunderbird tournait dans le vide : le certificat portait
+    `CA:TRUE`, la valeur par défaut d'`openssl req -x509`. OpenSSL et Python l'acceptent en serveur,
+    et c'est pour ça que les tests ci-dessus passaient ; Thunderbird (NSS) refuse une autorité
+    utilisée comme certificat de serveur. On éprouve donc l'OUTIL, sur le fichier qu'il produit."""
+    import shutil, subprocess
+    if not shutil.which("openssl"):
+        pytest.skip("binaire openssl absent : l'outil ne peut pas tourner ici (il le vérifie lui-même)")
+    outil = ICI.parent / "tools" / "make-imapd-cert.sh"
+    r = subprocess.run(["bash", str(outil)], env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path),
+                                                  "ATOMBOX_IMAPD_CERT_DIR": str(tmp_path / "imapd")},
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stdout + r.stderr
+    texte = subprocess.run(["openssl", "x509", "-in", str(tmp_path / "imapd" / "imapd.crt"), "-noout", "-text"],
+                           capture_output=True, text=True).stdout
+    assert "CA:FALSE" in texte, "un certificat de serveur n'est pas une autorité de certification"
+    assert "TLS Web Server Authentication" in texte and "IP Address:127.0.0.1" in texte
+    assert oct((tmp_path / "imapd" / "imapd.key").stat().st_mode & 0o777) == "0o600"
+    # et il refuse d'écraser sans --force : chaque client qui a accepté l'exception serait refusé
+    r2 = subprocess.run(["bash", str(outil)], env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path),
+                                                   "ATOMBOX_IMAPD_CERT_DIR": str(tmp_path / "imapd")},
+                        capture_output=True, text=True, timeout=60)
+    assert r2.returncode == 2 and "--force" in r2.stdout
