@@ -644,3 +644,46 @@ def test_le_client_voit_la_piece_jointe_et_la_telecharge_par_tranches(serveur_im
         assert rendu[0][1] == PDF, "la pièce entière : la tranche exacte des octets stockés"
     finally:
         c.logout()
+
+
+# ── SEARCH et INTERNALDATE sur le fil (RM3499) ──────────────────────────────────────────────────
+def test_la_recherche_complete_sur_le_vrai_serveur(serveur_imap):
+    """OR, NOT, dates, tailles, en-têtes, et un critère en LITTÉRAL (accentué) : ce qu'un client
+    envoie vraiment. La sémantique de chaque critère est éprouvée contre Dovecot ailleurs ; ici, le
+    chemin complet — analyse, base, magasin."""
+    c = _connecte(serveur_imap)
+    try:
+        c.select("INBOX")
+        typ, tous = c.uid("SEARCH", None, "ALL")
+        tous = tous[0].split()
+        assert tous, "la boîte a des messages"
+        typ, r = c.uid("SEARCH", None, "OR", "SUBJECT", "Commande", "NOT", "ALL")
+        assert typ == "OK" and r[0].split(), r
+        typ, r = c.uid("SEARCH", None, "SINCE", "1-Jan-2000", "LARGER", "10")
+        assert typ == "OK" and r[0].split() == tous, "tout est arrivé après l'an 2000 et pèse plus de 10 octets"
+        typ, r = c.uid("SEARCH", None, "HEADER", "Message-ID", "fournisseur.example")
+        assert typ == "OK" and r[0].split(), r
+        # un littéral : « Développement » est dans le corps des messages du banc
+        c.literal = "Développement".encode("utf-8")
+        typ, r = c.uid("SEARCH", "CHARSET", "UTF-8", "BODY")
+        assert typ == "OK" and r[0].split(), ("la recherche décode le corps (UTF-8) et lit le littéral", r)
+        # imaplib LÈVE sur un BAD : c'est précisément ce qu'on veut — une erreur, jamais une liste vide
+        with pytest.raises(imaplib.IMAP4.error, match="inconnu"):
+            c.uid("SEARCH", None, "YOUNGER", "60")
+        assert c.noop()[0] == "OK", "et le dialogue continue"
+    finally:
+        c.logout()
+
+
+def test_l_internaldate_est_au_format_imap(serveur_imap):
+    """« 21-Oct-2026 07:00:00 +0000 » (RFC 3501 § 9). Le serveur rendait « Wed 21 Oct 2026 07:00:00 + »
+    — une date RFC 2822 tronquée, que les clients ne savent pas lire."""
+    c = _connecte(serveur_imap)
+    try:
+        c.select("INBOX")
+        typ, r = c.fetch("1", "(INTERNALDATE)")
+        assert typ == "OK"
+        assert re.search(rb'INTERNALDATE "[ \d]\d-[A-Z][a-z]{2}-\d{4} \d\d:\d\d:\d\d [+-]\d{4}"', r[0]), r
+        assert imaplib.Internaldate2tuple(r[0]) is not None, "imaplib sait la lire"
+    finally:
+        c.logout()

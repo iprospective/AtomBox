@@ -226,31 +226,33 @@ class Session:
 
     # ── la recherche : un sous-ensemble assumé ──────────────────────────────────────────────────
     def _search(self, tag, args, by_uid):
-        """ALL, UID <ensemble>, et les critères d'en-tête les plus courants.
+        """SEARCH — TOUS les critères de la RFC 3501 § 6.4.4 (`imap/search.py`), avec NOT, OR et les
+        parenthèses. IMAP4rev1 les promet tous : on en refusait la plupart.
 
-        Ce qu'on ne sait pas faire, on le dit : rendre une liste vide sur un critère qu'on n'a pas
-        compris ferait croire au client qu'il n'y a rien, ce qui est pire qu'une erreur — il
-        n'insiste pas, et l'utilisateur conclut que le message a disparu."""
-        criteria = [a.upper() if isinstance(a, str) else a for a in args]
-        if criteria and criteria[0] in ("CHARSET", "UTF-8"): criteria = criteria[2:] if criteria[0] == "CHARSET" else criteria[1:]
-        found = list(self.uids)
-        i = 0
-        while i < len(criteria):
-            c = criteria[i]
-            if c == "ALL": i += 1; continue
-            if c == "UID" and i + 1 < len(criteria):
-                found = [u for u in found if u in set(sequence(args[i + 1], self.uids, True))]; i += 2; continue
-            if c in ("FROM", "TO", "CC", "SUBJECT", "BODY", "TEXT") and i + 1 < len(criteria):
-                needle = str(args[i + 1]).lower()
-                found = [u for u in found if self.view.contains(self.mailbox, u, c, needle)]; i += 2; continue
-            if c in ("SEEN", "UNSEEN", "FLAGGED", "UNFLAGGED"):
-                wants = not c.startswith("UN")
-                flag = "\\Seen" if c.endswith("SEEN") else "\\Flagged"
-                found = [u for u in found if (flag in self.view.message(self.mailbox, u).flags) == wants]; i += 1; continue
-            return ["%s NO critère de recherche non servi : %s" % (tag, c)]
-        if by_uid: returned = found
-        else: returned = [self.uids.index(u) + 1 for u in found]
+        Ce qu'on ne comprend pas reste une ERREUR (BAD), jamais une liste vide : « rien trouvé » ferait
+        conclure à l'utilisateur que son message a disparu, et il n'insisterait pas."""
+        from . import search as S
+        args = list(args)
+        if args and str(args[0]).upper() == "CHARSET":
+            if len(args) < 2: return ["%s BAD CHARSET sans jeu de caractères" % tag]
+            if str(args[1]).upper() not in ("UTF-8", "US-ASCII"):
+                return ["%s NO [BADCHARSET (UTF-8 US-ASCII)] jeu de caractères non servi" % tag]
+            args = args[2:]
+        try:
+            tree = S.parse(args, self.uids)
+            found = [u for u in self.uids if S.matches(tree, self._search_facade(u))]
+        except S.SearchError as e:
+            log.info("SEARCH refusé : %s", e)
+            return ["%s BAD %s" % (tag, e)]
+        returned = found if by_uid else [self.uids.index(u) + 1 for u in found]
         return ["* SEARCH" + ("".join(" %d" % n for n in returned)), "%s OK SEARCH" % tag]
+
+    def _search_facade(self, uid):
+        from . import search as S
+        fn = getattr(self.view, "search_message", None)
+        if fn is not None: return fn(self.mailbox, uid, self.uids)
+        m = self.view.message(self.mailbox, uid)            # un double de test : ses octets suffisent
+        return S.Message(uid, self.uids, getattr(m, "raw", b""), m.flags, None, getattr(m, "size", None))
 
     def _needs_login(self, text: str) -> bool:
         """la commande exige-t-elle d'être connecté ? — pour ne pas lire un littéral qu'on refusera"""

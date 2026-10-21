@@ -184,8 +184,9 @@ def test_aucun_expunge_pendant_un_fetch_ou_un_search():
 
 def test_un_critere_de_recherche_inconnu_est_une_ERREUR_pas_une_liste_vide():
     """Rendre « rien trouvé » ferait conclure à l'utilisateur que son message a disparu."""
+    # YOUNGER est de la RFC 5032 (WITHIN), que nous n'annonçons pas : une erreur de syntaxe, BAD
     _, (_, r) = dialogue("a1 SELECT INBOX", "a2 UID SEARCH YOUNGER 3600")
-    assert r[0].startswith("a2 NO"), r
+    assert r[0].startswith("a2 BAD"), r
     _, (_, ok) = dialogue("a1 SELECT INBOX", "a2 UID SEARCH FROM a@x.fr")
     assert ok[0].startswith("* SEARCH 1 4 9"), ok
 

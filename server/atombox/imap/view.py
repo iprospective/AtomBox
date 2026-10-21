@@ -57,8 +57,10 @@ class ServedMessage:
         self.uid, self._c, self._r = uid, comm, rattachement
         self._store, self._blob, self._message_id = store, blob_ref, message_id
         self.size = comm.taille or 0
-        self.internal_date = email.utils.format_datetime(comm.date_recue).replace(",", "")[:26] \
-            if comm.date_recue else "01-Jan-1970 00:00:00 +0000"
+        # INTERNALDATE : « 21-Oct-2026 07:00:00 +0000 » (RFC 3501 § 9, date-time). L'ancienne forme
+        # tronquait une date RFC 2822 — « Wed 21 Oct 2026 07:00:00 + » —, que rien ne savait lire.
+        self.internal = comm.date_recue
+        self.internal_date = internal_date(comm.date_recue)
         # DEUX ORIGINES, ET C'EST LE FOND DE D175 : `\\Seen` et `\\Flagged` viennent de l'état
         # PERSONNEL du compte connecté (`etat` absent = il n'y a jamais touché) ; `\\Answered` et
         # `\\Deleted` viennent du rattachement, parce que répondre et supprimer sont des actes
@@ -127,6 +129,18 @@ class ServedMessage:
         out = mime.section(self._tree(), raw, section)
         if out is None: log.info("section de corps inexistante : %r", section)
         return out
+
+
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def internal_date(d) -> str:
+    """date-time IMAP, à la main : `strftime("%b")` suit la LOCALE du processus"""
+    if d is None: return "01-Jan-1970 00:00:00 +0000"
+    if d.tzinfo is None: d = d.replace(tzinfo=timezone.utc)
+    off = int(d.utcoffset().total_seconds() // 60)
+    return "%2d-%s-%04d %02d:%02d:%02d %s%02d%02d" % (d.day, _MONTHS[d.month - 1], d.year, d.hour, d.minute,
+                                                        d.second, "+" if off >= 0 else "-", abs(off) // 60, abs(off) % 60)
 
 
 class View:
@@ -229,6 +243,14 @@ class View:
         state = state_sync(self.s, self.compte.compte_id if self.compte else None, r.comm_id, r.boite_id)
         return ServedMessage(uid, c, r, self.store, e.blob_ref if e else None,
                             message_id=e.message_id if e else None, state=state)
+
+    def search_message(self, mailbox, uid: int, all_uids: list[int]):
+        """la façade de recherche d'un message : ses drapeaux tels qu'on les SERT (personnels, D175),
+        sa date interne, sa taille — et ses octets, lus seulement si un critère les demande"""
+        from . import search as S
+        m = self.message(mailbox, uid)
+        if m is None: return S.Message(uid, all_uids, b"", (), None, 0)
+        return S.Message(uid, all_uids, m._raw, m.flags, m.internal, m.size)
 
     def contains(self, mailbox, uid: int, field: str, needle: str) -> bool:
         m = self.message(mailbox, uid)
