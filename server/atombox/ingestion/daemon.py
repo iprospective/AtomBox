@@ -49,8 +49,14 @@ def poll_mailbox(s, store: Store, releve: Poller, boite_id, adresse: str) -> int
         for uid in releve.new_uids(since):
             try:
                 raw_bytes, date, drapeaux = releve.read(uid)
+                # LE SENS PAR LE DOSSIER DU FOURNISSEUR (D185) : ce qui est dans ses Envoyés ou ses
+                # Brouillons est ÉMIS. La relève passait « reçu » pour tout — deux messages de nos
+                # Envoyés étaient marqués reçus (mesuré le 21/10).
+                from ..services.messages import special_of
                 r = ingest(s, store, boite_id, raw_bytes, uid=uid, uid_validity=validity, dossier_id=d.dossier_id,
-                            date_recue=date, dossier_alias=d.alias_imap)
+                            date_recue=date, dossier_alias=d.alias_imap,
+                            sens="out" if (d.special_use in ("\\Sent", "\\Drafts")
+                                           or special_of(d.alias_imap) in ("sent", "drafts")) else "in")
                 n += 1
                 log.debug("%s/%s uid %d → %s (%s)", adresse, alias, uid, "nouveau" if r["nouveau"] else "rattaché", r["nature"])
             except Exception as e:

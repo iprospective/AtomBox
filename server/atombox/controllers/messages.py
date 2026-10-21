@@ -17,9 +17,19 @@ log = journal("api")
 
 def store() -> Store: return Store(settings.read("ATOMBOX_STORE", "./magasin"))
 
-def _uuid(id_: str):
-    try: return uuid.UUID(id_)
+def _ref(id_: str):
+    """l'identifiant d'une PLACE (D185) : « <uuid> », ou « <uuid>.out » pour l'exemplaire émis d'un
+    message qui a AUSSI une place reçue dans la même boîte — le message envoyé à soi-même. Sans
+    suffixe, c'est la place reçue si elle existe, sinon la seule qui existe."""
+    base, _, sens = (id_ or "").partition(".")
+    if sens not in ("", "in", "out"): raise HTTPException(404, "message inconnu")
+    try: return uuid.UUID(base), (sens or None)
     except ValueError: raise HTTPException(404, "message inconnu")
+
+
+def _uuid(id_: str):
+    """le MESSAGE, quelle que soit sa place : son contenu est le même dans les deux"""
+    return _ref(id_)[0]
 
 class MessagesController(Controller):
     prefix = "/messages"
@@ -34,7 +44,7 @@ class MessagesController(Controller):
 
     @action("GET", "/{id}")
     async def detail(self, id: str, compte: Compte = Depends(current_account), s: AsyncSession = Depends(async_session)):
-        m = await svc.detail(s, compte, _uuid(id), store())
+        m = await svc.detail(s, compte, *_ref(id), store=store())
         if not m: raise HTTPException(404, "message inconnu")
         return m
 
@@ -55,7 +65,8 @@ class MessagesController(Controller):
     @action("PATCH", "/{id}/rattachement")
     async def filing(self, id: str, request: Request, compte: Compte = Depends(current_account), s: AsyncSession = Depends(async_session)):
         corps = await request.json()
-        r = await svc.patch(s, compte, _uuid(id), corps or {})
+        cid, sens = _ref(id)
+        r = await svc.patch(s, compte, cid, corps or {}, sens=sens)
         if r is None: raise HTTPException(404, "message inconnu")
         return {"ok": True, **r}
 
@@ -68,7 +79,7 @@ class MessagesController(Controller):
 
     @action("DELETE", "/{id}/rattachement")
     async def detach(self, id: str, compte: Compte = Depends(current_account), s: AsyncSession = Depends(async_session)):
-        if not await svc.detach(s, compte, _uuid(id)): raise HTTPException(404, "message inconnu")
+        if not await svc.detach(s, compte, *_ref(id)): raise HTTPException(404, "message inconnu")
         return {"ok": True, "modifies": 1, "detache": True}
 
     @action("POST", "/{id}/tags")

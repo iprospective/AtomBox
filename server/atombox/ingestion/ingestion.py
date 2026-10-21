@@ -109,7 +109,11 @@ def ingest(s: Session, store: Store, boite_id, raw_bytes: bytes, *, uid=None, ui
                                   content_id=p.content_id, parametres=p.parametres))
         s.flush()
         events.emit(s, "message.ingere", {"comm_id": str(comm_id), "boite_id": str(boite_id), "nature": a.nature, "sujet": a.sujet}, cible=None)
-    r = s.get(Rattachement, (comm_id, boite_id))
+    # LA PLACE de ce message dans cette boîte, pour CE rôle (D185). L'exemplaire livré d'un message
+    # qu'on s'est envoyé est le même message (D064) — mais pas la même place : il prend la sienne,
+    # dans la boîte de réception, avec les règles, comme toute arrivée. Il arrive LU, parce que
+    # l'état personnel est par (personne, message, boîte) et que ce qu'on écrit, on l'a lu.
+    r = s.get(Rattachement, (comm_id, boite_id, sens))
     if r is None:
         # LE MOTEUR DE FILTRES (F016, D074) : il décide du dossier et de l'état d'arrivée. Il ne
         # tourne qu'à la PREMIÈRE arrivée dans une boîte : rejouer les règles sur un message déjà
@@ -126,7 +130,7 @@ def ingest(s: Session, store: Store, boite_id, raw_bytes: bytes, *, uid=None, ui
             if d2 is not None: cible = d2.dossier_id
             else: log.warning("règle « %s » : dossier %r inconnu dans cette boîte", ", ".join(rules["regles"]), rules["dossier"])
         from ..served_uid import assign as assign_uid
-        s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, uid_servi=assign_uid(s, cible),
+        s.add(Rattachement(comm_id=comm_id, boite_id=boite_id, sens=sens, uid_servi=assign_uid(s, cible),
                            status=p.get("statut", "new"), personnel=False, gele=False,
                            dossier_id=cible, uid_imap=uid))
         # CE QU'UNE RÈGLE POSE COMME ÉTAT PERSONNEL (lu, drapeau) VA SUR UNE PERSONNE, pas sur le
@@ -148,7 +152,7 @@ def ingest(s: Session, store: Store, boite_id, raw_bytes: bytes, *, uid=None, ui
         # chemin, et le message est DÉPLACÉ côté IMAP — sinon Thunderbird ne voyait rien du tri.
         if uid is not None and (p.get("lu") or p.get("drapeau") or cible != dossier_id):
             s.flush()
-            events.emit(s, "rattachement.change", {"comm_id": str(comm_id), "boite_id": str(boite_id),
+            events.emit(s, "rattachement.change", {"comm_id": str(comm_id), "boite_id": str(boite_id), "sens": sens,
                                "dossier_avant": str(dossier_id) if cible != dossier_id else None}, cible=None)
     elif r.uid_imap is None and uid is not None:
         r.uid_imap = uid

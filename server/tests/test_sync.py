@@ -20,7 +20,7 @@ from atombox.schema.models import Rattachement
 
 
 def ratt(**k):
-    d = dict(comm_id=uuid.uuid4(), boite_id=uuid.uuid4(), status="new",
+    d = dict(comm_id=uuid.uuid4(), boite_id=uuid.uuid4(), sens="in", status="new",
              personnel=False, gele=False, uid_imap=12)
     d.update(k); return Rattachement(**d)
 
@@ -135,7 +135,7 @@ def _boite_avec(s, membres: int):
     s.add(Comm(comm_id=cid, type="email", date_recue=datetime.now(timezone.utc),
                date_ingestion=datetime.now(timezone.utc), sens="in", nature="humain",
                from_adresse="x@y.fr", taille=1, nb_pieces_jointes=0, est_chiffre=False, est_signe=False))
-    r = Rattachement(comm_id=cid, boite_id=b.boite_id, status="new", personnel=False, gele=False,
+    r = Rattachement(comm_id=cid, boite_id=b.boite_id, sens="in", status="new", personnel=False, gele=False,
                      dossier_id=d.dossier_id, uid_imap=7)
     s.add(r); s.commit()
     return b, d, r, comptes

@@ -33,7 +33,10 @@ class ModuleSync(Module):
     def push(self, ctx):
         s, charge = ctx["session"], ctx["charge"]
         comm_id, boite_id = uuid.UUID(charge["comm_id"]), uuid.UUID(charge["boite_id"])
-        r = s.get(Rattachement, (comm_id, boite_id))
+        # LA place qui a changé (D185). Un événement d'avant D185 ne porte pas de sens : c'est alors
+        # la place reçue s'il y en a une — la seule qui existait.
+        r = s.get(Rattachement, (comm_id, boite_id, charge.get("sens") or "in")) \
+            or (None if charge.get("sens") else s.get(Rattachement, (comm_id, boite_id, "out")))
         if r is None: log.debug("rattachement %s/%s disparu — rien à pousser", comm_id, boite_id); return
         if r.uid_imap is None:
             log.debug("%s : pas d'UID IMAP (message écrit ici, pas encore relevé) — rien à pousser", comm_id); return
@@ -73,7 +76,7 @@ class ModuleSync(Module):
         autre. Disparaît avec la V3, quand Dovecot lira le stockage d'AtomBox (Q024)."""
         s, charge = ctx["session"], ctx["charge"]
         comm_id, boite_id = uuid.UUID(charge["comm_id"]), uuid.UUID(charge["boite_id"])
-        r = s.get(Rattachement, (comm_id, boite_id))
+        r = s.get(Rattachement, (comm_id, boite_id, "out"))          # un envoi est une place ÉMISE (D185)
         if r is None or r.uid_imap is not None:
             log.debug("%s : rien à copier (%s)", comm_id, "déjà dans IMAP" if r is not None else "rattachement disparu"); return
         cfg = config_imap()

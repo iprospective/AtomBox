@@ -979,7 +979,8 @@
   "rattachement": {
    "cle": [
     "comm_id",
-    "boite_id"
+    "boite_id",
+    "sens"
    ],
    "colonnes": [
     {
@@ -990,6 +991,11 @@
     {
      "nom": "boite_id",
      "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "sens",
+     "type": "text",
      "obligatoire": true
     },
     {
@@ -1122,7 +1128,8 @@
     "D093",
     "D118",
     "D134",
-    "D175"
+    "D175",
+    "D185"
    ]
   },
   "read_state": {

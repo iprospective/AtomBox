@@ -270,7 +270,7 @@ async def address_book(s: AsyncSession, boites: list[Boite], q: str = "", limit:
           .join(Participant, Participant.adresse_id == Adresse.adresse_id)
           .join(Comm, Comm.comm_id == Participant.comm_id)
           .join(Rattachement, Rattachement.comm_id == Comm.comm_id)
-          .where(Rattachement.boite_id.in_(ids), Comm.sens == "out", Participant.role.in_(("to", "cc")))
+          .where(Rattachement.boite_id.in_(ids), Rattachement.sens == "out", Participant.role.in_(("to", "cc")))
           .group_by(Adresse.adresse_complete).order_by(func.count().desc(), func.max(Comm.date_recue).desc()).limit(limit))
     if q: st = st.where(func.lower(Adresse.adresse_complete).contains(q.lower()))
     return [{"adresse": a, "nom": nom, "echanges": n, "dernier": d.isoformat() if d else None}

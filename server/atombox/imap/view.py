@@ -344,7 +344,7 @@ class View:
                      sens="out" if special in ("sent", "drafts") else "in", apply_rules=False)
         if res.get("comm_id") is None:
             log.info("APPEND vers « %s » : ignoré par un module", name); return (dest.uid_validity_servie or 1, None)
-        r = self.s.get(Rattachement, (res["comm_id"], dest.boite_id))
+        r = self.s.get(Rattachement, (res["comm_id"], dest.boite_id, "out" if special in ("sent", "drafts") else "in"))
         if r is None or r.dossier_id != dest.dossier_id:
             log.info("APPEND vers « %s » : %s est déjà rangé ailleurs dans cette adresse", name, res["comm_id"])
             return (dest.uid_validity_servie or 1, None)
