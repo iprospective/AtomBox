@@ -15,7 +15,7 @@ import os, re as _re, uuid
 from datetime import datetime, timezone
 import pytest
 from atombox.sync.sync import apply_down_sync, down_sync, wanted_flags, in_down_sync, imap_state
-from atombox.sync.module import login_of
+from atombox.credentials import login_of
 from atombox.schema.models import Rattachement
 
 

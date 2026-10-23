@@ -22,8 +22,11 @@ import re, select, socket, threading, time
 class FauxImap(threading.Thread):
     SEP = "/"
 
-    def __init__(self, dossiers=("INBOX", "Sent", "Drafts", "Trash", "Junk")):
+    def __init__(self, dossiers=("INBOX", "Sent", "Drafts", "Trash", "Junk"), comptes: dict | None = None):
         super().__init__(daemon=True)
+        # comptes = {identifiant: mot de passe} : LOGIN est alors vérifié comme chez un vrai
+        # fournisseur ; None accepte tout (le comportement historique des tests)
+        self.comptes = comptes; self.logins: list[str] = []
         self.sock = socket.socket(); self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(("127.0.0.1", 0)); self.sock.listen(16)
         self.port = self.sock.getsockname()[1]
@@ -99,7 +102,16 @@ class FauxImap(threading.Thread):
                     sous, _, args = args.partition(" ")
                     current = self._uid(write, tag, sous.upper(), args, current); continue
                 if cmd == "CAPABILITY": write("* CAPABILITY IMAP4rev1 IDLE MOVE UIDPLUS"); write(tag + " OK fait")
-                elif cmd == "LOGIN": write(tag + " OK connecté")
+                elif cmd == "LOGIN":
+                    # imaplib envoie l'utilisateur nu et le mot de passe entre guillemets : chaque jeton l'un ou l'autre
+                    jetons = [m.group(1).replace('\\"', '"').replace("\\\\", "\\") if m.group(1) is not None else m.group(2)
+                              for m in re.finditer(r'"((?:[^"\\]|\\.)*)"|(\S+)', args)] + ["", ""]
+                    u, pw = jetons[0], jetons[1]
+                    if self.comptes is not None and self.comptes.get(u) != pw:
+                        write(tag + " NO [AUTHENTICATIONFAILED] Authentication failed.")
+                    else:
+                        with self.verrou: self.logins.append(u)
+                        write(tag + " OK connecté")
                 elif cmd == "LIST":
                     for d in self.boites: write('* LIST (\\HasNoChildren) "%s" "%s"' % (self.SEP, d))
                     write(tag + " OK fait")
@@ -238,8 +250,11 @@ class FauxRelais(threading.Thread):
     """un relais SMTP qui accepte PLUSIEURS connexions (le RelaisFactice de test_emission n'en prend
     qu'une) et garde chaque remise : enveloppe et octets. Refuse toute adresse en @refuse.example."""
 
-    def __init__(self):
+    def __init__(self, comptes: dict | None = None):
         super().__init__(daemon=True)
+        # comptes = {utilisateur: mot de passe} : AUTH PLAIN exigé, et un compte n'expédie QUE pour
+        # sa propre adresse — comme Postfix avec reject_sender_login_mismatch
+        self.comptes = comptes
         self.sock = socket.socket(); self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(("127.0.0.1", 0)); self.sock.listen(8)
         self.port = self.sock.getsockname()[1]
@@ -267,7 +282,7 @@ class FauxRelais(threading.Thread):
     def _session(self, c):
         f = c.makefile("rwb", buffering=0)
         rep = lambda x: f.write((x + "\r\n").encode())
-        rep("220 faux relais"); de, for_type, data, corps = None, [], False, []
+        rep("220 faux relais"); de, for_type, data, corps, qui = None, [], False, [], None
         try:
             for raw in f:
                 if data:
@@ -278,8 +293,19 @@ class FauxRelais(threading.Thread):
                     else: corps.append(raw[1:] if raw.startswith(b"..") else raw)
                     continue
                 l = raw.decode("utf-8", "replace").rstrip("\r\n"); cmd = l.split(" ")[0].upper()
-                if cmd in ("EHLO", "HELO"): rep("250-faux relais"); rep("250 8BITMIME")
-                elif cmd == "MAIL": de = re.search(r"<([^>]*)>", l).group(1); rep("250 OK")
+                if cmd in ("EHLO", "HELO"):
+                    rep("250-faux relais")
+                    if self.comptes is not None: rep("250-AUTH PLAIN")
+                    rep("250 8BITMIME")
+                elif cmd == "AUTH":
+                    import base64
+                    _, u, pw = base64.b64decode(l.split(" ")[2]).decode().split("\0")
+                    if self.comptes is not None and self.comptes.get(u) == pw: qui = u; rep("235 2.7.0 authentifié")
+                    else: rep("535 5.7.8 authentification refusée")
+                elif cmd == "MAIL":
+                    de = re.search(r"<([^>]*)>", l).group(1)
+                    if self.comptes is not None and de != qui: rep("553 5.7.1 <%s>: Sender address rejected: not owned by user %s" % (de, qui))
+                    else: rep("250 OK")
                 elif cmd == "RCPT":
                     a = re.search(r"<([^>]*)>", l).group(1)
                     if a.endswith("@refuse.example"): rep("550 5.1.1 inconnu")

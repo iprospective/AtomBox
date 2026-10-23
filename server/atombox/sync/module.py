@@ -7,7 +7,7 @@ file réessaie (D161), et IMAP finira par recevoir l'état."""
 from __future__ import annotations
 import os, uuid
 from sqlalchemy import select
-from ..ingestion.imap import Poller, tls_imap
+from ..ingestion.imap import open_mailbox
 from ..journal import journal
 from ..modules import Module, event
 from ..schema.models import Adresse, Boite, CommEmail, Dossier, Rattachement
@@ -16,14 +16,6 @@ from .. import settings
 
 log = journal("imap")
 
-def config_imap() -> dict:
-    return {"hote": settings.read("ATOMBOX_IMAP_HOST"), "port": int(settings.read("ATOMBOX_IMAP_PORT", "993")),
-            "master": (settings.read("ATOMBOX_IMAP_MASTER") or "").strip(),
-            "mot_de_passe": settings.read("ATOMBOX_IMAP_PASSWORD")}
-
-def login_of(adresse: str, master: str) -> str:
-    """« boîte*master » avec un compte master (chapitre 06) ; l'adresse seule sinon"""
-    return adresse if not master or master.lower() == adresse.lower() else "%s*%s" % (adresse, master)
 
 class ModuleSync(Module):
     nom = "sync"; version = "0.1"; interne = True
@@ -40,15 +32,14 @@ class ModuleSync(Module):
         if r is None: log.debug("rattachement %s/%s disparu — rien à pousser", comm_id, boite_id); return
         if r.uid_imap is None:
             log.debug("%s : pas d'UID IMAP (message écrit ici, pas encore relevé) — rien à pousser", comm_id); return
-        cfg = config_imap()
-        if not cfg["hote"]:
+        if not settings.read("ATOMBOX_IMAP_HOST"):
             log.warning("ATOMBOX_IMAP_HOST absent : synchronisation montante impossible"); return
         boite = s.get(Boite, boite_id); adresse = s.get(Adresse, boite.adresse_id).adresse_complete
         source = s.get(Dossier, charge.get("dossier_avant") and uuid.UUID(charge["dossier_avant"]) or r.dossier_id)
         cible = s.get(Dossier, r.dossier_id)
         if source is None or cible is None:
             log.warning("%s : dossier IMAP inconnu — rien à pousser", comm_id); return
-        releve = Poller(cfg["hote"], cfg["port"], tls=tls_imap()).connect(login_of(adresse, cfg["master"]), cfg["mot_de_passe"])
+        releve = open_mailbox(adresse)
         try:
             releve.select_folder(source.alias_imap or source.nom, writable=True)
             # Les drapeaux qu'on POUSSE sont ceux du membre qui relève (D175 § 3) : le
@@ -79,8 +70,7 @@ class ModuleSync(Module):
         r = s.get(Rattachement, (comm_id, boite_id, "out"))          # un envoi est une place ÉMISE (D185)
         if r is None or r.uid_imap is not None:
             log.debug("%s : rien à copier (%s)", comm_id, "déjà dans IMAP" if r is not None else "rattachement disparu"); return
-        cfg = config_imap()
-        if not cfg["hote"]:
+        if not settings.read("ATOMBOX_IMAP_HOST"):
             log.warning("ATOMBOX_IMAP_HOST absent : l'envoi %s n'est pas copié dans IMAP", comm_id); return
         dossier = s.get(Dossier, r.dossier_id)
         if dossier is None or not (dossier.alias_imap or dossier.nom):
@@ -89,7 +79,7 @@ class ModuleSync(Module):
         raw_bytes = Store(settings.read("ATOMBOX_STORE", "./magasin")).read(str(comm_id))
         e = s.get(CommEmail, comm_id)
         boite = s.get(Boite, boite_id); adresse = s.get(Adresse, boite.adresse_id).adresse_complete
-        releve = Poller(cfg["hote"], cfg["port"], tls=tls_imap()).connect(login_of(adresse, cfg["master"]), cfg["mot_de_passe"])
+        releve = open_mailbox(adresse)
         try:
             alias = dossier.alias_imap or dossier.nom
             releve.select_folder(alias, writable=True)
