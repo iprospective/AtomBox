@@ -36,7 +36,7 @@ if [ "$QUOI" = tout ] || [ "$QUOI" = --systemd ]; then
   # `atombox-tasks` (RM3351) : la laisser en place ferait tourner DEUX processus de tâches, l'un sur
   # un module qui n'existe plus — donc en échec perpétuel, relancé toutes les trois secondes.
   for u in api ingestion tasks imapd; do
-    sed -e "s#__SERVER__#$SERVER_DIR#g" -e "s/--port 8010/--port $PORT/" "$ICI/atombox-$u.service" > "/etc/systemd/system/atombox-$u.service"
+    "$ICI/render-unit.sh" "$SERVER_DIR" < "$ICI/atombox-$u.service" | sed -e "s/--port 8010/--port $PORT/" > "/etc/systemd/system/atombox-$u.service"
   done
   for vieille in atombox-taches; do
     if [ -f "/etc/systemd/system/$vieille.service" ]; then

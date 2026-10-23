@@ -54,3 +54,40 @@ def test_chaque_unite_de_service_a_bien_un_execstart():
                        "ne vérifie RIEN et passe au vert" % UNITES)
     vues = {nom for nom, _ in _execstart()}
     assert vues == attendues, "unités sans ExecStart : " + ", ".join(sorted(attendues - vues))
+
+
+def _rendre(*args):
+    import subprocess
+    out = {}
+    for u in sorted(UNITES.glob("atombox-*.service")):
+        if u.name == "atombox-tunnel.service": continue          # posée à part (RM3267)
+        out[u.name] = subprocess.run(["bash", str(UNITES / "render-unit.sh"), *args], input=u.read_text(encoding="utf-8"),
+                                     capture_output=True, text=True, check=True).stdout
+    return out
+
+
+def test_le_rendu_commun_ne_laisse_aucun_marqueur():
+    """RM3516 — un seul rendu (render-unit.sh) pour dev et pour une machine dédiée. Sans paramètre, il
+    rend l'unité du conteneur dev, à l'identique de ce qui y est installé ; avec un utilisateur et un
+    venv, celle de mmi. Un marqueur oublié, c'est un service qui ne démarre pas."""
+    dev = _rendre("/srv/x")
+    assert dev and all("__" not in t for t in dev.values()), "marqueur non rendu"
+    assert all("User=mathieu" in t and "/srv/x/.venv/bin/" in t for t in dev.values())
+    dediee = _rendre("/opt/atombox/current/server", "atombox", "/opt/atombox/venv")
+    assert all("User=atombox" in t and "Group=atombox" in t and "ExecStart=/opt/atombox/venv/bin/" in t
+               and "WorkingDirectory=/opt/atombox/current/server" in t for t in dediee.values())
+
+
+def test_les_scripts_de_deploiement_se_lisent():
+    import subprocess
+    for s in ("render-unit.sh", "install-host.sh", "ship.sh", "deploy.sh", "deploy-apache.sh"):
+        r = subprocess.run(["bash", "-n", str(UNITES / s)], capture_output=True, text=True)
+        assert r.returncode == 0, "%s : %s" % (s, r.stderr)
+
+
+def test_l_exemple_d_environnement_n_a_pas_de_commentaire_en_fin_de_ligne():
+    """systemd (EnvironmentFile) ne connaît pas le commentaire de fin de ligne : `X=a   # note` donne la
+    valeur « a   # note ». L'exemple en avait un — sur ATOMBOX_IMAP_MASTER, rien de moins."""
+    fautives = [l for l in (UNITES / "atombox.env.example").read_text(encoding="utf-8").splitlines()
+                if re.match(r"^[A-Z_]+=.*\s#", l)]
+    assert not fautives, fautives
