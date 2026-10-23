@@ -117,7 +117,15 @@
       };
       axe.onchange = proposer;
       proposer();
-      const ajouter = () => M.ajouterTag(m, axe.value, val.value);
+      /* LA CLÉ, PAS LE LIBELLÉ (D187) : on choisit « PR2610-0012 — Tiers SA » dans la liste, on pose
+         `propal=123`. Poser le libellé créerait une seconde valeur, que l'application ne connaît
+         pas — le message disparaîtrait de l'onglet « Échanges » de la proposition. Une saisie qui
+         ne correspond à aucun libellé part telle quelle : c'est une valeur nouvelle, à la main. */
+      const cle = () => {
+        const v = ((ABX.Ref.valeurs || {})[axe.value] || []).find(x => x.label === val.value.trim());
+        return v ? (v.val || v.id.split(":").slice(1).join(":")) : val.value;
+      };
+      const ajouter = () => M.ajouterTag(m, axe.value, cle());
       el.querySelector("#t_add").onclick = ajouter;
       val.onkeydown = e => { if (e.key === "Enter") ajouter(); };
     },

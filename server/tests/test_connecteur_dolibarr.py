@@ -151,3 +151,16 @@ def test_les_hotes_se_declarent_et_l_historique_se_rattrape(api, monde):
     assert applications.rescan(s, "dolibarr-demo") >= 1
     assert tags(monde, cid) == {("propal", "200")}
     assert applications.rescan(s, "dolibarr-demo") == 0, "idempotent"
+
+
+def test_le_webmail_recoit_libelles_et_cles(api, monde):
+    """RM3519 — la navigation et la complétion lisent le LIBELLÉ, et posent la CLÉ"""
+    c, humain, appli = api
+    ref = c.get("/api/v1/referentiels", headers=humain).json()
+    assert {"id": "propal", "label": "Propositions commerciales", "derive": False} in ref["axes"]
+    v = [x for x in ref["valeurs"]["propal"] if x["val"] == "123"]
+    assert v == [{"id": "propal:123", "label": "PR2610-0012 — Tiers SA", "val": "123", "axe": "propal"}], v
+    # un axe posé à la main, sans application, garde un nom lisible
+    cid = c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=humain).json()["messages"][0]["id"]
+    c.post("/api/v1/messages/%s/tags" % cid, json={"axe": "dossier_client", "val": "x"}, headers=humain)
+    assert {"id": "dossier_client", "label": "Dossier client", "derive": False} in c.get("/api/v1/referentiels", headers=humain).json()["axes"]

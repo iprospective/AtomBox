@@ -24,9 +24,6 @@
   "rform",
   "stat",
   "suivre",
-  "t_add",
-  "t_axe",
-  "t_val",
   "t_vals",
   "vform",
   "vider"
@@ -61,7 +58,6 @@
   "jetonDuLien",
   "joindre",
   "menu",
-  "messages",
   "motif",
   "oublier",
   "ouvrirPJ",

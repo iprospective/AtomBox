@@ -10,8 +10,12 @@
   const R = ABX.Registry, F = ABX.Fmt;
 
   /* ---- morceaux réutilisables ------------------------------------------- */
+  /* UN TAG SE LIT PAR SON LIBELLÉ (D187) : « PR2610-0012 — Tiers SA », pas « propal=123 ».
+     L'axe et la clé restent au survol — c'est ce qu'on cherche quand on veut comprendre. */
+  const axeLabel = id => ((ABX.Ref.axes || []).find(a => a.id === id) || {}).label || id;
+  const tagLabel = t => t.libelle || (((ABX.Ref.valeurs || {})[t.axe] || []).find(v => (v.val || v.id.split(":").slice(1).join(":")) === t.val) || {}).label || t.val;
   R.define("tag.chip", ({ tag }) => ABX.V0() ? "" :
-    `<span class="tag ax">${F.esc(tag.axe)}=${F.esc(tag.val)}</span>`);
+    `<span class="tag ax" title="${F.esc(axeLabel(tag.axe))} — ${F.esc(tag.axe)}=${F.esc(tag.val)}">${F.esc(tagLabel(tag))}</span>`);
 
   /* Les CINQ boîtes aux lettres sont les valeurs d'une colonne (D175 § 4) : la puce les nomme,
      et « rien » veut dire INBOX — il reste à traiter. */
@@ -207,18 +211,19 @@
   /* ---- tags : la seule partie du message que l'utilisateur écrit ---------- */
   R.define("message.tags", ({ m }) => {
     if (ABX.V0()) return "";
-    const AXES = (ABX.Ref.axes || []).map(a => a.id).concat(["projet", "type"]);
+    const AXES = (ABX.Ref.axes || []).map(a => a.id);
+    ["projet", "type"].forEach(a => { if (!AXES.includes(a)) AXES.push(a); });
     return `<div class="box"><h4>Tags — plusieurs applications, sans écrasement (D017/D020)</h4>
       ${m.tags.length ? m.tags.map((t, i) => `<div class="kv">
-          <span class="k">${F.esc(t.axe)}</span>
-          <span class="v"><b>${F.esc(t.val)}</b>
+          <span class="k">${F.esc(axeLabel(t.axe))}</span>
+          <span class="v"><b title="${F.esc(t.axe)}=${F.esc(t.val)}">${F.esc(tagLabel(t))}</b>
             <span class="tag">posé par ${F.esc(t.source)}</span>
             <button class="tagx" data-newv="${i}" title="Créer un dossier virtuel pour ce tag">⊕</button><button class="tagx" data-untag="${i}" title="Retirer ce tag">✕</button></span>
         </div>`).join("") : `<div class="dmeta">aucun tag</div>`}
       <div class="frow" style="margin-top:9px">
         <label>Ajouter</label>
         <select id="t_axe" style="flex:0 0 150px">${AXES.map(a =>
-          `<option value="${F.esc(a)}">${F.esc(a)}</option>`).join("")}</select>
+          `<option value="${F.esc(a)}">${F.esc(axeLabel(a))}</option>`).join("")}</select>
         <input id="t_val" list="t_vals" placeholder="valeur">
         <button class="hbtn" id="t_add">+</button>
       </div>
