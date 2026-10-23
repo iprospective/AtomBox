@@ -7,7 +7,7 @@ d'ailleurs qu'un compte expédie pour l'adresse d'un autre (`reject_sender_login
 
 OÙ. Un fichier à part, `/etc/atombox/boxes` (640 root:mathieu, comme `/etc/atombox/env`) : jamais en
 base, jamais dans le dépôt (D149). Une ligne par boîte, l'adresse puis le mot de passe, séparés par
-des blancs ; le mot de passe est tout le reste de la ligne. `#` commente.
+des blancs ; le mot de passe est tout le reste de la ligne. `#` ou `;` commente.
 
     test@exemple.fr   le mot de passe de test@
 
@@ -48,7 +48,7 @@ def table() -> dict[str, str]:
         _warn_once("droits:" + path, "identifiants des boîtes : %s est lisible par tous — chmod 640", path)
     out = {}
     for n, line in enumerate(text.splitlines(), 1):
-        if not line.strip() or line.lstrip().startswith("#"): continue
+        if not line.strip() or line.lstrip()[:1] in ("#", ";"): continue
         m = _LINE.match(line.strip())
         if not m:
             _warn_once("ligne:%s:%d" % (path, n), "identifiants des boîtes : %s, ligne %d mal formée (adresse puis mot de passe)", path, n)

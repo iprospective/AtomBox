@@ -46,7 +46,7 @@ def relais(monkeypatch, fichier):
 
 
 def test_le_fichier_se_lit_ligne_a_ligne(fichier):
-    fichier.write_text("# commentaire\n\n  B@Exemple.fr\t  un mot de passe avec  des blancs \n"
+    fichier.write_text("# commentaire\n;a@exemple.fr commenté à la façon d'un .ini\n\n  B@Exemple.fr\t  un mot de passe avec  des blancs \n"
                        "ligne-sans-adresse secret\nc@exemple.fr\n", encoding="utf-8")
     t = credentials.table()
     assert t == {"b@exemple.fr": "un mot de passe avec  des blancs"}, t     # ligne 4 et 5 mal formées : ignorées
