@@ -70,6 +70,10 @@ def when(v) -> datetime | None:
     return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
 
 async def account_mailboxes(s: AsyncSession, compte: Compte) -> list[Boite]:
+    """LA PORTÉE de celui qui appelle : les accès en cours d'une personne, ou la portée déclarée
+    d'une application (F048) — un seul chemin, pour que toutes les routes l'appliquent de même."""
+    from ..applications import AppPrincipal, mailboxes
+    if isinstance(compte, AppPrincipal): return await mailboxes(s, compte.application)
     return list(await s.scalars(select(Boite).join(Acces, Acces.boite_id == Boite.boite_id)
                                 .where(Acces.compte_id == compte.compte_id, Acces.fin.is_(None))))
 

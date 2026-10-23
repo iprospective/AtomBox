@@ -66,6 +66,12 @@ async def _tag(s: AsyncSession, axe: Axe, valeur: str) -> Tag:
     return t
 
 
+def _application(qui):
+    """l'application derrière l'appel, ou None pour une personne (F048)"""
+    from ..applications import AppPrincipal
+    return qui.application if isinstance(qui, AppPrincipal) else None
+
+
 async def _scope(s: AsyncSession, compte: Compte, comm_id) -> bool:
     """Le message est-il rattaché à une boîte du compte ? Hors portée = 404, jamais 403 (D108)."""
     from .messages import account_mailboxes
@@ -87,12 +93,24 @@ async def add(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur: st
         return None
     if await s.get(Comm, comm_id) is None:
         return None
-    axe = await _axis(s, axe_nom)
+    app = _application(compte)
+    if app is not None:
+        # UNE APPLICATION N'ÉTIQUETTE QUE SES AXES (D019, RM3517) : ceux qu'elle déclare, qu'elle
+        # possède. Elle ne crée pas d'axe à la volée — ce droit-là est celui d'une personne. Un axe
+        # qui n'est pas le sien est, pour elle, un axe qui n'existe pas : 404, jamais 403 (D108).
+        axe = await s.scalar(select(Axe).where(Axe.nom == axe_nom.lower(), Axe.application_id == app.application_id))
+        if axe is None:
+            log.warning("application « %s » : axe « %s » non déclaré — tag refusé", app.nom, axe_nom)
+            return None
+        source = app.type_connecteur
+    else:
+        axe = await _axis(s, axe_nom)
     tag = await _tag(s, axe, valeur)
     exists = await s.scalar(select(CommTag).where(CommTag.comm_id == comm_id, CommTag.tag_id == tag.tag_id))
     if exists is None:
         # clé (comm_id, tag_id) : le même tag ne se pose pas deux fois, la base le garantit
         s.add(CommTag(comm_id=comm_id, tag_id=tag.tag_id, source=source,
+                      application_id=app.application_id if app is not None else None,
                       pose_le=datetime.now(timezone.utc)))
         await s.commit()
         log.info("tag %s=%s posé sur %s par %s (%s)", axe.nom, tag.valeur, comm_id, compte.login, source)
@@ -107,6 +125,9 @@ async def remove(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur:
     axe = await s.scalar(select(Axe).where(Axe.nom == (axe_nom or "").strip().lower()))
     if axe is None:
         return None
+    app = _application(compte)
+    if app is not None and axe.application_id != app.application_id:
+        return None                       # pas son axe : pour elle, il n'existe pas (D108)
     tag = await s.scalar(select(Tag).where(Tag.axe_id == axe.axe_id, Tag.valeur == (valeur or "").strip()))
     if tag is None:
         return None

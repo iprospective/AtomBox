@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..api.routing import Controller, action
 from ..api.dependencies import async_session
-from ..api.security import current_account
+from ..api.security import current_account, current_reader
 from ..store import Store
 from ..schema.models import Compte
 from ..services import messages as svc
@@ -38,19 +38,19 @@ class MessagesController(Controller):
     async def listing(self, dossier: str = Query("inbox"), kind: str | None = None, axe: str | None = None, filtre: str | None = "file",
                     tri: str | None = "date_desc", sens: str | None = None, statut: str | None = None, tout: int = 0,
                     boites: str | None = None,
-                    compte: Compte = Depends(current_account), s: AsyncSession = Depends(async_session)):
+                    compte: Compte = Depends(current_reader), s: AsyncSession = Depends(async_session)):
         l = await svc.listing(s, compte, dossier, kind, filtre, tri, sens, statut, tout=bool(tout), wanted=boites)
         log.debug("liste %s/%s pour %s : %d", dossier, filtre, compte.login, len(l))
         return {"messages": l, "total": len(l)}
 
     @action("GET", "/{id}")
-    async def detail(self, id: str, compte: Compte = Depends(current_account), s: AsyncSession = Depends(async_session)):
+    async def detail(self, id: str, compte: Compte = Depends(current_reader), s: AsyncSession = Depends(async_session)):
         m = await svc.detail(s, compte, *_ref(id), store=store())
         if not m: raise HTTPException(404, "message inconnu")
         return m
 
     @action("GET", "/{id}/pieces-jointes/{pj}")
-    async def attachment(self, id: str, pj: str, compte: Compte = Depends(current_account), s: AsyncSession = Depends(async_session)):
+    async def attachment(self, id: str, pj: str, compte: Compte = Depends(current_reader), s: AsyncSession = Depends(async_session)):
         """Les octets d'une pièce (F136). `inline` pour ce qu'un navigateur sait afficher sans danger,
         `attachment` pour tout le reste — et jamais le type déclaré par le message (D032)."""
         p = await svc.attachment(s, compte, _uuid(id), _uuid(pj), store())
@@ -60,7 +60,7 @@ class MessagesController(Controller):
         return Response(content=p["octets"], media_type=p["type"], headers=entetes)
 
     @action("GET", "/{id}/fil")
-    async def thread(self, id: str, compte: Compte = Depends(current_account), s: AsyncSession = Depends(async_session)):
+    async def thread(self, id: str, compte: Compte = Depends(current_reader), s: AsyncSession = Depends(async_session)):
         return {"messages": await svc.thread(s, compte, _uuid(id))}
 
     @action("PATCH", "/{id}/rattachement")
@@ -84,7 +84,7 @@ class MessagesController(Controller):
         return {"ok": True, "modifies": 1, "detache": True}
 
     @action("POST", "/{id}/tags")
-    async def add_tag(self, id: str, request: Request, compte: Compte = Depends(current_account),
+    async def add_tag(self, id: str, request: Request, compte: Compte = Depends(current_reader),
                         s: AsyncSession = Depends(async_session)):
         """D002/D017 — le tag est posé sur le MESSAGE : deux personnes d'une boîte partagée voient
         les mêmes. La source distingue ce qu'un humain a posé de ce qu'un connecteur a déduit."""
@@ -95,7 +95,7 @@ class MessagesController(Controller):
         return {"ok": True, "tags": tags}
 
     @action("DELETE", "/{id}/tags/{tag}")
-    async def remove_tag(self, id: str, tag: str, compte: Compte = Depends(current_account),
+    async def remove_tag(self, id: str, tag: str, compte: Compte = Depends(current_reader),
                           s: AsyncSession = Depends(async_session)):
         """`tag` est « axe=valeur » — un tag n'a pas d'identité propre du point de vue de l'API :
         il EST la paire, et c'est ce qui rend l'appel idempotent."""
