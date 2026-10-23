@@ -1455,6 +1455,11 @@
      "obligatoire": false
     },
     {
+     "nom": "parametres",
+     "type": "jsonb",
+     "obligatoire": false
+    },
+    {
      "nom": "debit_max",
      "type": "bigint",
      "obligatoire": false

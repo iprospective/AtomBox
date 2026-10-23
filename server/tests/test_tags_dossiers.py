@@ -28,13 +28,13 @@ def test_poser_et_retirer_un_tag(monde):  # noqa: F811
     r = c.post("/api/v1/messages/%s/tags" % mid, json={"axe": "client", "val": "Tessier"}, headers=h)
     assert r.status_code == 200, r.text
     tags = r.json()["tags"]
-    assert tags == [{"axe": "client", "val": "Tessier", "source": "manuel"}]
+    assert tags == [{"axe": "client", "val": "Tessier", "source": "manuel", "libelle": "Tessier"}]
 
     # le tag remonte dans le DÉTAIL et dans la LISTE — il était rendu `[]` en dur des deux côtés
     assert c.get("/api/v1/messages/" + mid, headers=h).json()["tags"][0]["val"] == "Tessier"
     listing = c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=h).json()["messages"]
     porteur = next(m for m in listing if m["id"] == mid)
-    assert porteur["tags"] == [{"axe": "client", "val": "Tessier", "source": "manuel"}]
+    assert porteur["tags"] == [{"axe": "client", "val": "Tessier", "source": "manuel", "libelle": "Tessier"}]
     assert all(m["tags"] == [] for m in listing if m["id"] != mid), "et seulement sur celui-là"
 
     # poser deux fois est un succès silencieux ; un second AXE ne remplace pas le premier (D020)

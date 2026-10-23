@@ -98,14 +98,14 @@ def test_l_application_etiquette_sur_ses_axes(api, monde):
     c, humain, appli = api
     cid = monde["ids"]["contact@exemple.fr"]
     r = c.post("/api/v1/messages/%s/tags" % cid, json={"axe": "propal", "val": "123"}, headers=appli)
-    assert r.status_code == 200 and {"axe": "propal", "val": "123", "source": "dolibarr"} in r.json()["tags"], r.text
+    assert r.status_code == 200 and ("propal", "123", "dolibarr") in [(x["axe"], x["val"], x["source"]) for x in r.json()["tags"]], r.text
     # contre-épreuves : un axe qu'elle ne déclare pas, un message hors portée
     assert c.post("/api/v1/messages/%s/tags" % cid, json={"axe": "client", "val": "9"}, headers=appli).status_code == 404
     hors = monde["ids"]["ventes@ailleurs.example"]
     assert c.post("/api/v1/messages/%s/tags" % hors, json={"axe": "propal", "val": "123"}, headers=appli).status_code == 404
     # une personne garde le geste « rattacher à… » sur l'axe de l'application (D187 § 2)
     r = c.post("/api/v1/messages/%s/tags" % cid, json={"axe": "propal", "val": "124"}, headers=humain)
-    assert {"axe": "propal", "val": "124", "source": "manuel"} in r.json()["tags"]
+    assert ("propal", "124", "manuel") in [(x["axe"], x["val"], x["source"]) for x in r.json()["tags"]]
     # et l'application retire le sien
     assert c.delete("/api/v1/messages/%s/tags/propal=123" % cid, headers=appli).status_code == 200
 

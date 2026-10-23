@@ -54,20 +54,30 @@ class AppPrincipal:
         self.nom = self.application.nom
 
 
-async def mailboxes(s, app: Application) -> list[Boite]:
-    """LA PORTÉE : {"boites": [adresses], "domaines": [noms]} → les boîtes, résolues à chaque appel.
-    Une boîte ajoutée à un domaine de la portée y entre sans toucher à l'application."""
+def _scope_query(app: Application):
+    """LA PORTÉE : {"boites": [adresses], "domaines": [noms]} → la requête de ses boîtes, résolue à
+    chaque appel. Une boîte ajoutée à un domaine de la portée y entre sans toucher à l'application."""
+    from sqlalchemy import or_
     portee = app.portee or {}
     adresses = [a.lower() for a in portee.get("boites", [])]
     domaines = [d.lower() for d in portee.get("domaines", [])]
-    if not adresses and not domaines: return []
-    q = select(Boite).join(Adresse, Adresse.adresse_id == Boite.adresse_id)
+    if not adresses and not domaines: return None
     conds = []
     if adresses: conds.append(Adresse.adresse_complete.in_(adresses))
     if domaines:
         conds.append(Boite.domaine_id.in_(select(Domaine.domaine_id).where(Domaine.nom_ascii.in_(domaines))))
-    from sqlalchemy import or_
-    return list(await s.scalars(q.where(or_(*conds))))
+    return select(Boite).join(Adresse, Adresse.adresse_id == Boite.adresse_id).where(or_(*conds))
+
+
+async def mailboxes(s, app: Application) -> list[Boite]:
+    q = _scope_query(app)
+    return list(await s.scalars(q)) if q is not None else []
+
+
+def mailbox_ids_sync(s, app: Application) -> set:
+    """la même portée, pour l'ingestion (synchrone)"""
+    q = _scope_query(app)
+    return {b.boite_id for b in s.scalars(q)} if q is not None else set()
 
 
 def declared_axes(app: Application) -> list[str]:
@@ -76,7 +86,7 @@ def declared_axes(app: Application) -> list[str]:
 
 # ---- l'administration, en ligne de commande (une page d'administration viendra) -----------------
 
-def create(s, nom: str, type_connecteur: str, boites=(), domaines=(), axes=()) -> tuple[Application, str]:
+def create(s, nom: str, type_connecteur: str, boites=(), domaines=(), axes=(), parametres: dict | None = None) -> tuple[Application, str]:
     if s.scalar(select(Application).where(Application.nom == nom)):
         raise ValueError("une application « %s » existe déjà — révoquez-la ou choisissez un autre nom" % nom)
     jeton = new_token()
@@ -84,7 +94,8 @@ def create(s, nom: str, type_connecteur: str, boites=(), domaines=(), axes=()) -
     app = Application(application_id=uuid7(), type_connecteur=type_connecteur, nom=nom,
                       jeton_empreinte=token_fingerprint(jeton),
                       portee={"boites": [b.lower() for b in boites], "domaines": [d.lower() for d in domaines]},
-                      axes=[a.lower() for a in axes], actif=True, cree_le=datetime.now(timezone.utc))
+                      axes=[a.lower() for a in axes], parametres=parametres or {},
+                      actif=True, cree_le=datetime.now(timezone.utc))
     s.add(app); s.flush()
     # Les axes DÉCLARÉS appartiennent à l'application (D019) : elle seule y pose des tags par jeton.
     # Un axe du même nom, créé à la main avant, lui est rattaché plutôt que dédoublé.
@@ -104,6 +115,25 @@ def create(s, nom: str, type_connecteur: str, boites=(), domaines=(), axes=()) -
     return app, jeton
 
 
+def rescan(s, nom: str) -> int:
+    """Applique la règle d'en-tête de l'application à l'HISTORIQUE de sa portée — ce qui est arrivé
+    avant qu'elle soit déclarée, ou avant qu'elle donne ses hôtes. Idempotent."""
+    from .connectors import apply_header_rule
+    from .schema.models import CommEmail, Rattachement
+    app = s.scalar(select(Application).where(Application.nom == nom))
+    if app is None: raise ValueError("aucune application « %s »" % nom)
+    ids = mailbox_ids_sync(s, app)
+    if not ids: return 0
+    n = 0
+    rows = s.execute(select(Rattachement.comm_id, Rattachement.boite_id, CommEmail.message_id, CommEmail.in_reply_to, CommEmail.references)
+                     .join(CommEmail, CommEmail.comm_id == Rattachement.comm_id).where(Rattachement.boite_id.in_(ids))).all()
+    for comm_id, boite_id, mid, irt, refs in rows:
+        n += apply_header_rule(s, comm_id, boite_id, mid, irt, refs)
+    s.commit()
+    log.info("application « %s » : %d tag(s) posé(s) sur l'historique", nom, n)
+    return n
+
+
 def revoke(s, nom: str) -> bool:
     app = s.scalar(select(Application).where(Application.nom == nom))
     if app is None: return False
@@ -119,7 +149,9 @@ def main(argv=None):
     c.add_argument("--name", required=True); c.add_argument("--type", required=True, help="type de connecteur : dolibarr…")
     c.add_argument("--mailbox", action="append", default=[], help="une boîte de la portée (répétable)")
     c.add_argument("--domain", action="append", default=[], help="un domaine entier de la portée (répétable)")
-    c.add_argument("--axis", action="append", default=[], help="un axe que l'application déclare (répétable)")
+    c.add_argument("--axis", action="append", default=[], help="un axe que l'application déclare (répétable) ; sans, tous ceux de son type")
+    c.add_argument("--host", action="append", default=[], help="un hôte de ses Message-ID, pour la règle d'en-tête (répétable)")
+    rs = sub.add_parser("rescan", help="appliquer la règle d'en-tête à l'historique de la portée"); rs.add_argument("--name", required=True)
     r = sub.add_parser("revoke"); r.add_argument("--name", required=True)
     sub.add_parser("list")
     a = p.parse_args(argv)
@@ -127,11 +159,16 @@ def main(argv=None):
     s = ouvrir()
     if a.cmd == "create":
         if not a.mailbox and not a.domain: p.error("une portée est obligatoire : --mailbox ou --domain")
-        try: app, jeton = create(s, a.name, a.type, a.mailbox, a.domain, a.axis)
+        from .connectors import declaration
+        axes = a.axis or list(((declaration(a.type) or {}).get("axes") or {}).keys())
+        try: app, jeton = create(s, a.name, a.type, a.mailbox, a.domain, axes, {"hotes": [h.lower() for h in a.host]} if a.host else {})
         except ValueError as e: print("refusé : %s" % e, file=sys.stderr); return 1
         # Le jeton sort sur la sortie standard, et nulle part ailleurs : il n'est pas journalisé.
         print(jeton)
         print("(montré une seule fois — à mettre dans la configuration du module)", file=sys.stderr)
+    elif a.cmd == "rescan":
+        try: print("%d tag(s) posé(s)" % rescan(s, a.name))
+        except ValueError as e: print(str(e), file=sys.stderr); return 1
     elif a.cmd == "revoke":
         if not revoke(s, a.name): print("aucune application « %s »" % a.name, file=sys.stderr); return 1
     else:

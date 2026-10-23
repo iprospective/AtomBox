@@ -401,6 +401,7 @@ class Application(Base):
     jeton_empreinte: Mapped[str] = mapped_column(Text, nullable=False)
     portee: Mapped[dict | list] = mapped_column(JSONB, nullable=False)
     axes: Mapped[dict | list | None] = mapped_column(JSONB, nullable=True)
+    parametres: Mapped[dict | list | None] = mapped_column(JSONB, nullable=True)
     debit_max: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     actif: Mapped[bool] = mapped_column(Boolean, nullable=False)
     cree_le: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)

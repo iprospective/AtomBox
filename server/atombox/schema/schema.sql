@@ -374,6 +374,7 @@ CREATE TABLE "application" (
   "jeton_empreinte" text NOT NULL,
   "portee" jsonb NOT NULL,
   "axes" jsonb,
+  "parametres" jsonb,
   "debit_max" bigint,
   "actif" boolean NOT NULL,
   "cree_le" timestamptz NOT NULL,

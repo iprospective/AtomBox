@@ -1,0 +1,17 @@
+{
+  "type": "dolibarr",
+  "libelle": "Dolibarr",
+  "_note": "D187. Le code d'objet est celui que Dolibarr écrit dans le trackid de ses Message-ID (CMailFile : '<temps>.<mode>-dolibarr-<trackid>@<dol_getprefix('email')>'). Ajouter un objet = ajouter une ligne ici.",
+  "axes": {
+    "propal":               {"libelle": "Propositions commerciales", "code": "pro"},
+    "commande":             {"libelle": "Commandes clients",         "code": "ord"},
+    "facture":              {"libelle": "Factures clients",          "code": "inv"},
+    "projet":               {"libelle": "Projets",                   "code": "proj"},
+    "commande_fournisseur": {"libelle": "Commandes fournisseurs",    "code": "sord"},
+    "facture_fournisseur":  {"libelle": "Factures fournisseurs",     "code": "sinv"}
+  },
+  "regle_entete": {
+    "motif": "dolibarr-(?P<code>[a-z]+)(?P<id>[0-9]+)@(?P<hote>[^>\\s]+)",
+    "parametre_hotes": "hotes"
+  }
+}

@@ -34,12 +34,13 @@ async def tags_of(s: AsyncSession, comm_ids: list) -> dict:
     if not comm_ids:
         return {}
     lines = (await s.execute(
-        select(CommTag.comm_id, Axe.nom, Tag.valeur, CommTag.source)
+        select(CommTag.comm_id, Axe.nom, Tag.valeur, CommTag.source, Tag.libelle)
         .join(Tag, Tag.tag_id == CommTag.tag_id).join(Axe, Axe.axe_id == Tag.axe_id)
         .where(CommTag.comm_id.in_(comm_ids)).order_by(Axe.ordre, Axe.nom, Tag.valeur))).all()
     out: dict = {}
-    for cid, axe, val, source in lines:
-        out.setdefault(cid, []).append({"axe": axe, "val": val, "source": source})
+    for cid, axe, val, source, libelle in lines:
+        # le LIBELLÉ poussé par l'application (D187) : « PR2610-0012 — client » plutôt que « 123 »
+        out.setdefault(cid, []).append({"axe": axe, "val": val, "source": source, "libelle": libelle})
     return out
 
 
