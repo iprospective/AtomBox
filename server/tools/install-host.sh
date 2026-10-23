@@ -125,6 +125,10 @@ install -m 640 -o root -g $U "\$RENEWED_LINEAGE/privkey.pem" /etc/atombox/tls/pr
 systemctl restart atombox-imapd
 HOOK
   chmod 755 /etc/letsencrypt/renewal-hooks/deploy/atombox-imapd.sh
+  # certbot ne joue ses crochets de déploiement qu'au RENOUVELLEMENT, pas à la première émission :
+  # un certificat déjà là est livré tout de suite, sinon l'IMAP attendrait deux mois
+  [ -d "/etc/letsencrypt/live/$VHOST" ] && RENEWED_LINEAGE="/etc/letsencrypt/live/$VHOST" \
+    sh /etc/letsencrypt/renewal-hooks/deploy/atombox-imapd.sh && log "certificat livré à l'IMAP"
   log "vhost $VHOST (HTTP) ; certificat : certbot --apache -d $VHOST (le crochet le livre à l'IMAP)"
 fi
 
