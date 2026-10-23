@@ -20,11 +20,9 @@ def _imap_available() -> bool: return bool(settings.read("ATOMBOX_IMAP_HOST"))
 
 def _poller_for(adresse: str):
     """une relève ouverte sur l'adresse chez le FOURNISSEUR, ou None si l'IMAP n'est pas configuré"""
-    from ..ingestion.imap import Poller, tls_imap
-    from ..sync.module import config_imap, login_of
+    from ..ingestion.imap import open_mailbox
     if not _imap_available(): return None
-    cfg = config_imap()
-    return Poller(cfg["hote"], cfg["port"], tls=tls_imap()).connect(login_of(adresse, cfg["master"]), cfg["mot_de_passe"])
+    return open_mailbox(adresse)
 
 
 async def _imap(s: AsyncSession, boite: Boite):

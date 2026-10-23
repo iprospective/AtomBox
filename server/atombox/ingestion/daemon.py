@@ -5,6 +5,9 @@ UID, IDLE sur la boîte de réception ; les dossiers IMAP deviennent des `dossie
     ATOMBOX_IMAP_HOST=imap.exemple.fr ATOMBOX_IMAP_MASTER=masteruser ATOMBOX_IMAP_PASSWORD=… \\
     python3 -m atombox.ingestion.daemon
 
+Sans compte master, chaque boîte entre avec ses propres identifiants : `/etc/atombox/boxes`
+(credentials.py).
+
 Échouer bruyamment plutôt que deux fois (D152) : un message qui ne s'ingère pas est journalisé
 avec sa raison et le démon passe au suivant — il ne réessaie pas en boucle, il ne s'arrête pas.
 """
@@ -17,7 +20,7 @@ from ..schema.models import Adresse, Boite, Dossier, Evenement, Rattachement
 from ..sync.sync import apply_down_sync
 from ..store import Store
 from ..uuid7 import uuid7
-from .imap import Poller, tls_imap
+from .imap import Poller, open_mailbox
 from .ingestion import ingest
 from ..modules import loading
 from ..modules.hooks import hooks
@@ -122,10 +125,9 @@ async def watch_mailbox(boite_id, adresse: str, config: dict):
     while True:
         try:
             s = open_session(); store = Store(config["magasin"])
-            # compte master (chapitre 06) : « boite*master » ; sans master, ou si le master EST la boîte, le login est l'adresse
-            master = (config.get("master") or "").strip()
-            login = adresse if not master or master.lower() == adresse.lower() else "%s*%s" % (adresse, master)
-            releve = Poller(config["hote"], config["port"], tls=tls_imap()).connect(login, config["mot_de_passe"])
+            # les identifiants sont relus à CHAQUE tentative (credentials.py) : une boîte ajoutée au
+            # fichier des identifiants est prise à la tentative suivante, sans redémarrer
+            releve = open_mailbox(adresse)
             try:
                 while True:
                     await asyncio.to_thread(poll_mailbox, s, store, releve, boite_id, adresse)
@@ -149,9 +151,7 @@ async def watch_mailbox(boite_id, adresse: str, config: dict):
             await asyncio.sleep(60)
 
 async def main():
-    config = { "hote": settings.read("ATOMBOX_IMAP_HOST"), "port": int(settings.read("ATOMBOX_IMAP_PORT", "993")),
-               "master": settings.read("ATOMBOX_IMAP_MASTER", "masteruser"), "mot_de_passe": settings.read("ATOMBOX_IMAP_PASSWORD"),
-               "magasin": settings.read("ATOMBOX_STORE", "./magasin") }
+    config = { "hote": settings.read("ATOMBOX_IMAP_HOST"), "magasin": settings.read("ATOMBOX_STORE", "./magasin") }
     with open_session() as s:
         boites = s.execute(select(Boite.boite_id, Adresse.adresse_complete).join(Adresse, Adresse.adresse_id == Boite.adresse_id)).all()
     # grosses infrastructures (D161) : N démons se partagent les boîtes — ATOMBOX_PART="2/4" prend la 2e part sur 4

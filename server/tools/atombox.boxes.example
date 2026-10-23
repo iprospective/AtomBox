@@ -1,0 +1,12 @@
+# /etc/atombox/boxes — les identifiants de chaque boîte chez le fournisseur (atombox/credentials.py).
+# Un SECRET, comme /etc/atombox/env : jamais en base ni dans le dépôt (D149).
+#   sudo install -m 640 -o root -g mathieu /dev/null /etc/atombox/boxes && sudoedit /etc/atombox/boxes
+#
+# Une ligne par boîte : l'adresse, des blancs, puis le mot de passe (tout le reste de la ligne).
+# La boîte entre avec son adresse et ce mot de passe, en IMAP (relève, synchronisation, dossiers) et
+# en SMTP (le relais refuse qu'un compte expédie pour l'adresse d'un autre). Une boîte absente garde
+# ATOMBOX_IMAP_MASTER / ATOMBOX_IMAP_PASSWORD et ATOMBOX_SMTP_USER / ATOMBOX_SMTP_PASSWORD.
+#
+# Le fichier est relu à chaque connexion : la relève prend une ligne ajoutée à sa tentative suivante.
+#
+# boite@exemple.fr   son mot de passe

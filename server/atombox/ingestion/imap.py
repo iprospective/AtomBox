@@ -18,13 +18,21 @@ def tls_imap() -> bool:
     return (settings.read("ATOMBOX_IMAP_TLS") or "ssl").strip().lower() != "aucun"
 
 
+def open_mailbox(adresse: str, delay: int = 60) -> "Poller":
+    """la boîte ouverte chez le FOURNISSEUR, avec ses identifiants (credentials.py) — le seul chemin
+    de connexion : relève, synchronisation montante, dossiers. Lève si ATOMBOX_IMAP_HOST manque."""
+    from ..credentials import imap_login
+    hote = settings.read("ATOMBOX_IMAP_HOST")
+    if not hote: raise RuntimeError("ATOMBOX_IMAP_HOST absent : aucun fournisseur IMAP configuré")
+    return Poller(hote, int(settings.read("ATOMBOX_IMAP_PORT", "993")), tls=tls_imap(), delay=delay).connect(*imap_login(adresse))
+
 class Poller:
     def __init__(self, hote: str, port: int = 993, tls: bool = True, delay: int = 60):
         self.hote, self.port, self.tls, self.delay = hote, port, tls, delay
         self.cnx: imaplib.IMAP4 | None = None
 
     def connect(self, utilisateur: str, mot_de_passe: str):
-        """utilisateur = « boite@domaine*masteruser » avec le compte master (chapitre 06)"""
+        """utilisateur : l'adresse, ou « boîte*master » avec un compte master (credentials.py)"""
         self.cnx = imaplib.IMAP4_SSL(self.hote, self.port, ssl_context=ssl.create_default_context(), timeout=self.delay) if self.tls \
                    else imaplib.IMAP4(self.hote, self.port, timeout=self.delay)
         self.cnx.login(utilisateur, mot_de_passe)
