@@ -4219,6 +4219,12 @@
           "role": "les axes qu'elle déclare et alimente (D019)"
         },
         {
+          "nom": "parametres",
+          "type": "json",
+          "obligatoire": "non",
+          "role": "les réglages de l'instance propres à son type — pour dolibarr, les hôtes de ses Message-ID, que la règle d'en-tête reconnaît (D187 § 3)"
+        },
+        {
           "nom": "debit_max",
           "type": "entier",
           "obligatoire": "non",
@@ -8405,6 +8411,48 @@
         ],
         "etat": "hypothèse",
         "question": "Q034"
+      },
+      {
+        "methode": "GET",
+        "chemin": "/api/v1/application",
+        "role": "l'application qui appelle se décrit : portée, axes déclarés et leurs libellés, paramètres — 404 pour une session",
+        "portee": "jeton d'application",
+        "entites": [
+          "application"
+        ],
+        "etat": "décidée",
+        "decisions": [
+          "D019",
+          "D187"
+        ]
+      },
+      {
+        "methode": "PATCH",
+        "chemin": "/api/v1/application",
+        "role": "ses paramètres propres au type — pour dolibarr, les hôtes de ses Message-ID ; jamais sa portée ni ses axes",
+        "portee": "jeton d'application",
+        "entites": [
+          "application"
+        ],
+        "etat": "décidée",
+        "decisions": [
+          "D187"
+        ]
+      },
+      {
+        "methode": "PUT",
+        "chemin": "/api/v1/axes/{axe}/valeurs",
+        "role": "pousser les valeurs d'un axe qu'elle déclare, avec leur LIBELLÉ — upsert par lot, actif:false retire des complétions",
+        "portee": "jeton d'application, axe qu'elle déclare",
+        "entites": [
+          "axe",
+          "tag"
+        ],
+        "etat": "décidée",
+        "decisions": [
+          "D019",
+          "D187"
+        ]
       },
       {
         "methode": "POST",

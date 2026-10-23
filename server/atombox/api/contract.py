@@ -305,6 +305,7 @@ class Application(BaseModel):
     jeton_empreinte: str
     portee: dict | list
     axes: dict | list | None = None
+    parametres: dict | list | None = None
     debit_max: int | None = None
     actif: bool
     cree_le: datetime.datetime
