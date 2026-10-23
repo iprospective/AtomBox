@@ -89,7 +89,7 @@ fi
 # seule DATABASE_URL compte pour migrer ; charger tout le fichier dans une ligne de commande
 # casserait sur la première valeur à espaces
 DSN="$(sed -n 's/^DATABASE_URL=//p' /etc/atombox/env | tail -1)"
-( cd "$BASE/current/server" && run_as env DATABASE_URL="${DSN:-postgresql:///atombox}" \
+( cd "$BASE/current/server" && run_as env DATABASE_URL="${DSN:-postgresql:///atombox}" ATOMBOX_LOGS=/var/log/atombox \
     "$BASE/venv/bin/python" -m alembic upgrade head ) 2>&1 | tail -2 | sed 's/^/   /'
 log "base à $(runuser -u "$U" -- psql -d atombox -tAc 'select version_num from alembic_version')"
 
