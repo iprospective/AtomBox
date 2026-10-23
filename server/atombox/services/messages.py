@@ -73,6 +73,17 @@ async def account_mailboxes(s: AsyncSession, compte: Compte) -> list[Boite]:
     return list(await s.scalars(select(Boite).join(Acces, Acces.boite_id == Boite.boite_id)
                                 .where(Acces.compte_id == compte.compte_id, Acces.fin.is_(None))))
 
+def chosen(boites: list, wanted: str | None) -> list:
+    """LE FILTRE EN AMONT (D176 § 3) : les boîtes cochées, parmi celles du compte. Absent = toutes.
+    Le paramètre est TOUJOURS intersecté avec les accès : une boîte qu'on ne voit pas, citée dans
+    l'URL, ne s'ajoute pas — elle est ignorée, et une sélection qui n'en garde aucune ne montre rien."""
+    if not wanted: return boites
+    ids = set()
+    for x in wanted.split(","):
+        try: ids.add(uuid.UUID(x.strip()))
+        except ValueError: pass
+    return [b for b in boites if b in ids]
+
 async def _axes_and_values(s: AsyncSession) -> dict:
     """Les axes de classement et leurs valeurs (D002, D016) — ils étaient rendus `[]` et `{}` EN DUR.
     Conséquence visible : le formulaire « mes dossiers + » faisait `axes[0].id` sur une liste vide,
@@ -168,10 +179,16 @@ async def _folders_by_id(s: AsyncSession, boites) -> dict:
     ds = list(await s.scalars(select(Dossier).where(Dossier.boite_id.in_(boites))))
     return {d.dossier_id: d for d in ds}
 
-async def counters(s: AsyncSession, compte: Compte) -> dict:
-    """UNE passe (D078) : par dossier, total / non lus / à faire — et les vues trash, archives, traites"""
-    boites = [b.boite_id for b in await account_mailboxes(s, compte)]
-    if not boites: return {"compteurs": {}, "virtuels": [], "epingles": []}
+async def counters(s: AsyncSession, compte: Compte, wanted: str | None = None) -> dict:
+    """UNE passe (D078) : par dossier, total / non lus / à faire — et les vues trash, archives, traites.
+    `wanted` : les boîtes cochées (D176 § 3) — elles restreignent TOUS les compteurs de dossiers,
+    sauf ceux des boîtes elles-mêmes, qui disent ce qu'on décoche."""
+    toutes = [b.boite_id for b in await account_mailboxes(s, compte)]
+    if not toutes: return {"compteurs": {}, "boites": {}, "virtuels": [], "epingles": []}
+    par_boite = await _mailbox_counters(s, toutes, compte)
+    boites = chosen(toutes, wanted)
+    if not boites: return {"compteurs": {}, "boites": par_boite, "virtuels": (await references(s, compte))["virtuels"],
+                           "epingles": (compte.preferences or {}).get("epingles", [])}
     ds = await _folders_by_id(s, boites)
     # LE « NON LU » N'EST PLUS UNE COLONNE (D175) : c'est « moi, je ne l'ai pas ouvert », donc un
     # EXISTS sur read_state. Il entre dans le GROUP BY comme le faisait `lu_le IS NULL` — même forme,
@@ -199,7 +216,35 @@ async def counters(s: AsyncSession, compte: Compte) -> dict:
     ref = await references(s, compte)
     c.update(await _axis_counters(s, boites, ds, compte))
     c.update(await _virtual_counters(s, boites, ds, compte, ref["virtuels"]))
-    return {"compteurs": c, "virtuels": ref["virtuels"], "epingles": prefs.get("epingles", [])}
+    return {"compteurs": c, "boites": par_boite, "virtuels": ref["virtuels"], "epingles": prefs.get("epingles", [])}
+
+
+async def _mailbox_counters(s: AsyncSession, boites, compte) -> dict:
+    """LE COMPTEUR D'UNE BOÎTE est un rapport (D176 § 4, arbitré le 23/10) : NON TRAITÉ / TOTAL.
+
+    - total : le périmètre ACTIF — hors archives, corbeille et spam ; les traités y restent, les
+      envoyés aussi : c'est ce que la boîte contient de vivant ;
+    - non traité (`n`) : ce qui est arrivé et attend — une place REÇUE encore en file. Un envoyé
+      n'attend rien de nous ;
+    - non lus (`u`) : ne pilote que le gras, et se donne à côté.
+
+    Indépendant des cases cochées : une boîte décochée doit encore dire ce qu'elle contient, sinon
+    on ne sait plus ce qu'on cache. Une requête pour toutes les boîtes (D078)."""
+    ds = await _folders_by_id(s, boites)
+    hors = [d.dossier_id for d in ds.values() if short_folder_id(d) in ("trash", "junk")]
+    actif = or_(Rattachement.exit_reason.is_(None), Rattachement.exit_reason == "processed")
+    if hors: actif = and_(actif, Rattachement.dossier_id.notin_(hors))
+    en_file = and_(Rattachement.sens == "in", Rattachement.exit_reason.is_(None))
+    if hors: en_file = and_(en_file, Rattachement.dossier_id.notin_(hors))
+    rows = (await s.execute(select(Rattachement.boite_id,
+                                   func.count().filter(actif).label("t"),
+                                   func.count().filter(en_file).label("n"),
+                                   func.count().filter(and_(en_file, personal.needs_attention_by(compte.compte_id))).label("u"))
+                            .where(_scope(boites)).group_by(Rattachement.boite_id))).all()
+    out = {str(b): {"t": 0, "n": 0, "u": 0} for b in boites}
+    for b, total, non_traite, non_lu in rows:
+        out[str(b)] = {"t": total, "n": non_traite, "u": non_lu}
+    return out
 
 
 async def _axis_counters(s: AsyncSession, boites, ds: dict, compte) -> dict:
@@ -313,8 +358,8 @@ def _folder_condition(dossier: str, kind: str | None, ds: dict, compte):
 
 SORTS = { "date_desc": Comm.date_recue.desc(), "date_asc": Comm.date_recue.asc(), "from_nom": Comm.from_nom.asc(), "subj": Comm.sujet.asc(), "taille": Comm.taille.desc() }
 
-async def listing(s: AsyncSession, compte: Compte, dossier: str, kind: str | None, filtre: str | None, tri: str | None, sens: str | None, statut: str | None, tout: bool = False) -> list[dict]:
-    boites = [b.boite_id for b in await account_mailboxes(s, compte)]
+async def listing(s: AsyncSession, compte: Compte, dossier: str, kind: str | None, filtre: str | None, tri: str | None, sens: str | None, statut: str | None, tout: bool = False, wanted: str | None = None) -> list[dict]:
+    boites = chosen([b.boite_id for b in await account_mailboxes(s, compte)], wanted)
     if not boites: return []
     ds = await _folders_by_id(s, boites)
     q = select(Rattachement, Comm).join(Comm, Comm.comm_id == Rattachement.comm_id).where(_scope(boites))

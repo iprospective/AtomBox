@@ -13,7 +13,11 @@
 (function (ABX) {
   "use strict";
   const BASE = (ABX.config && ABX.config.api) || "/api/v1";
-  const cache = { messages: {}, compteurs: {}, virtuels: [], epingles: [] };
+  const cache = { messages: {}, compteurs: {}, boites: {}, virtuels: [], epingles: [] };
+  /* LE FILTRE EN AMONT (D176 § 3) part avec la liste, la recherche ET les compteurs :
+     un filtre posé sur la liste seule ferait annoncer aux compteurs ce que la liste
+     ne montre pas (D166). Lu ICI, une fois, plutôt que passé par chaque appelant. */
+  const boites = () => { const c = ABX.Ref && ABX.Ref.boitesChoisies && ABX.Ref.boitesChoisies(); return c ? c.join(",") : undefined; };
 
   /* L'UNIQUE fonction d'appel. Simulée ou réelle, elle rend toujours une
      promesse de JSON — ou null sur 404 (hors portée = 404, jamais 403 : D108). */
@@ -67,17 +71,17 @@
     liste: (folder, filtre, tri, sens, statut) => folder.kind === "recherche"
       ? ImplHttp.rechercher(folder.q)
       :
-      req("GET", "/messages?" + q_({ dossier: folder.id, kind: folder.kind, axe: folder.axe, filtre, tri, sens, statut }))
+      req("GET", "/messages?" + q_({ dossier: folder.id, kind: folder.kind, axe: folder.axe, filtre, tri, sens, statut, boites: boites() }))
         .then(r => { const l = (r && r.messages) || []; l.forEach(garde); return l; }),
     contenu: folder =>
-      req("GET", "/messages?" + q_({ dossier: folder.id, kind: folder.kind, axe: folder.axe, tout: 1 }))
+      req("GET", "/messages?" + q_({ dossier: folder.id, kind: folder.kind, axe: folder.axe, tout: 1, boites: boites() }))
         .then(r => ((r && r.messages) || []).map(garde)),
     /* le détail est COMPLET (corps, pièces) ; la liste ne l'est pas — le contrôleur le sait par _complet */
     message: id => req("GET", "/messages/" + encodeURIComponent(id)).then(r => { const m = garde(r); if (m) m._complet = true; return m; }),
     fil: m => req("GET", "/messages/" + encodeURIComponent(m.id) + "/fil")
         .then(r => ((r && r.messages) || []).map(garde)),
-    compteurs: () => req("GET", "/arborescence").then(r => {
-      cache.compteurs = (r && r.compteurs) || {};
+    compteurs: () => req("GET", "/arborescence" + (boites() ? "?" + q_({ boites: boites() }) : "")).then(r => {
+      cache.compteurs = (r && r.compteurs) || {}; cache.boites = (r && r.boites) || {};
       cache.virtuels = (r && r.virtuels) || []; cache.epingles = (r && r.epingles) || [];
       return cache.compteurs; }),
     etat: () => req("GET", "/etat"),
@@ -88,7 +92,7 @@
     supprimerFiltre: id => req("DELETE", "/filtres/" + encodeURIComponent(id)),
     envoi: id => req("GET", "/envois/" + encodeURIComponent(id)),
     relancer: id => req("POST", "/envois/" + encodeURIComponent(id) + "/relancer"),
-    rechercher: q => req("GET", "/recherche?" + q_({ q })).then(r => { const l = (r && r.messages) || []; l.forEach(garde); return l; }),
+    rechercher: q => req("GET", "/recherche?" + q_({ q, boites: boites() })).then(r => { const l = (r && r.messages) || []; l.forEach(garde); return l; }),
     /* le serveur sert {pj_id, nom, octets, mime_detecte, sha256, partage_par, message:{…}} ; la page
        d'administration lit encore {m, p, i} — même adaptateur que pour un message (la dette du module) */
     piecesJointes: () => req("GET", "/pieces-jointes").then(r => ((r && r.pieces_jointes) || []).map(x => x.m ? x
@@ -155,6 +159,7 @@
     /* ---- cache synchrone, pour les vues qui rendent en une passe ------------ */
     cacheMessage: id => cache.messages[id] || null,
     cacheCompteur: k => cache.compteurs[k] || { t: 0, u: 0, f: 0 },
+    cacheBoite: id => cache.boites[id] || { t: 0, n: 0, u: 0 },
     cacheVirtuels: () => cache.virtuels,
     cacheEpingles: () => cache.epingles,
   };

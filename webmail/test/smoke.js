@@ -1000,6 +1000,50 @@ console.log("— responsive : trois vues sur un petit écran (F044, D112) ——
   App.MOBILE = vrai_mobile;
 }
 
+console.log("— la boîte de chaque message (F147, D176) ——————————");
+{
+  const nav = () => p.doc.getElementById("nav"), liste = () => p.doc.getElementById("list");
+  const Ref = A.Ref, boites = Ref.moi.boites, St = A.Store;
+  vrai(boites.length >= 2, "le compte du POC a " + boites.length + " boîtes");
+  A.Controllers.List.ouvrir({ id: "inbox", label: "Boîte de réception", kind: "special" }); await tick(p);
+  const cases = () => nav().querySelectorAll("input[data-boite]");
+  eq(cases().length, boites.length, "une case par boîte, en tête de la navigation (D176 § 3)");
+  vrai(liste().innerHTML.includes('class="bx bx'), "chaque ligne de la liste porte sa boîte (D176 § 2)");
+  const avant = A.Controllers.List.messages(), cible = boites[0];
+  vrai(avant.some(m => m.boite === cible.adresse), "la liste fusionnée montre des messages de " + cible.adresse);
+  const cBoite = { ...A.Api.cache.boite(cible.id) };
+  vrai(cBoite.t > 0 && cBoite.n <= cBoite.t, "le compteur d'une boîte : non traité / total (" + cBoite.n + " / " + cBoite.t + ")");
+  const inboxAvant = A.Api.cache.compteur("inbox").t;
+
+  // décocher la première boîte
+  const c0 = cases().find(c => c.dataset.boite === cible.id);
+  c0.checked = false; c0.onchange(evt(c0)); await tick(p);
+  const apres = A.Controllers.List.messages();
+  vrai(apres.length > 0 && !apres.some(m => m.boite === cible.adresse), "décochée : ses messages quittent la liste");
+  vrai(A.Api.cache.compteur("inbox").t < inboxAvant, "… ET le compteur du dossier : il dit ce que la liste montre (D166)");
+  eq(JSON.stringify(A.Api.cache.boite(cible.id)), JSON.stringify(cBoite), "le compteur de la boîte décochée ne bouge pas : on sait ce qu'on cache");
+  vrai(nav().innerHTML.includes('id="bx_toutes"'), "un bouton ramène toutes les boîtes");
+  St.save();
+  const garde = demarrer(p.ls); await drainer(garde);
+  eq(JSON.stringify(garde.ABX.Ref.boitesChoisies()), JSON.stringify(boites.slice(1).map(b => b.id)),
+     "la sélection est conservée d'une session à l'autre");
+
+  // la dernière case cochée ne se décoche pas
+  boites.slice(1, -1).forEach(b => { const c = cases().find(x => x.dataset.boite === b.id); c.checked = false; c.onchange(evt(c)); });
+  await tick(p);
+  const derniere = cases().find(c => c.dataset.boite === boites[boites.length - 1].id);
+  vrai("disabled" in derniere._attrs, "la dernière boîte cochée ne se décoche pas : un filtre qui ne garde rien ne montrerait rien");
+
+  // toutes
+  nav().querySelector("#bx_toutes").onclick(); await tick(p);
+  eq(Ref.boitesChoisies(), null, "« toutes » revient au flux fusionné");
+  eq(A.Api.cache.compteur("inbox").t, inboxAvant, "et les compteurs avec lui");
+
+  // le serveur simulé, comme le vrai : un identifiant inconnu n'élargit rien
+  eq(A.ServeurSimule.traiter("GET", "/messages?dossier=inbox&boites=inconnue").total, 0,
+     "une boîte hors du compte, citée dans l'URL, est ignorée");
+}
+
 console.log("— déterminisme ————————————————————————————————");
 const p3 = demarrer(creerStockage()); await drainer(p3);   // stockage vierge
 const C = p3.ABX;

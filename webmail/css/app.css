@@ -335,6 +335,48 @@ header {
     display: none;
   }
 }
+/* La boîte d'un message (D176 § 2) : une initiale sur une couleur stable par boîte.
+   Six teintes assez sombres pour un texte blanc, lisibles sur les deux thèmes. */
+.bx {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  margin-right: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: #6b7580;
+}
+
+.bx0 {
+  background: #2f6fed;
+}
+
+.bx1 {
+  background: #0f7b4f;
+}
+
+.bx2 {
+  background: #b45309;
+}
+
+.bx3 {
+  background: #8e44ad;
+}
+
+.bx4 {
+  background: #c0392b;
+}
+
+.bx5 {
+  background: #0e7490;
+}
+
 /* ---- onglets : une 2e ligne d'en-tete, toujours visible ---- */
 .tabs {
   display: flex;
@@ -891,6 +933,64 @@ header {
 
 .vcrit input {
   flex: 1;
+}
+
+/* Le filtre en amont (D176 § 3) : une case par boîte, son compteur à droite. */
+.bxsel {
+  padding: 2px 6px 6px;
+}
+
+.bxrow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.bxrow:hover {
+  background: var(--panel2);
+}
+.bxrow.off {
+  color: var(--muted);
+}
+.bxrow.off .bx {
+  opacity: 0.45;
+}
+.bxrow input {
+  margin: 0 4px 0 0;
+}
+.bxrow .lb {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bxrow .ct {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.bxrow .ct b {
+  color: var(--fg);
+}
+.bxrow .ct .sep {
+  margin: 0 2px;
+}
+
+.bxall {
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: none;
+  color: var(--accent);
+  font-size: 10.5px;
+  text-transform: none;
+  cursor: pointer;
 }
 
 /* ---- détail ---- */

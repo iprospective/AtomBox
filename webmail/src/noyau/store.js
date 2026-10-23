@@ -37,6 +37,8 @@
       /* les dossiers épinglés en tête (D144) — un réglage par compte, comme l'ordre des axes ;
          le formulaire de dossier virtuel est de l'état de session, jamais persisté */
       epingles: [], formVirtuel: null,
+      /* les boîtes cochées du filtre en amont (D176 § 3) — null : toutes */
+      boites: null,
       /* jalon simulé : 0 = la V0 (la V1 réduite, D140b), null = la maquette complète */
       jalon: null,
       tabs: [], tab: null,
@@ -58,7 +60,7 @@
       (d.virtuels || []).forEach(v => this.virtuels.push(v));
       (d.filtres || []).forEach(f => this.filtres.push(f));
       this.seq = d.seq || 0;
-      ["folder","filtre","tri","sens","statut","ordreAxes","triAxe","jalon","triFeat","triFeatDesc","epingles"]
+      ["folder","filtre","tri","sens","statut","ordreAxes","triAxe","jalon","triFeat","triFeatDesc","epingles","boites"]
         .forEach(k => { if (d.ui && d.ui[k]) this.ui[k] = d.ui[k]; });
       if (d.ui) { this.ui.tabs = d.ui.tabs || []; this.ui.tab = d.ui.tab || null; }
       return d;
@@ -75,6 +77,7 @@
               sens: this.ui.sens, statut: this.ui.statut,
               ordreAxes: this.ui.ordreAxes, triAxe: this.ui.triAxe, jalon: this.ui.jalon,
               triFeat: this.ui.triFeat, triFeatDesc: this.ui.triFeatDesc, epingles: this.ui.epingles,
+              boites: this.ui.boites,
               tabs: this.ui.tabs, tab: this.ui.tab },
       }, sansPrive)); } catch (e) { /* quota ou navigation privée : le POC reste utilisable */ }
     },

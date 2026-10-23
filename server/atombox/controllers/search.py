@@ -13,7 +13,7 @@ log = journal("api")
 
 class SearchController(Controller):
     @action("GET", "/recherche")
-    async def search(self, q: str = Query(""), sortis: int = 0, compte: Compte = Depends(current_account), s: AsyncSession = Depends(async_session)):
-        l = await svc.search(s, compte, q, sortis=bool(sortis))
+    async def search(self, q: str = Query(""), sortis: int = 0, boites: str | None = None, compte: Compte = Depends(current_account), s: AsyncSession = Depends(async_session)):
+        l = await svc.search(s, compte, q, sortis=bool(sortis), wanted=boites)
         log.debug("recherche %r par %s : %d", q, compte.login, len(l))
         return {"messages": l, "total": len(l), "q": q}

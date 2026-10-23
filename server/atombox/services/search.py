@@ -10,10 +10,10 @@ from ..journal import journal
 
 log = journal("api")
 
-async def search(s: AsyncSession, compte: Compte, q: str, sortis: bool = False, limit: int = 100) -> list[dict]:
+async def search(s: AsyncSession, compte: Compte, q: str, sortis: bool = False, limit: int = 100, wanted: str | None = None) -> list[dict]:
     q = (q or "").strip()
     if len(q) < 2: log.debug("recherche trop courte : %r", q); return []
-    boites = [b.boite_id for b in await svcm.account_mailboxes(s, compte)]
+    boites = svcm.chosen([b.boite_id for b in await svcm.account_mailboxes(s, compte)], wanted)   # D176 § 3
     if not boites: return []
     ds = await svcm._folders_by_id(s, boites)
     texte = func.to_tsvector("french", func.coalesce(Comm.sujet, "") + " " + func.coalesce(Comm.corps_texte, ""))
