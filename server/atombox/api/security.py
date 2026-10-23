@@ -46,6 +46,31 @@ async def current_account(request: Request, s: AsyncSession = Depends(async_sess
     request.state.session = ses
     return compte
 
+async def current_reader(request: Request, s: AsyncSession = Depends(async_session)):
+    """CELUI QUI LIT : une personne (session), ou une APPLICATION connectée (F048, RM3517).
+
+    Seules les routes de lecture et d'étiquetage acceptent ce dépendant ; tout ce qui classe,
+    supprime ou envoie reste à `current_account` — une application qui présente son jeton à ces
+    routes-là reçoit 401, comme un jeton inconnu. Le jeton d'application se reconnaît à son
+    préfixe : il n'est cherché que dans sa table."""
+    from ..applications import PREFIX, AppPrincipal
+    from ..schema.models import Application
+    auth = request.headers.get("authorization", "")
+    jeton = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    if not jeton.startswith(PREFIX):
+        return await current_account(request, s)
+    app = await s.scalar(select(Application).where(Application.jeton_empreinte == token_fingerprint(jeton)))
+    if not app or not app.actif:
+        log.warning("jeton d'application %s : %s (%s)", "inconnu" if not app else "révoqué", request.url.path,
+                    request.client.host if request.client else "?")
+        raise HTTPException(401, "jeton d'application invalide")
+    # le dernier appel se VOIT (la liste des applications le montre) : une route de lecture ne
+    # valide rien, donc on valide ici — expire_on_commit est faux, l'objet reste lisible
+    app.dernier_appel = datetime.now(timezone.utc)
+    await s.commit()
+    request.state.application = app
+    return AppPrincipal(app)
+
 async def open_session(s: AsyncSession, compte: Compte, agent: str | None) -> str:
     jeton = new_token()
     s.add(SessionModele(session_id=uuid7(), compte_id=compte.compte_id, jeton_empreinte=token_fingerprint(jeton),
