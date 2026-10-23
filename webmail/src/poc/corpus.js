@@ -249,7 +249,7 @@
     retire(m) { tous = tous.filter(x => x !== m); },
 
     /* UNE passe sur le corpus pour les ~300 branches de l'arborescence (D078). */
-    recompte() {
+    recompte(garde) {
       compte = {};
       /* « u » compte CE QUE LA LISTE MET EN GRAS : jamais ouvert, ou remis de côté. Le serveur
          évalue la même expression (a_voir_par) — D166 interdit qu'ils divergent. */
@@ -257,6 +257,7 @@
         c.t++; if (!m.lu || m.a_revoir) c.u++;
         if (m.statut === "todo" || m.statut === "doing") c.f++; };
       for (const m of tous) {
+        if (garde && !garde(m)) continue;          // le filtre en amont (D176 § 3)
         if (m.motif_sortie === "archived") { bump("archives", m); continue; }
         if (m.motif_sortie === "processed") { bump("traites", m); continue; }
         if (m.motif_sortie === "junk") { bump("junk", m); continue; }

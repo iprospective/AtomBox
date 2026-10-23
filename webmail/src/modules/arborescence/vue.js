@@ -20,7 +20,7 @@
       const epingles = v0 ? [] : Api.cache.epingles();
       const noeud = (o, cls, sel) =>
         R.render("nav.node", { o: { ...o, epingle: epingles.includes(o.id) }, cls, sel });
-      let h = `<div class="navsearch"><input id="navq" placeholder="Filtrer les dossiers…"
+      let h = R.render("nav.boites", {}) + `<div class="navsearch"><input id="navq" placeholder="Filtrer les dossiers…"
          value="${F.esc(ui.navq)}">${ui.navq
            ? `<button class="navx" id="navx" title="Effacer le filtre (Échap)">✕</button>` : ""}</div>`;
 

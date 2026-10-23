@@ -41,3 +41,17 @@
 .vform{padding:6px 10px 8px;display:flex;flex-direction:column;gap:5px;background:var(--panel2)}
 .vform input,.vform select{font:inherit;font-size:12px;padding:3px 5px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:inherit;min-width:0}
 .vcrit{display:flex;gap:4px}.vcrit select{flex:0 0 46%}.vcrit input{flex:1}
+
+/* Le filtre en amont (D176 § 3) : une case par boîte, son compteur à droite. */
+.bxsel { padding:2px 6px 6px; }
+.bxrow { display:flex; align-items:center; gap:4px; padding:4px 6px; border-radius:6px;
+  cursor:pointer; font-size:12.5px;
+  &:hover { background:var(--panel2); }
+  &.off { color:var(--muted); .bx { opacity:.45; } }
+  input { margin:0 4px 0 0; }
+  .lb { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ct { margin-left:auto; color:var(--muted); font-size:11.5px; white-space:nowrap;
+    b { color:var(--fg); } .sep { margin:0 2px; } }
+}
+.bxall { margin-left:6px; padding:0 6px; border:1px solid var(--line); border-radius:4px;
+  background:none; color:var(--accent); font-size:10.5px; text-transform:none; cursor:pointer; }

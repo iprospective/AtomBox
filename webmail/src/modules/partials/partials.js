@@ -76,9 +76,22 @@
     return n ? `<span class="nat ${n[1]}" title="${F.esc(n[2])} — D130">${n[0]}</span>` : "";
   });
 
+  /* ---- la boîte d'un message (D176 § 2) ----------------------------------
+     Le flux reste fusionné, mais lisible : chaque ligne porte sa boîte. Une
+     initiale et une couleur stable (le rang de la boîte), l'adresse au survol.
+     À une seule boîte, rien : la pastille n'aurait rien à distinguer. */
+  R.define("boite.pastille", ({ adresse }) => {
+    const Ref = ABX.Ref;
+    if (!adresse || !Ref.plusieursBoites()) return "";
+    const rang = Ref.rangBoite(adresse);
+    const b = (Ref.moi.boites || [])[rang];
+    const nom = (b && b.label) || adresse.split("@")[0];
+    return `<span class="bx bx${rang < 0 ? "x" : rang % 6}" title="${F.esc(adresse)}">${F.esc(nom.charAt(0).toUpperCase())}</span>`;
+  });
+
   /* ---- carte de message (liste) ----------------------------------------- */
   R.define("message.card.header", ({ m }) =>
-    `<div class="r1">${R.render("fiabilite", { m })}${R.render("expediteur", { m })}
+    `<div class="r1">${R.render("boite.pastille", { adresse: m.boite })}${R.render("fiabilite", { m })}${R.render("expediteur", { m })}
        <span class="dt">${F.dt(m.date_recue)}</span></div>`);
 
   R.define("message.card.body", ({ m }) =>
@@ -260,6 +273,28 @@
   });
 
   /* ---- arborescence ------------------------------------------------------ */
+  /* LE FILTRE EN AMONT (D176 § 3) : une case par boîte, au-dessus de tout. Il
+     restreint la liste, la recherche et les compteurs des dossiers. Le compteur
+     d'une boîte, lui, ne dépend pas des cases : NON TRAITÉ / TOTAL (§ 4) — ce qui
+     attend, sur ce que la boîte contient de vivant. Les non-lus ne pilotent que le
+     gras ; ils se disent au survol. La dernière case cochée ne se décoche pas : un
+     filtre qui ne garde rien ne montrerait qu'une liste vide sans dire pourquoi. */
+  R.define("nav.boites", () => {
+    const Ref = ABX.Ref;
+    if (!Ref.plusieursBoites()) return "";
+    const choix = Ref.boitesChoisies();
+    const lignes = Ref.moi.boites.map(b => {
+      const c = ABX.Api.cache.boite(b.id), coche = !choix || choix.includes(b.id);
+      const seule = coche && choix && choix.length === 1;
+      return `<label class="bxrow${coche ? "" : " off"}" title="${F.esc(b.adresse)} — ${c.n} non traité${c.n > 1 ? "s" : ""} sur ${c.t} (hors archives, corbeille et spam) · ${c.u} non lu${c.u > 1 ? "s" : ""}">
+        <input type="checkbox" data-boite="${F.esc(b.id)}"${coche ? " checked" : ""}${seule ? " disabled" : ""}>
+        ${R.render("boite.pastille", { adresse: b.adresse })}<span class="lb">${F.esc(b.adresse)}</span>
+        <span class="ct">${c.n ? `<b>${c.n}</b>` : c.n}<span class="sep">/</span>${c.t}</span></label>`;
+    }).join("");
+    return `<div class="grp">Boîtes${choix ? ` <button class="bxall" id="bx_toutes" title="Revoir toutes les boîtes">toutes</button>` : ""}</div>
+      <div class="bxsel">${lignes}</div>`;
+  });
+
   R.define("nav.node", ({ o, cls, sel }) =>
     `<div class="node ${cls || ""}${sel ? " sel" : ""}" data-id="${F.esc(o.id)}"
        data-label="${F.esc(o.label)}" data-kind="${o.kind || ""}" data-axe="${o.axe || ""}">

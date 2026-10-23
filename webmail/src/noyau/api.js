@@ -109,6 +109,8 @@
     cache: {
       message: id => impl && impl.cacheMessage ? impl.cacheMessage(id) : null,
       compteur: k => impl && impl.cacheCompteur ? impl.cacheCompteur(k) : null,
+      /* le compteur d'une BOÎTE (D176 § 4) : {t: total actif, n: non traité, u: non lus} */
+      boite: id => impl && impl.cacheBoite ? impl.cacheBoite(id) : { t: 0, n: 0, u: 0 },
       virtuels: () => impl && impl.cacheVirtuels ? impl.cacheVirtuels() : [],
       epingles: () => impl && impl.cacheEpingles ? impl.cacheEpingles() : [],
     },

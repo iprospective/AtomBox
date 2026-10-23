@@ -31,6 +31,24 @@
           "index (valeur text_pattern_ops) — sinon balayage de tous les tags", true);
       };
 
+      /* LE FILTRE EN AMONT (D176 § 3) : cocher ou décocher une boîte recompte
+         TOUT (dossiers, axes, virtuels) et recharge la liste — les deux partent avec
+         la même sélection, sinon le compteur dirait autre chose que la liste (D166). */
+      const choisir = ids => {
+        ui.boites = ids; St.save();
+        return ABX.Api.compteurs().then(() => { Nav.peindre(); return ABX.Controllers.List.charger(); });
+      };
+      D.on(el, "input[data-boite]", "onchange", n => {
+        const toutes = ABX.Ref.moi.boites.map(b => b.id);
+        const avant = ABX.Ref.boitesChoisies() || toutes;
+        const apres = n.checked ? toutes.filter(id => avant.includes(id) || id === n.dataset.boite)
+                                : avant.filter(id => id !== n.dataset.boite);
+        if (!apres.length) { n.checked = true; return; }
+        choisir(apres.length === toutes.length ? null : apres);
+      });
+      const toutes = el.querySelector("#bx_toutes");
+      if (toutes) toutes.onclick = () => choisir(null);
+
       /* Réordonner (D135). Les boutons sont DANS le nœud : sans le stopPropagation,
          monter un axe l'ouvrirait aussi. */
       D.on(el, ".axop", "onclick", (n, e) => {

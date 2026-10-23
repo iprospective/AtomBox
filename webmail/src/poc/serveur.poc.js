@@ -22,6 +22,31 @@
   const rep = m => m;
   const ok = (extra) => Object.assign({ ok: true }, extra || {});
 
+  /* LE FILTRE EN AMONT (D176 § 3), comme le vrai serveur : les identifiants cochés,
+     toujours intersectés avec les boîtes du compte — un identifiant inconnu ne
+     s'ajoute pas, il est ignoré. Rend le prédicat sur un message, ou null (toutes). */
+  const dansBoites = p => {
+    if (!p.boites) return null;
+    const ids = p.boites.split(","), adr = new Set(ABX.Fixtures.MOI.boites.filter(b => ids.includes(b.id)).map(b => b.adresse));
+    return m => adr.has(m.boite);
+  };
+  /* LE COMPTEUR D'UNE BOÎTE (D176 § 4) : non traité / total. Total = périmètre actif
+     (hors archives, corbeille, spam) ; non traité = une place REÇUE encore en file.
+     Indépendant des cases cochées : une boîte décochée dit encore ce qu'elle contient. */
+  const compteursBoites = () => {
+    const out = {};
+    ABX.Fixtures.MOI.boites.forEach(b => out[b.id] = { t: 0, n: 0, u: 0 });
+    const parAdr = {}; ABX.Fixtures.MOI.boites.forEach(b => parAdr[b.adresse] = out[b.id]);
+    for (const m of C.tous) {
+      const c = parAdr[m.boite]; if (!c) continue;
+      const ou = m.dossier || m.dossier_origine;
+      if (ou === "trash" || ou === "junk" || ["archived", "deleted", "junk"].includes(m.motif_sortie)) continue;
+      c.t++;
+      if ((m.sens || "in") === "in" && !m.motif_sortie) { c.n++; if (!m.lu || m.a_revoir) c.u++; }
+    }
+    return out;
+  };
+
   const dossierDe = p => ({ id: p.dossier, kind: p.kind || (p.dossier && p.dossier.includes(":") ? "virtuel" : "special"), axe: p.axe });
 
   /* ---- les routes ----------------------------------------------------------- */
@@ -39,14 +64,16 @@
       return { jeton: "poc", compte: ABX.Fixtures.MOI }; }],
     ["DELETE", /^\/session$/, () => ok({ fermee: true })],
 
-    ["GET", /^\/arborescence$/, () => ({ compteurs: C.recompte(),
+    ["GET", /^\/arborescence$/, (_, p) => ({ compteurs: C.recompte(dansBoites(p)), boites: compteursBoites(),
       /* des COPIES : le vrai serveur sérialise, le cache du client ne doit pas partager
          le tableau du store — sinon un push s'y verrait deux fois */
       virtuels: St.virtuels.map(v => ({ ...v })), epingles: (St.ui.epingles || []).slice() })],
 
     ["GET", /^\/messages$/, (_, p) => {
       const f = dossierDe(p);
-      const l = p.tout ? C.vue(f) : C.filtrer(f, p.filtre, p.tri, p.sens, p.statut);
+      const garde = dansBoites(p);
+      let l = p.tout ? C.vue(f) : C.filtrer(f, p.filtre, p.tri, p.sens, p.statut);
+      if (garde) l = l.filter(garde);
       return { messages: l.map(m => rep(m, false)), total: l.length }; }],
 
     ["GET", /^\/messages\/([^/]+)\/fil$/, (m) => { const x = C.par(dec(m[1])); if (!x) return null;
@@ -132,7 +159,8 @@
       return ok({ supprimes: 1 }); }],
 
     ["GET", /^\/recherche$/, (_, p) => { const q = (p.q || "").toLowerCase().trim();
-      const l = q.length < 2 ? [] : C.tous.filter(m => !m.motif_sortie && m.dossier !== "trash" &&
+      const garde = dansBoites(p) || (() => true);
+      const l = q.length < 2 ? [] : C.tous.filter(m => garde(m) && !m.motif_sortie && m.dossier !== "trash" &&
         ((m.sujet || "").toLowerCase().includes(q) || (m.corps || "").toLowerCase().includes(q) || (m.from_adresse || "").toLowerCase().includes(q) || (m.from_nom || "").toLowerCase().includes(q)));
       return { messages: l.map(m => rep(m, false)), total: l.length, q }; }],
 

@@ -1,1 +1,9 @@
 // PARTIALS — rien de propre : les chips, badges et compteurs sont stylés par le module qui les affiche.
+
+/* La boîte d'un message (D176 § 2) : une initiale sur une couleur stable par boîte.
+   Six teintes assez sombres pour un texte blanc, lisibles sur les deux thèmes. */
+.bx { display:inline-flex; align-items:center; justify-content:center; flex:none;
+  width:18px; height:18px; border-radius:5px; margin-right:6px;
+  font-size:10.5px; font-weight:700; line-height:1; color:#fff; background:#6b7580; }
+.bx0 { background:#2f6fed; } .bx1 { background:#0f7b4f; } .bx2 { background:#b45309; }
+.bx3 { background:#8e44ad; } .bx4 { background:#c0392b; } .bx5 { background:#0e7490; }
