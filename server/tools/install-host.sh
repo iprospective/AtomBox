@@ -27,6 +27,7 @@ esac; shift; done
 [ -f "$R/server/pyproject.toml" ] && [ -f "$R/cdc/dict/routes.yml" ] && [ -f "$R/webmail/index.html" ] \
   || { echo "livraison incomplète sous $R (server/, webmail/, cdc/dict/ attendus)"; exit 1; }
 log() { echo "-- $*"; }
+cd /          # postgres et atombox n'ont pas le droit d'entrer dans le dossier courant de root
 run_as() { runuser -u "$U" -- "$@"; }
 
 # 1. l'utilisateur et les dossiers
@@ -49,7 +50,9 @@ export UV_PYTHON_INSTALL_DIR="$BASE/python" UV_CACHE_DIR="$BASE/.cache/uv"
 [ -x "$BASE/venv/bin/python" ] || { "$BASE/bin/uv" venv -q --python "$PY" "$BASE/venv"; log "venv créé ($PY)"; }
 
 # 3. la livraison devient `current`, et le paquet s'installe depuis elle
-chown -R root:root "$R"; chmod -R go-w "$R"
+# LISIBLE par atombox, modifiable par root seul. Le mode vient de l'archive : le dossier temporaire
+# de ship.sh est en 700, et tar le reporte sur la livraison — atombox ne pouvait rien lire.
+chown -R root:root "$R"; chmod -R u+rwX,go+rX,go-w "$R"
 ln -sfn "$R" "$BASE/current.new" && mv -Tf "$BASE/current.new" "$BASE/current"
 "$BASE/bin/uv" pip install -q --python "$BASE/venv/bin/python" -e "$BASE/current/server"
 log "code servi : $(basename "$R")"
