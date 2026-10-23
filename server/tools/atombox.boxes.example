@@ -7,6 +7,7 @@
 # en SMTP (le relais refuse qu'un compte expédie pour l'adresse d'un autre). Une boîte absente garde
 # ATOMBOX_IMAP_MASTER / ATOMBOX_IMAP_PASSWORD et ATOMBOX_SMTP_USER / ATOMBOX_SMTP_PASSWORD.
 #
+# `#` ou `;` en début de ligne commente.
 # Le fichier est relu à chaque connexion : la relève prend une ligne ajoutée à sa tentative suivante.
 #
 # boite@exemple.fr   son mot de passe
