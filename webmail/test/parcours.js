@@ -38,7 +38,7 @@ function serveur(vus) {
     }, filtres: [], virtuels: [],
     /* le référentiel des valeurs d'axe VIT côté serveur : poser un tag dont la valeur n'existe
        pas encore l'y ajoute — c'est ce que fait le vrai, et c'est ce que le client doit relire. */
-    valeurs: { client: [{ id: "client:Acme", label: "Acme", axe: "client" }],
+    valeurs: { client: [{ id: "client:Acme", label: "Acme", axe: "client" }], commande: [],
                /* un axe d'APPLICATION (D187) : la clé (`val`) n'est pas ce qu'on lit (`label`) */
                propal: [{ id: "propal:123", label: "PR2610-0012 — Tiers SA", val: "123", axe: "propal" }] } };
   /* DEUX boîtes (F147) : le filtre en amont n'existe qu'à partir de deux */
@@ -56,7 +56,9 @@ function serveur(vus) {
                  { id: "sent", label: "Envoyés", icon: "📤", sortant: true },
                  { id: "trash", label: "Corbeille", icon: "🗑", vue: true }],
       util: [{ id: "d1", label: "Clients", icon: "📁", boite: "moi@exemple.fr" }],
-      axes: [{ id: "client", label: "Client" }, { id: "propal", label: "Propositions commerciales" }], valeurs: etat.valeurs,
+      axes: [{ id: "client", label: "Client", famille: null }, { id: "propal", label: "Propositions commerciales", famille: "dolibarr" },
+             { id: "commande", label: "Commandes clients", famille: "dolibarr" }],
+      familles: [{ id: "dolibarr", label: "Dolibarr" }], valeurs: etat.valeurs,
       statuts: [{ id: "new", label: "Nouveau" }, { id: "todo", label: "À faire" }, { id: "processed", label: "Traité" }],
       vues: ["trash", "archives", "traites"], virtuels: etat.virtuels });
     /* le filtre en amont, comme le vrai : `boites=` restreint la liste ET les compteurs (D166) */
@@ -421,6 +423,25 @@ function serveur(vus) {
      "le tag posé est propal=123 — la clé, pas le libellé choisi");
   A.Controllers.List.charger(); await drainer(e);
   vrai(doc.getElementById("list").innerHTML.includes("PR2610-0012 — Tiers SA"), "et la puce de la liste montre le libellé");
+  vrai(doc.getElementById("list").innerHTML.includes("Dolibarr › Propositions commerciales"), "la famille nomme l'axe au survol (D188)");
+
+  console.log("— la famille range les axes (D188) ————————————————————");
+  A.Controllers.Nav.peindre();
+  const navF = doc.getElementById("nav").innerHTML;
+  vrai(navF.includes('class="grp fam">Dolibarr<'), "les axes de Dolibarr sont sous leur famille");
+  vrai(navF.indexOf(">Dolibarr<") < navF.indexOf("Autres axes") && navF.indexOf("Autres axes") < navF.indexOf(">Client<"),
+       "les axes hors famille viennent ensuite, sous « Autres axes »");
+  vrai(doc.getElementById("detail").innerHTML.includes('<optgroup label="Dolibarr">'), "la liste des axes du formulaire est rangée par famille");
+  /* ▲▼ (D135) partaient des fixtures du POC, absentes en produit : le premier clic plantait */
+  const ordreAvant = A.Views.Nav.axesOrdonnes(ui).map(a => a.id).join(",");
+  const boutonsAxes = doc.getElementById("nav").querySelectorAll(".axop");
+  const descendre = boutonsAxes.find(b => b.dataset.mv === "down" && b.dataset.axe === "propal");
+  vrai(!!descendre, "propal a un bouton « descendre »");
+  descendre.onclick(evt(descendre)); await drainer(e);
+  eq(A.Views.Nav.axesOrdonnes(ui).map(a => a.id).join(","), "commande,propal,client",
+     "descendre propal l'échange avec commande, son voisin dans la famille (avant : " + ordreAvant + ")");
+  const commandeBas = doc.getElementById("nav").querySelectorAll(".axop").find(b => b.dataset.mv === "down" && b.dataset.axe === "propal");
+  vrai(commandeBas && "disabled" in commandeBas._attrs, "et propal, dernier de sa famille, ne descend pas chez « Autres axes »");
 
   bilan();
 })().catch(e => { console.error("  ✗ échec des parcours :", e.stack.split("\n").slice(0, 3).join(" | ")); process.exit(1); });

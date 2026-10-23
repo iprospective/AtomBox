@@ -112,7 +112,12 @@ async def _axes_and_values(s: AsyncSession) -> dict:
     def label(a):
         d = declaration(types.get(a.application_id)) if a.application_id else None
         return ((d or {}).get("axes") or {}).get(a.nom, {}).get("libelle") or a.nom.replace("_", " ").capitalize()
-    return {"axes": [{"id": a.nom, "label": label(a), "derive": a.derive} for a in axes],
+    # LA FAMILLE (D188) : elle range les axes dans la navigation et nomme les tags au survol
+    from ..schema.models import Famille
+    familles = list(await s.scalars(select(Famille).order_by(Famille.ordre, Famille.nom))) if axes else []
+    nom_famille = {f.famille_id: f.nom for f in familles}
+    return {"axes": [{"id": a.nom, "label": label(a), "derive": a.derive, "famille": nom_famille.get(a.famille_id)} for a in axes],
+            "familles": [{"id": f.nom, "label": f.libelle} for f in familles],
             "valeurs": values}
 
 

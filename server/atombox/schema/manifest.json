@@ -1509,6 +1509,11 @@
      "obligatoire": false
     },
     {
+     "nom": "famille_id",
+     "type": "uuid",
+     "obligatoire": false
+    },
+    {
      "nom": "acl",
      "type": "jsonb",
      "obligatoire": true
@@ -1530,6 +1535,36 @@
     "D019",
     "D133",
     "D077"
+   ]
+  },
+  "famille": {
+   "cle": [
+    "famille_id"
+   ],
+   "colonnes": [
+    {
+     "nom": "famille_id",
+     "type": "uuid",
+     "obligatoire": true
+    },
+    {
+     "nom": "nom",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "libelle",
+     "type": "text",
+     "obligatoire": true
+    },
+    {
+     "nom": "ordre",
+     "type": "bigint",
+     "obligatoire": false
+    }
+   ],
+   "decisions": [
+    "D188"
    ]
   },
   "tag": {
@@ -2395,8 +2430,8 @@
    ]
   }
  },
- "fks": 88,
- "index": 74,
- "contraintes": 9,
+ "fks": 89,
+ "index": 75,
+ "contraintes": 10,
  "rapport": []
 }

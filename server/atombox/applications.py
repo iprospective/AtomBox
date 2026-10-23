@@ -80,6 +80,21 @@ def mailbox_ids_sync(s, app: Application) -> set:
     return {b.boite_id for b in s.scalars(q)} if q is not None else set()
 
 
+def family(s, nom: str, libelle: str | None = None):
+    """LA FAMILLE (D188), créée à la volée par sa clé : un connecteur la déclare, une personne la
+    nomme en rangeant un axe. Le libellé ne s'écrase pas : la première déclaration le fixe."""
+    from .schema.models import Famille
+    nom = (nom or "").strip().lower()
+    f = s.scalar(select(Famille).where(Famille.nom == nom))
+    if f is None:
+        n = s.scalar(select(Famille).order_by(Famille.ordre.desc()).limit(1))
+        f = Famille(famille_id=uuid7(), nom=nom, libelle=(libelle or nom.replace("_", " ").capitalize()).strip(),
+                    ordre=((n.ordre or 0) + 1) if n else 1)
+        s.add(f); s.flush()
+        log.info("famille « %s » créée", nom)
+    return f
+
+
 def declared_axes(app: Application) -> list[str]:
     return [a.lower() for a in (app.axes or [])]
 
@@ -97,19 +112,25 @@ def create(s, nom: str, type_connecteur: str, boites=(), domaines=(), axes=(), p
                       axes=[a.lower() for a in axes], parametres=parametres or {},
                       actif=True, cree_le=datetime.now(timezone.utc))
     s.add(app); s.flush()
+    from .connectors import declaration
+    fam = ((declaration(type_connecteur) or {}).get("famille") or {})
+    famille = family(s, fam["nom"], fam.get("libelle")) if fam.get("nom") else None
     # Les axes DÉCLARÉS appartiennent à l'application (D019) : elle seule y pose des tags par jeton.
     # Un axe du même nom, créé à la main avant, lui est rattaché plutôt que dédoublé.
     for nom_axe in app.axes:
         axe = s.scalar(select(Axe).where(Axe.nom == nom_axe))
         if axe is None:
             n = s.scalar(select(Axe).order_by(Axe.ordre.desc()).limit(1))
-            s.add(Axe(axe_id=uuid7(), nom=nom_axe, application_id=app.application_id, acl={}, derive=False,
-                      ordre=((n.ordre or 0) + 1) if n else 1))
-            s.flush()
+            axe = Axe(axe_id=uuid7(), nom=nom_axe, application_id=app.application_id, acl={}, derive=False,
+                      ordre=((n.ordre or 0) + 1) if n else 1)
+            s.add(axe); s.flush()
         elif axe.application_id is None:
             axe.application_id = app.application_id
         elif axe.application_id != app.application_id:
             raise ValueError("l'axe « %s » appartient déjà à une autre application" % nom_axe)
+        # la famille du connecteur RANGE ses axes (D188) — sauf si quelqu'un l'a déjà rangé ailleurs
+        if famille is not None and axe.famille_id is None:
+            axe.famille_id = famille.famille_id
     s.commit()
     log.info("application « %s » (%s) créée : portée %s, axes %s", nom, type_connecteur, app.portee, app.axes)
     return app, jeton

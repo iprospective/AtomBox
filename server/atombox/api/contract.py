@@ -316,8 +316,16 @@ class Axe(BaseModel):
     axe_id: uuid.UUID
     nom: str
     application_id: uuid.UUID | None = None
+    famille_id: uuid.UUID | None = None
     acl: dict | list
     derive: bool
+    ordre: int | None = None
+
+class Famille(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    famille_id: uuid.UUID
+    nom: str
+    libelle: str
     ordre: int | None = None
 
 class Tag(BaseModel):
@@ -500,4 +508,4 @@ class Evenement(BaseModel):
     abandonne: bool | None = None
     erreur: str | None = None
 
-CONTRACT = {"comm": Comm, "reinitialisation": Reinitialisation, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "read_state": ReadState, "marker": Marker, "marker_collective": MarkerCollective, "marker_personal": MarkerPersonal, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}
+CONTRACT = {"comm": Comm, "reinitialisation": Reinitialisation, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "read_state": ReadState, "marker": Marker, "marker_collective": MarkerCollective, "marker_personal": MarkerPersonal, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "famille": Famille, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}

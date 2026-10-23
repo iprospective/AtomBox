@@ -1,6 +1,7 @@
 {
   "type": "dolibarr",
   "libelle": "Dolibarr",
+  "famille": {"nom": "dolibarr", "libelle": "Dolibarr"},
   "_note": "D187. Le code d'objet est celui que Dolibarr écrit dans le trackid de ses Message-ID (CMailFile : '<temps>.<mode>-dolibarr-<trackid>@<dol_getprefix('email')>'). Ajouter un objet = ajouter une ligne ici.",
   "axes": {
     "propal":               {"libelle": "Propositions commerciales", "code": "pro"},

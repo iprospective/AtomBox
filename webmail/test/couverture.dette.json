@@ -30,7 +30,6 @@
  ],
  "gestes": [],
  "ecoutes": [
-  ".axop",
   ".chip[data-cap]",
   ".chip[data-pjt]",
   ".more",

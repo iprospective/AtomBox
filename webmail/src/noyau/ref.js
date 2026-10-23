@@ -11,7 +11,7 @@
   "use strict";
   const Ref = {
     moi: { nom: "", boites: [] },
-    speciaux: [], util: [], axes: [], valeurs: {}, statuts: [], vues: [],
+    speciaux: [], util: [], axes: [], familles: [], valeurs: {}, statuts: [], vues: [],
     charge: false,
 
     /* GET /referentiels → cache. Rend la promesse pour enchaîner la peinture. */

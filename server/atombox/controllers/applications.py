@@ -14,11 +14,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..api.routing import Controller, action
 from ..api.dependencies import async_session
-from ..api.security import current_reader
+from ..api.security import current_account, current_reader
 from ..applications import AppPrincipal
 from ..connectors import declaration
 from ..journal import journal
-from ..schema.models import Axe, Tag
+from ..schema.models import Axe, Famille, Tag
 from ..uuid7 import uuid7
 
 log = journal("api")
@@ -90,3 +90,31 @@ class ApplicationController(Controller):
         await s.commit()
         log.info("application « %s », axe %s : %d valeur(s) créée(s), %d modifiée(s)", app.nom, a.nom, crees, modifies)
         return {"ok": True, "crees": crees, "modifies": modifies}
+
+
+class AxesController(Controller):
+    @action("PATCH", "/axes/{axe}")
+    async def configure(self, axe: str, request: Request, qui=Depends(current_account), s: AsyncSession = Depends(async_session)):
+        """RANGER UN AXE DANS UNE FAMILLE (D188), ou l'en sortir (`famille: null`). Une personne le
+        fait ; la famille se crée à la volée par sa clé, avec le libellé donné ou dérivé. Une
+        application ne range pas : sa famille vient de son connecteur."""
+        corps = await request.json() or {}
+        a = await s.scalar(select(Axe).where(Axe.nom == axe.strip().lower()))
+        if a is None: raise HTTPException(404, "axe inconnu")
+        if "famille" not in corps: raise HTTPException(422, "famille : une clé, ou null pour sortir l'axe de sa famille")
+        nom = corps["famille"]
+        if nom is None:
+            a.famille_id = None
+        else:
+            nom = str(nom).strip().lower()
+            if not nom: raise HTTPException(422, "famille : une clé non vide")
+            f = await s.scalar(select(Famille).where(Famille.nom == nom))
+            if f is None:
+                n = await s.scalar(select(Famille).order_by(Famille.ordre.desc()).limit(1))
+                f = Famille(famille_id=uuid7(), nom=nom, libelle=str(corps.get("famille_libelle") or nom.replace("_", " ").capitalize()).strip(),
+                            ordre=((n.ordre or 0) + 1) if n else 1)
+                s.add(f); await s.flush()
+            a.famille_id = f.famille_id
+        await s.commit()
+        log.info("axe %s : famille %s (par %s)", a.nom, nom, qui.login)
+        return {"ok": True, "axe": a.nom, "famille": nom}

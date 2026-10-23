@@ -56,11 +56,9 @@
 
       /* L'ordre des axes appartient à l'utilisateur (D135). Un axe ajouté depuis
          son dernier réglage se range à la fin plutôt que de disparaître. */
-      const ordre = ui.ordreAxes || [];
-      const axes = Ref.axes.slice().sort((x, y) => {
-        const i = ordre.indexOf(x.id), j = ordre.indexOf(y.id);
-        return (i < 0 ? 999 : i) - (j < 0 ? 999 : j);
-      });
+      const axes = ABX.Views.Nav.axesOrdonnes(ui);
+      const familles = Ref.familles || [];
+      let famillePrecedente;
       axes.forEach((a, rang) => {
         let vals = Ref.valeurs[a.id].filter(v => !f || v.label.toLowerCase().includes(f));
         if (f && !vals.length) return;
@@ -69,12 +67,20 @@
         if (ui.triAxe[a.id] === "alpha")
           vals = vals.slice().sort((x, y) => x.label.localeCompare(y.label));
         const ouvert = ui.ouverts[a.id] || !!f;
+        /* LA FAMILLE (D188) range les axes : son nom en tête de ses axes. Les axes hors famille
+           viennent ensuite, sous « Autres axes » — seulement s'il existe des familles. */
+        if (familles.length && (a.famille || null) !== famillePrecedente) {
+          const fa = familles.find(x => x.id === a.famille);
+          h += `<div class="grp fam">${F.esc(fa ? fa.label : "Autres axes")}</div>`;
+        }
+        famillePrecedente = a.famille || null;
         /* Plus de titre de groupe : il répétait le nom de l'axe juste au-dessus
            d'un nœud « Tous — <axe> ». Le nœud porte le nom, un point c'est tout. */
         h += noeud({ id:"axe:" + a.id, label: a.label + (a.sub ? " · " + a.sub : ""),
                      icon:a.icon, ...cptr("axe:" + a.id),
                      tw: ouvert ? "▾" : "▸", kind:"axe", axe:a.id,
-                     rang, dernier: rang === axes.length - 1,
+                     rang: (axes[rang - 1] || {}).famille === a.famille ? rang : 0,
+                     dernier: (axes[rang + 1] || {}).famille !== a.famille,
                      triAxe: ui.triAxe[a.id] || "recent" },
                    "axe-tete", ui.folder.id === "axe:" + a.id);
         if (!ouvert) return;
@@ -90,6 +96,17 @@
           h += `<div class="more" data-more="${a.id}">voir les ${vals.length - lim} autres…</div>`;
       });
       return h;
+    },
+
+    /* L'ORDRE AFFICHÉ DES AXES : par famille d'abord (D188, dans l'ordre servi), puis dans l'ordre
+       choisi par l'utilisateur (D135). Les boutons ▲▼ travaillent sur CET ordre : monter un axe
+       l'échange avec son voisin visible — jamais avec un axe d'une autre famille, ce qui ne se
+       verrait pas. */
+    axesOrdonnes(ui) {
+      const Ref = ABX.Ref, ordre = ui.ordreAxes || [];
+      const rangF = id => { const i = (Ref.familles || []).findIndex(f => f.id === id); return i < 0 ? 999 : i; };
+      const rangA = id => { const i = ordre.indexOf(id); return i < 0 ? 999 : i; };
+      return Ref.axes.slice().sort((x, y) => (rangF(x.famille) - rangF(y.famille)) || (rangA(x.id) - rangA(y.id)));
     },
 
     /* Retrouver un nœud par son identifiant, quel que soit son groupe : c'est ce
