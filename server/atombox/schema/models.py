@@ -414,11 +414,22 @@ class Axe(Base):
     axe_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     nom: Mapped[str] = mapped_column(Text, nullable=False)
     application_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("application.application_id", name="fk_axe_application_id"), nullable=True)
+    famille_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("famille.famille_id", name="fk_axe_famille_id"), nullable=True)
     acl: Mapped[dict | list] = mapped_column(JSONB, nullable=False)
     derive: Mapped[bool] = mapped_column(Boolean, nullable=False)
     ordre: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     application: Mapped[Application | None] = relationship("Application", foreign_keys=[application_id])
+    famille: Mapped[Famille | None] = relationship("Famille", foreign_keys=[famille_id])
     __table_args__ = (PrimaryKeyConstraint("axe_id", name="pk_axe"),)
+
+class Famille(Base):
+    """Le niveau AU-DESSUS de l'axe : une famille regroupe plusieurs axes (Dolibarr → propositions, commandes, factures…), et u"""
+    __tablename__ = "famille"
+    famille_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    nom: Mapped[str] = mapped_column(Text, nullable=False)
+    libelle: Mapped[str] = mapped_column(Text, nullable=False)
+    ordre: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    __table_args__ = (PrimaryKeyConstraint("famille_id", name="pk_famille"), UniqueConstraint("nom", name="uq_famille_nom"),)
 
 class Tag(Base):
     """Une valeur d'un axe : une CLÉ stable (l'identifiant chez l'application — 1042, RM2881 — ou le List-Id) et un LIBELLÉ aff"""
@@ -654,4 +665,4 @@ class Evenement(Base):
     erreur: Mapped[str | None] = mapped_column(Text, nullable=True)
     __table_args__ = (PrimaryKeyConstraint("evenement_id", name="pk_evenement"),)
 
-MODELS = {"comm": Comm, "reinitialisation": Reinitialisation, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "read_state": ReadState, "marker": Marker, "marker_collective": MarkerCollective, "marker_personal": MarkerPersonal, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}
+MODELS = {"comm": Comm, "reinitialisation": Reinitialisation, "comm_citation": CommCitation, "comm_email": CommEmail, "comm_interne": CommInterne, "comm_groupe": CommGroupe, "participant": Participant, "piece_jointe": PieceJointe, "comm_piece_jointe": CommPieceJointe, "blob": Blob, "correspondant": Correspondant, "adresse": Adresse, "domaine": Domaine, "identite": Identite, "compte": Compte, "boite": Boite, "rattachement": Rattachement, "read_state": ReadState, "marker": Marker, "marker_collective": MarkerCollective, "marker_personal": MarkerPersonal, "acces": Acces, "lecture_groupe": LectureGroupe, "application": Application, "axe": Axe, "famille": Famille, "tag": Tag, "comm_tag": CommTag, "dossier": Dossier, "filtre": Filtre, "envoi": Envoi, "envoi_destinataire": EnvoiDestinataire, "dmarc_rapport": DmarcRapport, "dmarc_ligne": DmarcLigne, "analyse": Analyse, "note": Note, "parametre": Parametre, "journal": Journal, "modele": Modele, "session": Session, "evenement": Evenement}

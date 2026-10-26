@@ -29,6 +29,21 @@ STAMP=$(date +%Y%m%d-%H%M%S)
 faire() { if [ "$APPLY" = 1 ]; then echo "   ✓ $*"; else echo "   (à faire) $*"; fi; }
 sauver() { [ -e "$1" ] && [ "$APPLY" = 1 ] && cp -a "$1" "$1.avant-rm3528-$STAMP" || true; }
 q() { mysql -N postfix -e "$1"; }
+# INSÉRER SANS CONNAÎTRE LE SCHÉMA : les colonnes données, plus toute colonne OBLIGATOIRE sans valeur
+# par défaut, remplie d'une valeur neutre selon son type (vide, 0, maintenant). Le schéma de la base
+# « postfix » varie d'une version de PostfixAdmin à l'autre — `domain.transport` l'a montré.
+inserer() {   # inserer TABLE "col1,col2" "val1,val2"   (valeurs déjà en SQL)
+  local t="$1" cols="$2" vals="$3" c ty
+  while read -r c ty; do
+    case ",$cols," in *",$c,"*) continue ;; esac
+    case "$ty" in
+      *int*|decimal|float|double|tinyint|bit) cols="$cols,$c"; vals="$vals,0" ;;
+      date|datetime|timestamp) cols="$cols,$c"; vals="$vals,now()" ;;
+      *) cols="$cols,$c"; vals="$vals,''" ;;
+    esac
+  done < <(q "select column_name, data_type from information_schema.columns where table_schema='postfix' and table_name='$t' and is_nullable='NO' and column_default is null and extra not like '%auto_increment%'")
+  q "insert into $t ($cols) values ($vals)"
+}
 
 echo "-- 0. secrets"
 if [ ! -f "$SECRETS" ]; then
@@ -55,13 +70,13 @@ fi
 echo "-- 2. boîtes locales (base postfix)"
 q "select domain from domain where domain='$DOMAINE'" | grep -q . && echo "   domaine $DOMAINE : présent" || {
   faire "déclarer le domaine $DOMAINE"
-  [ "$APPLY" = 1 ] && q "insert into domain (domain, description, backupmx, active, created, modified) values ('$DOMAINE', 'RM3528 — boîtes de dev d''AtomBox', 0, 1, now(), now())"; }
+  [ "$APPLY" = 1 ] && inserer domain "domain,description,backupmx,active,created,modified" "'$DOMAINE','RM3528 — boîtes de dev d''AtomBox',0,1,now(),now()"; }
 for b in $BOITES; do
   if q "select username from mailbox where username='$b'" | grep -q .; then echo "   $b : présente"; else
     faire "créer la boîte $b"
     if [ "$APPLY" = 1 ]; then
       h=$(printf '%s' "$BOX_PASS" | openssl passwd -6 -stdin)
-      q "insert into mailbox (username, password, name, maildir, quota, local_part, domain, active, created, modified) values ('$b', '$h', '$b', '$DOMAINE/${b%@*}/', 0, '${b%@*}', '$DOMAINE', 1, now(), now())"
+      inserer mailbox "username,password,name,maildir,quota,local_part,domain,active,created,modified" "'$b','$h','$b','$DOMAINE/${b%@*}/',0,'${b%@*}','$DOMAINE',1,now(),now()"
     fi
   fi
 done
