@@ -136,6 +136,32 @@ def create(s, nom: str, type_connecteur: str, boites=(), domaines=(), axes=(), p
     return app, jeton
 
 
+def declare_axes(s, nom: str) -> list[str]:
+    """Rattache à une application EXISTANTE les axes que son connecteur déclare depuis (l'axe `tiers`
+    de D189 est venu après les six de D187). Rend les axes ajoutés."""
+    from .connectors import declaration
+    app = s.scalar(select(Application).where(Application.nom == nom))
+    if app is None: raise ValueError("aucune application « %s »" % nom)
+    d = declaration(app.type_connecteur) or {}
+    fam = d.get("famille") or {}
+    famille = family(s, fam["nom"], fam.get("libelle")) if fam.get("nom") else None
+    ajout = [a for a in (d.get("axes") or {}) if a not in (app.axes or [])]
+    for nom_axe in ajout:
+        axe = s.scalar(select(Axe).where(Axe.nom == nom_axe))
+        if axe is None:
+            n = s.scalar(select(Axe).order_by(Axe.ordre.desc()).limit(1))
+            axe = Axe(axe_id=uuid7(), nom=nom_axe, application_id=app.application_id, acl={}, derive=False,
+                      ordre=((n.ordre or 0) + 1) if n else 1); s.add(axe); s.flush()
+        elif axe.application_id not in (None, app.application_id):
+            raise ValueError("l'axe « %s » appartient déjà à une autre application" % nom_axe)
+        axe.application_id = app.application_id
+        if famille is not None and axe.famille_id is None: axe.famille_id = famille.famille_id
+    app.axes = list(app.axes or []) + ajout
+    s.commit()
+    if ajout: log.info("application « %s » : axes ajoutés %s", nom, ajout)
+    return ajout
+
+
 def rescan(s, nom: str) -> int:
     """Applique la règle d'en-tête de l'application à l'HISTORIQUE de sa portée — ce qui est arrivé
     avant qu'elle soit déclarée, ou avant qu'elle donne ses hôtes. Idempotent."""
@@ -146,10 +172,13 @@ def rescan(s, nom: str) -> int:
     ids = mailbox_ids_sync(s, app)
     if not ids: return 0
     n = 0
-    rows = s.execute(select(Rattachement.comm_id, Rattachement.boite_id, CommEmail.message_id, CommEmail.in_reply_to, CommEmail.references)
+    rows = s.execute(select(Rattachement.comm_id, Rattachement.boite_id, CommEmail.message_id, CommEmail.in_reply_to, CommEmail.references, Rattachement.sens)
                      .join(CommEmail, CommEmail.comm_id == Rattachement.comm_id).where(Rattachement.boite_id.in_(ids))).all()
-    for comm_id, boite_id, mid, irt, refs in rows:
+    from .connectors import apply_address_rule
+    for comm_id, boite_id, mid, irt, refs, sens in rows:
         n += apply_header_rule(s, comm_id, boite_id, mid, irt, refs)
+        s.flush()   # le tag posé par la règle d'en-tête doit être vu avant la règle d'adresse
+        n += apply_address_rule(s, comm_id, boite_id, sens)
     s.commit()
     log.info("application « %s » : %d tag(s) posé(s) sur l'historique", nom, n)
     return n
@@ -172,7 +201,8 @@ def main(argv=None):
     c.add_argument("--domain", action="append", default=[], help="un domaine entier de la portée (répétable)")
     c.add_argument("--axis", action="append", default=[], help="un axe que l'application déclare (répétable) ; sans, tous ceux de son type")
     c.add_argument("--host", action="append", default=[], help="un hôte de ses Message-ID, pour la règle d'en-tête (répétable)")
-    rs = sub.add_parser("rescan", help="appliquer la règle d'en-tête à l'historique de la portée"); rs.add_argument("--name", required=True)
+    rs = sub.add_parser("rescan", help="appliquer les règles d'en-tête et d'adresse à l'historique de la portée"); rs.add_argument("--name", required=True)
+    ax = sub.add_parser("axes", help="ajouter les axes que le connecteur déclare depuis la création"); ax.add_argument("--name", required=True)
     r = sub.add_parser("revoke"); r.add_argument("--name", required=True)
     sub.add_parser("list")
     a = p.parse_args(argv)
@@ -187,6 +217,9 @@ def main(argv=None):
         # Le jeton sort sur la sortie standard, et nulle part ailleurs : il n'est pas journalisé.
         print(jeton)
         print("(montré une seule fois — à mettre dans la configuration du module)", file=sys.stderr)
+    elif a.cmd == "axes":
+        try: print("axes ajoutés : %s" % (", ".join(declare_axes(s, a.name)) or "aucun"))
+        except ValueError as e: print(str(e), file=sys.stderr); return 1
     elif a.cmd == "rescan":
         try: print("%d tag(s) posé(s)" % rescan(s, a.name))
         except ValueError as e: print(str(e), file=sys.stderr); return 1

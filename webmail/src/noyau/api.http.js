@@ -99,7 +99,7 @@
         : { m: normaliser(Object.assign({ id: x.message.id, sujet: x.message.sujet, from_nom: x.message.from_nom, date_recue: x.message.date_recue })),
             p: normaliser({ pieces_jointes: [x] }).pieces_jointes[0], i: x.ordre })),
     referentiels: () => req("GET", "/referentiels")
-        .then(r => r || { moi: { nom: "", boites: [] }, speciaux: [], util: [], axes: [], familles: [], valeurs: {}, statuts: [], vues: [] }),
+        .then(r => r || { moi: { nom: "", boites: [] }, speciaux: [], util: [], axes: [], familles: [], valeurs: {}, statuts: [], vues: [], applications: [] }),
 
     /* ---- la session ---------------------------------------------------------- */
     /* `req` rend null sur 404 — « hors portée = 404 » (D108). Cette convention vaut pour une

@@ -213,6 +213,28 @@
   });
 
   /* ---- tags : la seule partie du message que l'utilisateur écrit ---------- */
+  /* L'EXPÉDITEUR INCONNU DE L'ERP (D189 § 3) : un message REÇU qui ne porte aucun tag de l'axe que
+     l'application range par adresse (le tiers). Deux gestes, qui OUVRENT l'ERP pré-rempli — AtomBox
+     n'y écrit jamais : c'est l'utilisateur, chez lui, avec ses droits. Le tiers créé revient par la
+     synchronisation, et la règle d'adresse range ses messages. */
+  R.define("message.inconnu", ({ m }) => {
+    if ((m.sens || "in") !== "in" || !m.from_adresse) return "";
+    const adresse = m.from_adresse.trim().toLowerCase(), domaine = adresse.split("@")[1] || "";
+    const nom = (m.from_nom || "").trim() || adresse.split("@")[0];
+    const remplir = modele => modele.replace(/\{(nom|adresse|domaine)\}/g, (_, k) =>
+      encodeURIComponent({ nom, adresse, domaine }[k]));
+    return (ABX.Ref.applications || [])
+      .filter(app => app.axe_tiers && !(m.tags || []).some(t => t.axe === app.axe_tiers))
+      .map(app => `<div class="lien inconnu" style="margin:12px 16px">👤 <b>${F.esc(adresse)}</b> est inconnu de
+          ${F.esc(app.libelle)}.
+          ${app.creation.tiers ? `<a class="hbtn" target="_blank" rel="noopener" data-creer="tiers"
+             href="${F.esc(remplir(app.creation.tiers))}">Créer le tiers</a>` : ""}
+          ${app.creation.contact ? `<a class="hbtn" target="_blank" rel="noopener" data-creer="contact"
+             href="${F.esc(remplir(app.creation.contact))}">Ajouter comme contact</a>` : ""}
+          <div class="hint">La fiche s'ouvre dans ${F.esc(app.libelle)}, pré-remplie. Une fois enregistrée, la
+            synchronisation range ses messages ici.</div></div>`).join("");
+  });
+
   /* la liste des axes, rangée par famille (D188) : un <optgroup> par famille, les autres ensuite */
   const optionsAxes = ids => {
     const fam = id => ((ABX.Ref.axes || []).find(x => x.id === id) || {}).famille || null;

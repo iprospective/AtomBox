@@ -1,18 +1,52 @@
 {
   "type": "dolibarr",
   "libelle": "Dolibarr",
-  "famille": {"nom": "dolibarr", "libelle": "Dolibarr"},
+  "famille": {
+    "nom": "dolibarr",
+    "libelle": "Dolibarr"
+  },
   "_note": "D187. Le code d'objet est celui que Dolibarr écrit dans le trackid de ses Message-ID (CMailFile : '<temps>.<mode>-dolibarr-<trackid>@<dol_getprefix('email')>'). Ajouter un objet = ajouter une ligne ici.",
   "axes": {
-    "propal":               {"libelle": "Propositions commerciales", "code": "pro"},
-    "commande":             {"libelle": "Commandes clients",         "code": "ord"},
-    "facture":              {"libelle": "Factures clients",          "code": "inv"},
-    "projet":               {"libelle": "Projets",                   "code": "proj"},
-    "commande_fournisseur": {"libelle": "Commandes fournisseurs",    "code": "sord"},
-    "facture_fournisseur":  {"libelle": "Factures fournisseurs",     "code": "sinv"}
+    "tiers": {
+      "libelle": "Tiers",
+      "code": "thi"
+    },
+    "propal": {
+      "libelle": "Propositions commerciales",
+      "code": "pro"
+    },
+    "commande": {
+      "libelle": "Commandes clients",
+      "code": "ord"
+    },
+    "facture": {
+      "libelle": "Factures clients",
+      "code": "inv"
+    },
+    "projet": {
+      "libelle": "Projets",
+      "code": "proj"
+    },
+    "commande_fournisseur": {
+      "libelle": "Commandes fournisseurs",
+      "code": "sord"
+    },
+    "facture_fournisseur": {
+      "libelle": "Factures fournisseurs",
+      "code": "sinv"
+    }
   },
   "regle_entete": {
     "motif": "dolibarr-(?P<code>[a-z]+)(?P<id>[0-9]+)@(?P<hote>[^>\\s]+)",
     "parametre_hotes": "hotes"
+  },
+  "regle_adresse": {
+    "axe": "tiers",
+    "_note": "D189 : les valeurs de l'axe portent leurs adresses (celle du tiers, celles de ses contacts) ; un message reçu d'une de ces adresses, ou envoyé vers l'une d'elles, reçoit le tag."
+  },
+  "creation": {
+    "_note": "D189 § 3 : pour un expéditeur inconnu, Dolibarr s'ouvre pré-rempli — AtomBox n'y écrit jamais. {nom}, {adresse}, {domaine} sont encodés pour l'URL.",
+    "tiers": "/societe/card.php?action=create&name={nom}&email={adresse}&url={domaine}",
+    "contact": "/contact/card.php?action=create&lastname={nom}&email={adresse}"
   }
 }

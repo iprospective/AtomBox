@@ -151,7 +151,29 @@ async def references(s: AsyncSession, compte: Compte) -> dict:
     return { "moi": {"nom": compte.nom, "login": compte.login, "boites": [{"id": str(b.boite_id), "adresse": adresses[b.boite_id], "label": adresses[b.boite_id].split("@")[0]} for b in boites]},
              "speciaux": [{"id": x["id"], "label": x["label"], "icon": x["icon"], **({"vue": True} if x.get("vue") else {}), **({"sortant": True} if x.get("sortant") else {})} for x in SPECIAL],
              "util": util, **(await _axes_and_values(s)), "statuts": STATUSES, "vues": VIEWS,
-             "virtuels": [{"id": "perso:" + str(f.filtre_id), "label": f.nom, "criteres": (f.predicat or {}).get("criteres", [])} for f in virtuels] }
+             "virtuels": [{"id": "perso:" + str(f.filtre_id), "label": f.nom, "criteres": (f.predicat or {}).get("criteres", [])} for f in virtuels],
+             "applications": await _applications_for(s, [b.boite_id for b in boites]) }
+
+async def _applications_for(s: AsyncSession, boites: list) -> list[dict]:
+    """CE QUE LE WEBMAIL DOIT SAVOIR DES APPLICATIONS (D189 § 3) : laquelle range les tiers (son axe
+    de règle d'adresse), et où créer un inconnu — les modèles du connecteur, préfixés par l'adresse
+    que le module a déclarée. Seulement les applications dont la portée touche les boîtes du compte,
+    et seulement si l'adresse est connue : pas de lien cassé."""
+    from ..schema.models import Application
+    from ..applications import mailboxes
+    from ..connectors import declaration
+    out = []
+    for app in await s.scalars(select(Application).where(Application.actif.is_(True))):
+        d = declaration(app.type_connecteur) or {}
+        url = ((app.parametres or {}).get("url") or "").rstrip("/")
+        axe = (d.get("regle_adresse") or {}).get("axe")
+        if not axe or not url: continue
+        if not {b.boite_id for b in await mailboxes(s, app)} & set(boites): continue
+        out.append({"nom": app.nom, "type": app.type_connecteur, "libelle": d.get("libelle") or app.type_connecteur,
+                    "axe_tiers": axe, "url": url,
+                    "creation": {k: url + v for k, v in (d.get("creation") or {}).items() if not k.startswith("_")}})
+    return out
+
 
 def _tag_condition(axe: str, val: str | None):
     """Un dossier virtuel sur un TAG — sa raison d'être (D143). `val` absente = toute la FAMILLE :

@@ -9,6 +9,7 @@ une session n'est pas une application, et ces ressources n'existent pas pour ell
 
 Le module pousse ; AtomBox n'appelle jamais l'application (chapitre 07)."""
 from __future__ import annotations
+import re
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,6 +56,12 @@ class ApplicationController(Controller):
             if not isinstance(hotes, list) or not all(isinstance(h, str) and h.strip() and "@" not in h for h in hotes):
                 raise HTTPException(422, "hotes : une liste de noms d'hôte")
             p["hotes"] = sorted({h.strip().lower() for h in hotes})
+        if "url" in corps:
+            # l'adresse de l'ERP, pour les liens vers ses fiches et ses pages de création (D189 § 3, F149)
+            url = str(corps["url"] or "").strip().rstrip("/")
+            if url and not re.match(r"^https?://[^\s/?#]+(/[^\s?#]*)?$", url):
+                raise HTTPException(422, "url : une adresse http(s), sans paramètres")
+            p["url"] = url
         app.parametres = p
         await s.commit()
         log.info("application « %s » : paramètres %s", app.nom, p)
@@ -78,6 +85,10 @@ class ApplicationController(Controller):
             valeur = str((v or {}).get("valeur") or "").strip()
             if not valeur: raise HTTPException(422, "une valeur sans clé")
             libelle = str(v.get("libelle") or valeur).strip()
+            # les ADRESSES d'une valeur (D189) : la règle d'adresse les lit ; rangées dans ref_externe
+            if "adresses" in v:
+                ad = sorted({str(x).strip().lower() for x in (v.get("adresses") or []) if "@" in str(x)})
+                v["ref_externe"] = dict(v.get("ref_externe") or {}, adresses=ad)
             t = existants.get(valeur)
             if t is None:
                 t = Tag(tag_id=uuid7(), axe_id=a.axe_id, valeur=valeur, libelle=libelle,

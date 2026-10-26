@@ -54,6 +54,7 @@
         ${ABX.Views.Message.repondHtml(m)}
         ${ABX.Views.Message.spoofHtml(m)}
         ${ABX.Views.Message.lienHtml(m)}
+        ${R.render("message.inconnu", { m })}
         ${R.render("message.tags", { m })}
         ${R.render("erp.panel", { m })}
         ${R.render("attachment.list", { m })}

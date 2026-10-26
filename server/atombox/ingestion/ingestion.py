@@ -158,8 +158,11 @@ def ingest(s: Session, store: Store, boite_id, raw_bytes: bytes, *, uid=None, ui
         r.uid_imap = uid
     # LES RÈGLES D'EN-TÊTE DES CONNECTEURS (D187 § 3) : la réponse d'un tiers à un envoi Dolibarr
     # arrive étiquetée sur l'objet, sans geste humain. Dans la même transaction que la place.
-    from ..connectors import apply_header_rule
+    from ..connectors import apply_header_rule, apply_address_rule
     apply_header_rule(s, comm_id, boite_id, a.message_id, a.in_reply_to, a.references)
+    # …et la règle d'adresse (D189) : le message d'un tiers ou de ses contacts se range sur le tiers
+    s.flush()
+    apply_address_rule(s, comm_id, boite_id, sens)
     s.commit()
     if fresh: log.info("nouveau %s : %s, de %s, %d octets, %d pièce(s), nature %s", comm_id, a.sujet or "(sans sujet)", a.from_adresse, a.taille, len(a.pieces), a.nature)
     hooks.emit("message.ingere", comm_id=comm_id, fresh=fresh, analyse=a, boite_id=boite_id, tags=ctx.get("tags", []))
