@@ -96,7 +96,9 @@ unites_perimees() {
                | sed -n 's#^server/tools/\(atombox-[a-z]*\)\.service$#\1#p'); do
     [ "$u" = atombox-tunnel ] && continue          # posée à part, avec sa clé (RM3267)
     rendu="$UNITES_EN_ATTENTE/$u.service"
-    git -C "$CIBLE" show "origin/$BRANCHE:server/tools/$u.service" | sed "s#__SERVER__#$SRV#g" > "$rendu"
+    # LE MÊME RENDU que celui qui pose les unités (render-unit.sh), pris dans la version à servir
+    git -C "$CIBLE" show "origin/$BRANCHE:server/tools/$u.service" \
+      | bash <(git -C "$CIBLE" show "origin/$BRANCHE:server/tools/render-unit.sh" 2>/dev/null || echo 'sed "s#__SERVER__#$1#g"') "$SRV" > "$rendu"
     installe="/etc/systemd/system/$u.service"
     # on compare ce qui S'EXÉCUTE, pas les commentaires : une phrase reformulée ne vaut pas une réinstallation
     if [ ! -f "$installe" ] || ! diff -q <(grep -v '^#' "$rendu") <(grep -v '^#' "$installe") >/dev/null; then
@@ -288,8 +290,8 @@ if [ ! -f /etc/systemd/system/atombox-imapd.service ]; then
   bash "$SRV/tools/imapd.sh" start | sed 's/^/    /'
   info "⚠ le serveur IMAP n'a pas d'unité systemd : il vient d'être lancé par imapd.sh, donc il ne"
   info "  repartira pas tout seul au prochain démarrage de la machine. Pour l'installer :"
-  info "     sudo sed \"s#__SERVER__#$SRV#g\" $SRV/tools/atombox-imapd.service \\"
-  info "       > /etc/systemd/system/atombox-imapd.service"
+  info "     $SRV/tools/render-unit.sh $SRV < $SRV/tools/atombox-imapd.service | sudo tee \\"
+  info "       /etc/systemd/system/atombox-imapd.service >/dev/null"
   info "     sudo systemctl daemon-reload && sudo systemctl enable --now atombox-imapd"
 fi
 

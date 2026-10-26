@@ -1,15 +1,15 @@
-# managed-by: server/tools/deploy-apache.sh (AtomBox) — __SERVER__ est remplacé au déploiement
+# managed-by: server/tools/deploy-apache.sh (AtomBox) — __SERVER__, __USER__ et __VENV__ sont remplacés au déploiement (render-unit.sh)
 [Unit]
 Description=AtomBox — les événements, envois et tâches cadencées
 After=network.target postgresql.service
 Wants=postgresql.service
 
 [Service]
-User=mathieu
-Group=mathieu
+User=__USER__
+Group=__USER__
 WorkingDirectory=__SERVER__
 EnvironmentFile=/etc/atombox/env
-ExecStart=__SERVER__/.venv/bin/python -m atombox.tasks
+ExecStart=__VENV__/bin/python -m atombox.tasks
 Restart=on-failure
 RestartSec=3
 
