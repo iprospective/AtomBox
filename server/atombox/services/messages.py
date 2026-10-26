@@ -354,6 +354,12 @@ async def _virtual_counters(s: AsyncSession, boites, ds: dict, compte, virtuels:
 
 def _folder_condition(dossier: str, kind: str | None, ds: dict, compte):
     """la condition SQL d'un dossier du webmail"""
+    # `tous` : aucun dossier — tout le courrier de la portée, pour qui cherche par autre chose (les
+    # échanges d'un tiers, par ses adresses — D108). La corbeille et les indésirables restent dehors
+    # par le filtre de la liste, comme partout.
+    if dossier == "tous":
+        from sqlalchemy import true
+        return true()
     par_court = {}
     for d in ds.values(): par_court.setdefault(short_folder_id(d), []).append(d.dossier_id)
     # LES CINQ BOÎTES AUX LETTRES SONT DES VALEURS D'UNE COLONNE (D051 réalisée par D175 § 4) :
@@ -376,7 +382,17 @@ def _folder_condition(dossier: str, kind: str | None, ds: dict, compte):
 
 SORTS = { "date_desc": Comm.date_recue.desc(), "date_asc": Comm.date_recue.asc(), "from_nom": Comm.from_nom.asc(), "subj": Comm.sujet.asc(), "taille": Comm.taille.desc() }
 
-async def listing(s: AsyncSession, compte: Compte, dossier: str, kind: str | None, filtre: str | None, tri: str | None, sens: str | None, statut: str | None, tout: bool = False, wanted: str | None = None) -> list[dict]:
+def _addresses_condition(adresses: str):
+    """LES ÉCHANGES AVEC CES ADRESSES (D108) : l'expéditeur, ou un participant (à, copie). C'est ce
+    que montre l'onglet « Échanges » d'une fiche tiers dans l'ERP — dans les deux sens."""
+    liste = [a.strip().lower() for a in (adresses or "").split(",") if "@" in a]
+    if not liste: return Comm.comm_id.is_(None)          # une liste vide ne montre rien, jamais tout
+    par_participant = (select(Participant.comm_id).join(Adresse, Adresse.adresse_id == Participant.adresse_id)
+                       .where(Participant.comm_id == Comm.comm_id, Adresse.adresse_complete.in_(liste)).exists())
+    return or_(func.lower(Comm.from_adresse).in_(liste), par_participant)
+
+
+async def listing(s: AsyncSession, compte: Compte, dossier: str, kind: str | None, filtre: str | None, tri: str | None, sens: str | None, statut: str | None, tout: bool = False, wanted: str | None = None, adresses: str | None = None) -> list[dict]:
     boites = chosen([b.boite_id for b in await account_mailboxes(s, compte)], wanted)
     if not boites: return []
     ds = await _folders_by_id(s, boites)
@@ -393,6 +409,7 @@ async def listing(s: AsyncSession, compte: Compte, dossier: str, kind: str | Non
         q = q.where(Rattachement.dossier_id.notin_([d.dossier_id for d in ds.values() if short_folder_id(d) == "trash"]))
     else:
         q = q.where(_folder_condition(dossier, kind, ds, compte))
+    if adresses is not None: q = q.where(_addresses_condition(adresses))
     est_vue = dossier in VIEWS
     if not tout:
         if sens in ("in", "out"): q = q.where(Rattachement.sens == sens)      # le rôle de la PLACE (D185)
