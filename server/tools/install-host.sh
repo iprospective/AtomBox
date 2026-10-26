@@ -135,5 +135,10 @@ fi
 # 9. mesuré, pas supposé
 sleep 2
 for s in api ingestion tasks imapd; do printf '   atombox-%-10s %s\n' "$s" "$(systemctl is-active atombox-$s || true)"; done
-code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/api/v1/referentiels" || true)
+# l'API met quelques secondes à démarrer (3 s sur mmi) : on attend qu'elle réponde, 30 s au plus,
+# plutôt que de conclure à une panne sur une mesure prise trop tôt (le même défaut que RM3506)
+for i in $(seq 1 30); do
+  code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/api/v1/referentiels" || true)
+  [ "$code" = 401 ] && break; sleep 1
+done
 [ "$code" = 401 ] && log "API vivante (401 sans jeton, comme attendu)" || { echo "API : réponse $code — journalctl -u atombox-api -n 30"; exit 1; }
