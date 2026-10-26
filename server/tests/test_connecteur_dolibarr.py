@@ -151,3 +151,39 @@ def test_les_hotes_se_declarent_et_l_historique_se_rattrape(api, monde):
     assert applications.rescan(s, "dolibarr-demo") >= 1
     assert tags(monde, cid) == {("propal", "200")}
     assert applications.rescan(s, "dolibarr-demo") == 0, "idempotent"
+
+
+def test_le_webmail_recoit_libelles_et_cles(api, monde):
+    """RM3519 — la navigation et la complétion lisent le LIBELLÉ, et posent la CLÉ"""
+    c, humain, appli = api
+    ref = c.get("/api/v1/referentiels", headers=humain).json()
+    assert {"id": "propal", "label": "Propositions commerciales", "derive": False, "famille": "dolibarr"} in ref["axes"]
+    v = [x for x in ref["valeurs"]["propal"] if x["val"] == "123"]
+    assert v == [{"id": "propal:123", "label": "PR2610-0012 — Tiers SA", "val": "123", "axe": "propal"}], v
+    # un axe posé à la main, sans application, garde un nom lisible
+    cid = c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=humain).json()["messages"][0]["id"]
+    c.post("/api/v1/messages/%s/tags" % cid, json={"axe": "dossier_client", "val": "x"}, headers=humain)
+    assert {"id": "dossier_client", "label": "Dossier client", "derive": False, "famille": None} in c.get("/api/v1/referentiels", headers=humain).json()["axes"]
+
+
+
+def test_la_famille_range_les_axes(api, monde):
+    """D188 — une famille, plusieurs axes ; un axe dans une famille au plus ; configurable par axe"""
+    c, humain, appli = api
+    ref = c.get("/api/v1/referentiels", headers=humain).json()
+    assert {"id": "dolibarr", "label": "Dolibarr"} in ref["familles"]
+    dolibarr = sorted(a["id"] for a in ref["axes"] if a["famille"] == "dolibarr")
+    assert dolibarr == ["commande", "commande_fournisseur", "facture", "facture_fournisseur", "projet", "propal"], \
+        "le connecteur range ses six axes dans sa famille"
+    # ranger à la main un axe sans famille, avec un libellé ; puis l'en sortir
+    r = c.patch("/api/v1/axes/dossier_client", json={"famille": "interne", "famille_libelle": "Suivi interne"}, headers=humain)
+    assert r.json() == {"ok": True, "axe": "dossier_client", "famille": "interne"}
+    ref = c.get("/api/v1/referentiels", headers=humain).json()
+    assert {"id": "interne", "label": "Suivi interne"} in ref["familles"]
+    assert [a["famille"] for a in ref["axes"] if a["id"] == "dossier_client"] == ["interne"]
+    c.patch("/api/v1/axes/dossier_client", json={"famille": None}, headers=humain)
+    assert [a["famille"] for a in c.get("/api/v1/referentiels", headers=humain).json()["axes"] if a["id"] == "dossier_client"] == [None]
+    # contre-épreuves : axe inconnu, corps sans famille, et une application ne range pas
+    assert c.patch("/api/v1/axes/inconnu", json={"famille": "x"}, headers=humain).status_code == 404
+    assert c.patch("/api/v1/axes/propal", json={}, headers=humain).status_code == 422
+    assert c.patch("/api/v1/axes/propal", json={"famille": "x"}, headers=appli).status_code == 401

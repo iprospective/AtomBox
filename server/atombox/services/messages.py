@@ -96,14 +96,28 @@ async def _axes_and_values(s: AsyncSession) -> dict:
 
     Une seule requête pour les deux : un axe sans valeur existe (on vient de le créer), une valeur
     sans axe n'existe pas."""
-    from ..schema.models import Axe, Tag
+    from ..schema.models import Application, Axe, Tag
+    from ..connectors import declaration
     axes = list(await s.scalars(select(Axe).order_by(Axe.ordre, Axe.nom)))
-    lines = (await s.execute(select(Axe.nom, Tag.valeur).join(Tag, Tag.axe_id == Axe.axe_id)
-                              .where(Tag.actif.is_(True)).order_by(Axe.nom, Tag.valeur))).all()
+    # LE LIBELLÉ, pas la clé (D187) : « PR2610-0012 — client » se lit, « 123 » non. La clé reste
+    # dans `val` — c'est elle qu'on pose ; poser le libellé créerait une seconde valeur fantôme.
+    lines = (await s.execute(select(Axe.nom, Tag.valeur, Tag.libelle).join(Tag, Tag.axe_id == Axe.axe_id)
+                              .where(Tag.actif.is_(True)).order_by(Axe.nom, Tag.libelle))).all()
     values: dict = {a.nom: [] for a in axes}
-    for nom, val in lines:
-        values.setdefault(nom, []).append({"id": "%s:%s" % (nom, val), "label": val, "axe": nom})
-    return {"axes": [{"id": a.nom, "label": a.nom.capitalize(), "derive": a.derive} for a in axes],
+    for nom, val, libelle in lines:
+        values.setdefault(nom, []).append({"id": "%s:%s" % (nom, val), "label": libelle or val, "val": val, "axe": nom})
+    # le nom d'un axe déclaré vient de son connecteur : « Propositions commerciales », pas « Propal »
+    types = {i: t for i, t in
+             (await s.execute(select(Application.application_id, Application.type_connecteur))).all()} if axes else {}
+    def label(a):
+        d = declaration(types.get(a.application_id)) if a.application_id else None
+        return ((d or {}).get("axes") or {}).get(a.nom, {}).get("libelle") or a.nom.replace("_", " ").capitalize()
+    # LA FAMILLE (D188) : elle range les axes dans la navigation et nomme les tags au survol
+    from ..schema.models import Famille
+    familles = list(await s.scalars(select(Famille).order_by(Famille.ordre, Famille.nom))) if axes else []
+    nom_famille = {f.famille_id: f.nom for f in familles}
+    return {"axes": [{"id": a.nom, "label": label(a), "derive": a.derive, "famille": nom_famille.get(a.famille_id)} for a in axes],
+            "familles": [{"id": f.nom, "label": f.libelle} for f in familles],
             "valeurs": values}
 
 

@@ -38,7 +38,11 @@ function serveur(vus) {
     }, filtres: [], virtuels: [],
     /* le référentiel des valeurs d'axe VIT côté serveur : poser un tag dont la valeur n'existe
        pas encore l'y ajoute — c'est ce que fait le vrai, et c'est ce que le client doit relire. */
-    valeurs: { client: [{ id: "client:Acme", label: "Acme", axe: "client" }] } };
+    valeurs: { client: [{ id: "client:Acme", label: "Acme", axe: "client" }], commande: [],
+               /* un axe d'APPLICATION (D187) : la clé (`val`) n'est pas ce qu'on lit (`label`) */
+               propal: [{ id: "propal:123", label: "PR2610-0012 — Tiers SA", val: "123", axe: "propal" }] } };
+  /* DEUX boîtes (F147) : le filtre en amont n'existe qu'à partir de deux */
+  const BOITES = [{ id: "b1", adresse: "moi@exemple.fr", label: "moi" }, { id: "b2", adresse: "test@exemple.fr", label: "test" }];
   return [etat, (url, init) => {
     const m = (init && init.method) || "GET";
     const chemin = url.replace("/api/v1", "");
@@ -47,16 +51,23 @@ function serveur(vus) {
     vus.push(m + " " + nu);
 
     if (nu === "/referentiels") return rep({
-      moi: { nom: "Moi", login: "moi", boites: [{ id: "b1", adresse: "moi@exemple.fr", label: "moi" }] },
+      moi: { nom: "Moi", login: "moi", boites: BOITES },
       speciaux: [{ id: "inbox", label: "Boîte de réception", icon: "📥" },
                  { id: "sent", label: "Envoyés", icon: "📤", sortant: true },
                  { id: "trash", label: "Corbeille", icon: "🗑", vue: true }],
       util: [{ id: "d1", label: "Clients", icon: "📁", boite: "moi@exemple.fr" }],
-      axes: [{ id: "client", label: "Client" }], valeurs: etat.valeurs,
-      statuts: [{ id: "nouveau", label: "Nouveau" }, { id: "a_faire", label: "À faire" }, { id: "traite", label: "Traité", sortie: "traite" }],
+      axes: [{ id: "client", label: "Client", famille: null }, { id: "propal", label: "Propositions commerciales", famille: "dolibarr" },
+             { id: "commande", label: "Commandes clients", famille: "dolibarr" }],
+      familles: [{ id: "dolibarr", label: "Dolibarr" }], valeurs: etat.valeurs,
+      statuts: [{ id: "new", label: "Nouveau" }, { id: "todo", label: "À faire" }, { id: "processed", label: "Traité" }],
       vues: ["trash", "archives", "traites"], virtuels: etat.virtuels });
-    if (nu === "/arborescence") return rep({ compteurs: { inbox: { t: 2, u: 1, f: 0 } }, virtuels: etat.virtuels, epingles: [] });
-    if (nu === "/messages" && m === "GET") return rep({ messages: Object.values(etat.messages), total: 2 });
+    /* le filtre en amont, comme le vrai : `boites=` restreint la liste ET les compteurs (D166) */
+    const cochees = (new URLSearchParams(chemin.split("?")[1] || "").get("boites") || "").split(",").filter(Boolean);
+    const garde = x => !cochees.length || BOITES.some(b => cochees.includes(b.id) && b.adresse === x.boite);
+    etat.dernieresBoites = cochees;
+    if (nu === "/arborescence") return rep({ compteurs: { inbox: { t: Object.values(etat.messages).filter(garde).length, u: 1, f: 0 } },
+      boites: { b1: { t: 3, n: 2, u: 1 }, b2: { t: 1, n: 1, u: 1 } }, virtuels: etat.virtuels, epingles: [] });
+    if (nu === "/messages" && m === "GET") { const l = Object.values(etat.messages).filter(garde); return rep({ messages: l, total: l.length }); }
     if (nu === "/messages" && m === "POST") { const id = "u" + (Object.keys(etat.messages).length + 1);
       /* comme le vrai (D167) : le corps stocké est le COMMENTAIRE seul, la provenance est une
          relation, et le message transféré compte pour une pièce — il part encapsulé (D066). */
@@ -159,11 +170,11 @@ function serveur(vus) {
   const det = () => doc.getElementById("detail").innerHTML;
   vrai(det().length > 100, "le message se peint");
   await A.MessageService.traiter(A.Api.cache.message("m1"));
-  eq(A.Api.cache.message("m1").motif_sortie, "traite", "« traiter » sort le message de la file");
+  eq(A.Api.cache.message("m1").motif_sortie, "processed", "« traiter » sort le message de la file (le code du contrat, D181)");
   await A.MessageService.refile(A.Api.cache.message("m1"));
   eq(A.Api.cache.message("m1").motif_sortie, null, "« remettre en file » l'y ramène");
   await A.MessageService.archiver(A.Api.cache.message("m1"));
-  eq(A.Api.cache.message("m1").motif_sortie, "archive", "« archiver » sort sans traiter");
+  eq(A.Api.cache.message("m1").motif_sortie, "archived", "« archiver » sort sans traiter");
   await A.MessageService.refile(A.Api.cache.message("m1"));
   await A.MessageService.junk(A.Api.cache.message("m2"));
   eq(A.Api.cache.message("m2").dossier, "junk", "« indésirable » déplace");
@@ -381,6 +392,56 @@ function serveur(vus) {
   App.ouvrirNav(); vrai(doc.getElementById("main").classList.contains("navopen"), "le tiroir s'ouvre");
   App.fermerNav(); App.setVue("liste"); App.setQ(false);
   vrai(!App.qOuvert(), "le journal des requêtes reste fermé en produit");
+
+  console.log("— la boîte de chaque message : pastille et filtre en amont (F147) ————");
+  A.Controllers.List.ouvrir({ id: "inbox", label: "Boîte de réception", kind: "special" });
+  await drainer(e);
+  etat.messages.m2.boite = "test@exemple.fr";
+  A.Controllers.List.charger(); await drainer(e);
+  vrai(doc.getElementById("list").innerHTML.includes('class="bx bx1"'), "la ligne de test@ porte la pastille de sa boîte");
+  const navBx = () => doc.getElementById("nav");
+  eq(navBx().querySelectorAll("input[data-boite]").length, 2, "une case par boîte en tête de la navigation");
+  const caseTest = navBx().querySelectorAll("input[data-boite]")[1];
+  caseTest.checked = false; caseTest.onchange(evt(caseTest)); await drainer(e);
+  eq(JSON.stringify(etat.dernieresBoites), JSON.stringify(["b1"]), "décocher test@ : la requête ne demande plus que moi@");
+  eq(JSON.stringify(A.Ref.boitesChoisies()), JSON.stringify(["b1"]), "et la sélection est retenue");
+  vrai(!A.Controllers.List.messages().some(x => x.boite === "test@exemple.fr"), "la liste n'a plus de message de test@");
+  vrai(navBx().innerHTML.includes('id="bx_toutes"'), "le bouton « toutes » apparaît");
+  geste("nav", "#bx_toutes"); await drainer(e);
+  eq(A.Ref.boitesChoisies(), null, "« toutes » revient au flux fusionné");
+  vrai(A.Controllers.List.messages().some(x => x.boite === "test@exemple.fr"), "et les messages de test@ reviennent");
+
+  console.log("— rattacher à un objet de l'application : on lit le libellé, on pose la clé (D187) ————");
+  etat.messages.m1.tags = [];
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m1" }, false); await drainer(e);
+  const detTag = doc.getElementById("detail");
+  vrai(detTag.innerHTML.includes("Propositions commerciales"), "l'axe se lit par son libellé dans la liste des axes");
+  detTag.querySelector("#t_axe").value = "propal";
+  detTag.querySelector("#t_val").value = "PR2610-0012 — Tiers SA";
+  detTag.querySelector("#t_add").onclick(); await drainer(e);
+  eq(JSON.stringify(etat.messages.m1.tags.map(x => [x.axe, x.val])), JSON.stringify([["propal", "123"]]),
+     "le tag posé est propal=123 — la clé, pas le libellé choisi");
+  A.Controllers.List.charger(); await drainer(e);
+  vrai(doc.getElementById("list").innerHTML.includes("PR2610-0012 — Tiers SA"), "et la puce de la liste montre le libellé");
+  vrai(doc.getElementById("list").innerHTML.includes("Dolibarr › Propositions commerciales"), "la famille nomme l'axe au survol (D188)");
+
+  console.log("— la famille range les axes (D188) ————————————————————");
+  A.Controllers.Nav.peindre();
+  const navF = doc.getElementById("nav").innerHTML;
+  vrai(navF.includes('class="grp fam">Dolibarr<'), "les axes de Dolibarr sont sous leur famille");
+  vrai(navF.indexOf(">Dolibarr<") < navF.indexOf("Autres axes") && navF.indexOf("Autres axes") < navF.indexOf(">Client<"),
+       "les axes hors famille viennent ensuite, sous « Autres axes »");
+  vrai(doc.getElementById("detail").innerHTML.includes('<optgroup label="Dolibarr">'), "la liste des axes du formulaire est rangée par famille");
+  /* ▲▼ (D135) partaient des fixtures du POC, absentes en produit : le premier clic plantait */
+  const ordreAvant = A.Views.Nav.axesOrdonnes(ui).map(a => a.id).join(",");
+  const boutonsAxes = doc.getElementById("nav").querySelectorAll(".axop");
+  const descendre = boutonsAxes.find(b => b.dataset.mv === "down" && b.dataset.axe === "propal");
+  vrai(!!descendre, "propal a un bouton « descendre »");
+  descendre.onclick(evt(descendre)); await drainer(e);
+  eq(A.Views.Nav.axesOrdonnes(ui).map(a => a.id).join(","), "commande,propal,client",
+     "descendre propal l'échange avec commande, son voisin dans la famille (avant : " + ordreAvant + ")");
+  const commandeBas = doc.getElementById("nav").querySelectorAll(".axop").find(b => b.dataset.mv === "down" && b.dataset.axe === "propal");
+  vrai(commandeBas && "disabled" in commandeBas._attrs, "et propal, dernier de sa famille, ne descend pas chez « Autres axes »");
 
   bilan();
 })().catch(e => { console.error("  ✗ échec des parcours :", e.stack.split("\n").slice(0, 3).join(" | ")); process.exit(1); });

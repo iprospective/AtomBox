@@ -53,14 +53,16 @@
          monter un axe l'ouvrirait aussi. */
       D.on(el, ".axop", "onclick", (n, e) => {
         if (e && e.stopPropagation) e.stopPropagation();
-        const Fx = ABX.Fixtures;
         if (n.dataset.tri) {
           ui.triAxe[n.dataset.tri] = ui.triAxe[n.dataset.tri] === "alpha" ? "recent" : "alpha";
         } else {
-          const ordre = ui.ordreAxes || Fx.AXES.map(a => a.id);
-          const i = ordre.indexOf(n.dataset.axe);
+          /* L'ordre AFFICHÉ, celui du référentiel servi : il partait des fixtures du POC, absentes
+             en produit — le premier ▲ plantait. Et un échange ne franchit pas une famille (D188). */
+          const vus = ABX.Views.Nav.axesOrdonnes(ui);
+          const i = vus.findIndex(a => a.id === n.dataset.axe);
           const j = n.dataset.mv === "up" ? i - 1 : i + 1;
-          if (i < 0 || j < 0 || j >= ordre.length) return;
+          if (i < 0 || j < 0 || j >= vus.length || vus[i].famille !== vus[j].famille) return;
+          const ordre = vus.map(a => a.id);
           ordre[i] = ordre[j]; ordre[j] = n.dataset.axe;
           ui.ordreAxes = ordre;
         }

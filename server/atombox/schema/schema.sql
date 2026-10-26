@@ -1,6 +1,6 @@
 -- SCHÉMA ATOMBOX — engendré par tools/gen-schema.py depuis le dictionnaire des données.
 -- NE PAS ÉDITER : la source est .mmi-pm/docs/dict/*.yml (F114, D154). PostgreSQL ≥ 14 (D027).
--- 40 tables, 88 clés étrangères, 74 index, 9 unicités. Identifiants : uuid v7 engendrés par
+-- 41 tables, 89 clés étrangères, 75 index, 10 unicités. Identifiants : uuid v7 engendrés par
 -- l'application (D145). Le tronc comm n'est PAS partitionné en V0 : la partition par canal (D138)
 -- se pose quand un second canal existe — l'uuid rend la clé indépendante de la partition.
 
@@ -387,10 +387,20 @@ CREATE TABLE "axe" (
   "axe_id" uuid NOT NULL,
   "nom" text NOT NULL,
   "application_id" uuid,
+  "famille_id" uuid,
   "acl" jsonb NOT NULL,
   "derive" boolean NOT NULL,
   "ordre" bigint,
   CONSTRAINT "pk_axe" PRIMARY KEY ("axe_id")
+);
+
+-- famille — Le niveau AU-DESSUS de l'axe : une famille regroupe plusieurs axes (Dolibarr → propositions, commandes, factur
+CREATE TABLE "famille" (
+  "famille_id" uuid NOT NULL,
+  "nom" text NOT NULL,
+  "libelle" text NOT NULL,
+  "ordre" bigint,
+  CONSTRAINT "pk_famille" PRIMARY KEY ("famille_id")
 );
 
 -- tag — Une valeur d'un axe : une CLÉ stable (l'identifiant chez l'application — 1042, RM2881 — ou le List-Id) et un L
@@ -670,6 +680,7 @@ ALTER TABLE "lecture_groupe" ADD CONSTRAINT "fk_lecture_groupe_compte_id" FOREIG
 ALTER TABLE "lecture_groupe" ADD CONSTRAINT "fk_lecture_groupe_boite_id" FOREIGN KEY ("boite_id") REFERENCES "boite" ("boite_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "lecture_groupe" ADD CONSTRAINT "fk_lecture_groupe_dernier_message_lu" FOREIGN KEY ("dernier_message_lu") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "axe" ADD CONSTRAINT "fk_axe_application_id" FOREIGN KEY ("application_id") REFERENCES "application" ("application_id") DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE "axe" ADD CONSTRAINT "fk_axe_famille_id" FOREIGN KEY ("famille_id") REFERENCES "famille" ("famille_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "tag" ADD CONSTRAINT "fk_tag_axe_id" FOREIGN KEY ("axe_id") REFERENCES "axe" ("axe_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "comm_tag" ADD CONSTRAINT "fk_comm_tag_comm_id" FOREIGN KEY ("comm_id") REFERENCES "comm" ("comm_id") DEFERRABLE INITIALLY IMMEDIATE;
 ALTER TABLE "comm_tag" ADD CONSTRAINT "fk_comm_tag_tag_id" FOREIGN KEY ("tag_id") REFERENCES "tag" ("tag_id") DEFERRABLE INITIALLY IMMEDIATE;
@@ -705,6 +716,7 @@ ALTER TABLE "adresse" ADD CONSTRAINT "uq_adresse_adresse_complete" UNIQUE ("adre
 ALTER TABLE "domaine" ADD CONSTRAINT "uq_domaine_nom_ascii" UNIQUE ("nom_ascii");
 ALTER TABLE "compte" ADD CONSTRAINT "uq_compte_login" UNIQUE ("login");
 ALTER TABLE "marker" ADD CONSTRAINT "uq_marker_code" UNIQUE ("code");
+ALTER TABLE "famille" ADD CONSTRAINT "uq_famille_nom" UNIQUE ("nom");
 ALTER TABLE "tag" ADD CONSTRAINT "uq_tag_axe_id_valeur" UNIQUE ("axe_id", "valeur");
 ALTER TABLE "dossier" ADD CONSTRAINT "uq_dossier_boite_id_alias_imap" UNIQUE ("boite_id", "alias_imap");
 ALTER TABLE "dmarc_rapport" ADD CONSTRAINT "uq_dmarc_rapport_emetteur_report_id" UNIQUE ("emetteur", "report_id");
@@ -760,6 +772,7 @@ CREATE INDEX "ix_acces_stands_in_for" ON "acces" ("stands_in_for");
 CREATE INDEX "ix_lecture_groupe_boite_id" ON "lecture_groupe" ("boite_id");
 CREATE INDEX "ix_lecture_groupe_dernier_message_lu" ON "lecture_groupe" ("dernier_message_lu");
 CREATE INDEX "ix_axe_application_id" ON "axe" ("application_id");
+CREATE INDEX "ix_axe_famille_id" ON "axe" ("famille_id");
 CREATE INDEX "ix_tag_axe_id" ON "tag" ("axe_id");
 CREATE INDEX "ix_comm_tag_tag_id" ON "comm_tag" ("tag_id");
 CREATE INDEX "ix_comm_tag_application_id" ON "comm_tag" ("application_id");
