@@ -34,7 +34,7 @@ ls.setItem("abx.session", JSON.stringify({ mode: "poc", jeton: "poc", compte: "p
 const sandbox = { console: { log(){}, warn(){}, error(){} }, document: doc, localStorage: ls,
   matchMedia: () => ({ matches:false }), addEventListener: () => {},
   alert: () => {}, confirm: () => true, location: { reload(){} },
-  setTimeout, clearTimeout, encodeURIComponent, Math, Date, JSON };
+  setTimeout, clearTimeout, encodeURIComponent, Math, Date, JSON, URLSearchParams };
 sandbox.window = sandbox;
 sandbox.Promise = Promise; sandbox.setImmediate = setImmediate;
 vm.runInContext(js, vm.createContext(sandbox), { filename: "dist/index.html" });
