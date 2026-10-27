@@ -267,3 +267,48 @@ def test_les_tags_renvoient_aux_fiches_dolibarr(api, monde):
     assert liens["tiers"] == "https://doli.exemple.fr/societe/card.php?socid={id}"
     assert liens["facture"] == "https://doli.exemple.fr/compta/facture/card.php?facid={id}"
     assert liens["dossier_client"] is None
+
+
+# ---- F148 : la session déléguée et le cadre (RM3545) ------------------------------------------------
+
+def test_la_session_deleguee(api, monde):
+    from datetime import datetime, timezone
+    from atombox import applications
+    from atombox.api.security import hash_password
+    from atombox.schema.models import Compte, Session as SessionModele
+    from atombox.uuid7 import uuid7
+    from sqlalchemy import select
+    c, humain, appli = api
+    s = monde["session"]
+    ouvrir = lambda login, h=appli: c.post("/api/v1/application/sessions", json={"login": login}, headers=h)
+    assert ouvrir("mathieu").status_code == 404, "non délégué : le compte n'existe pas pour l'application (D108)"
+    applications.delegate(s, "dolibarr-demo", "mathieu")
+    r = ouvrir("mathieu")
+    assert r.status_code == 200 and r.json()["compte"] == "mathieu", r.text
+    jeton = r.json()["jeton"]
+    assert c.get("/api/v1/referentiels", headers={"Authorization": "Bearer " + jeton}).json()["moi"]["login"] == "mathieu"
+    s.expire_all()
+    assert s.scalar(select(SessionModele.agent).order_by(SessionModele.cree_le.desc()).limit(1)) == "délégation:dolibarr-demo"
+    # contre-épreuves : un compte délégué SANS boîte dans la portée ; une personne à la place de l'application
+    s.add(Compte(compte_id=uuid7(), login="intrus", nom="Intrus", actif=True, cree_le=datetime.now(timezone.utc),
+                 mot_de_passe_empreinte=hash_password("x"))); s.commit()
+    applications.delegate(s, "dolibarr-demo", "intrus")
+    assert ouvrir("intrus").status_code == 404, "délégué mais hors portée : refusé"
+    assert ouvrir("mathieu", humain).status_code == 404, "une session n'est pas une application"
+    applications.delegate(s, "dolibarr-demo", "mathieu", retirer=True)
+    assert ouvrir("mathieu").status_code == 404, "la délégation retirée coupe"
+    applications.delegate(s, "dolibarr-demo", "mathieu")
+
+
+def test_seuls_atombox_et_les_applications_deleguees_encadrent_le_webmail(api, monde):
+    from atombox import applications
+    c, humain, appli = api
+    applications.delegate(monde["session"], "dolibarr-demo", "mathieu")      # autonome : ne compte sur aucun test d'avant
+    c.patch("/api/v1/application", json={"url": "https://doli.exemple.fr/sous/chemin"}, headers=appli)
+    r = c.get("/")
+    if r.status_code == 404: pytest.skip("webmail non servi dans ce harnais")
+    csp = r.headers.get("content-security-policy", "")
+    assert csp.startswith("frame-ancestors 'self'"), csp
+    assert "https://doli.exemple.fr" in csp and "/sous/chemin" not in csp, "l'ORIGINE, pas le chemin : %s" % csp
+    assert "content-security-policy" not in {k.lower() for k in c.get("/api/v1/referentiels", headers=humain).headers}, \
+        "l'API n'en a pas besoin"

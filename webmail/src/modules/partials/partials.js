@@ -227,9 +227,9 @@
       .filter(app => app.axe_tiers && !(m.tags || []).some(t => t.axe === app.axe_tiers))
       .map(app => `<div class="lien inconnu" style="margin:12px 16px">👤 <b>${F.esc(adresse)}</b> est inconnu de
           ${F.esc(app.libelle)}.
-          ${app.creation.tiers ? `<a class="hbtn" target="_blank" rel="noopener" data-creer="tiers"
+          ${app.creation.tiers ? `<a class="hbtn" target="${ABX.Session && ABX.Session.integre() ? "_top" : "_blank"}" rel="noopener" data-creer="tiers"
              href="${F.esc(remplir(app.creation.tiers))}">Créer le tiers</a>` : ""}
-          ${app.creation.contact ? `<a class="hbtn" target="_blank" rel="noopener" data-creer="contact"
+          ${app.creation.contact ? `<a class="hbtn" target="${ABX.Session && ABX.Session.integre() ? "_top" : "_blank"}" rel="noopener" data-creer="contact"
              href="${F.esc(remplir(app.creation.contact))}">Ajouter comme contact</a>` : ""}
           <div class="hint">La fiche s'ouvre dans ${F.esc(app.libelle)}, pré-remplie. Une fois enregistrée, la
             synchronisation range ses messages ici.</div></div>`).join("");
@@ -258,7 +258,7 @@
       ${m.tags.length ? m.tags.map((t, i) => `<div class="kv">
           <span class="k">${F.esc(axeLabel(t.axe))}</span>
           <span class="v">${ficheTag(t)
-            ? `<a class="fiche" target="_blank" rel="noopener" href="${F.esc(ficheTag(t))}" title="Ouvrir la fiche — ${F.esc(t.axe)}=${F.esc(t.val)}"><b>${F.esc(tagLabel(t))}</b> ↗</a>`
+            ? `<a class="fiche" target="${ABX.Session && ABX.Session.integre() ? "_top" : "_blank"}" rel="noopener" href="${F.esc(ficheTag(t))}" title="Ouvrir la fiche — ${F.esc(t.axe)}=${F.esc(t.val)}"><b>${F.esc(tagLabel(t))}</b> ↗</a>`
             : `<b title="${F.esc(t.axe)}=${F.esc(t.val)}">${F.esc(tagLabel(t))}</b>`}
             <span class="tag">posé par ${F.esc(t.source)}</span>
             <button class="tagx" data-newv="${i}" title="Créer un dossier virtuel pour ce tag">⊕</button><button class="tagx" data-untag="${i}" title="Retirer ce tag">✕</button></span>

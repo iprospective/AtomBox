@@ -67,6 +67,33 @@ class ApplicationController(Controller):
         log.info("application « %s » : paramètres %s", app.nom, p)
         return describe(app)
 
+    @action("POST", "/application/sessions")
+    async def delegated_session(self, request: Request, qui=Depends(current_reader), s: AsyncSession = Depends(async_session)):
+        """LA SESSION DÉLÉGUÉE (F148) : l'application ouvre une session pour un compte que
+        l'administrateur lui a délégué (`applications delegate`), et qui a au moins une boîte dans sa
+        portée. Tout autre cas est un compte qui, pour elle, n'existe pas : 404 (D108). La session est
+        une session ordinaire, plus courte, et dit d'où elle vient (agent)."""
+        from datetime import datetime, timedelta, timezone
+        from ..api.security import new_token, token_fingerprint
+        from ..applications import mailboxes
+        from ..schema.models import Acces, Compte, Session as SessionModele
+        app = _app(qui)
+        login = str((await request.json() or {}).get("login") or "").strip().lower()
+        if not login or login not in ((app.parametres or {}).get("delegation") or []):
+            log.warning("application « %s » : session refusée pour « %s » (non délégué)", app.nom, login); raise HTTPException(404, "compte inconnu")
+        compte = await s.scalar(select(Compte).where(Compte.login == login, Compte.actif.is_(True)))
+        portee = {b.boite_id for b in await mailboxes(s, app)}
+        siennes = set(await s.scalars(select(Acces.boite_id).where(Acces.compte_id == compte.compte_id, Acces.fin.is_(None)))) if compte else set()
+        if not compte or not (portee & siennes):
+            log.warning("application « %s » : session refusée pour « %s » (hors portée)", app.nom, login); raise HTTPException(404, "compte inconnu")
+        jeton, maintenant = new_token(), datetime.now(timezone.utc)
+        expire = maintenant + timedelta(hours=8)
+        s.add(SessionModele(session_id=uuid7(), compte_id=compte.compte_id, jeton_empreinte=token_fingerprint(jeton),
+                            cree_le=maintenant, expire_le=expire, agent="délégation:" + app.nom))
+        await s.commit()
+        log.info("application « %s » : session déléguée ouverte pour %s", app.nom, login)
+        return {"jeton": jeton, "compte": login, "expire_le": expire.isoformat()}
+
     @action("PUT", "/axes/{axe}/valeurs")
     async def values(self, axe: str, request: Request, qui=Depends(current_reader), s: AsyncSession = Depends(async_session)):
         """Upsert d'un lot : la VALEUR est la clé stable (l'id chez l'application), le LIBELLÉ se

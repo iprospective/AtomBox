@@ -464,5 +464,14 @@ function serveur(vus) {
   A.Controllers.Tabs.ouvrir({ type: "msg", id: "m2" }, false); await drainer(e);
   vrai(!doc.getElementById("detail").innerHTML.includes("est inconnu de"), "un message rangé sur un tiers ne le signale plus");
 
+  console.log("— le webmail intégré : la session déléguée par le fragment (F148) ————————");
+  let adresse = null;
+  const ok = A.Session.depuisFragment({ hash: "#session=jeton-delegue&compte=mathieu&integre=1&msg=m1", pathname: "/", search: "" },
+                                      { replaceState: (_, __, u) => { adresse = u; } });
+  vrai(ok && A.Session.jeton() === "jeton-delegue" && A.Session.compte() === "mathieu", "la session déléguée du fragment est ouverte");
+  eq(adresse, "/#msg=m1", "le jeton est effacé de l'adresse et de l'historique ; le reste du fragment demeure");
+  vrai(!A.Session.depuisFragment({ hash: "#msg=m2", pathname: "/", search: "" }, { replaceState() {} }), "sans session dans le fragment, rien ne change");
+  eq(A.Session.jeton(), "jeton-delegue", "…et la session en place reste");
+
   bilan();
 })().catch(e => { console.error("  ✗ échec des parcours :", e.stack.split("\n").slice(0, 3).join(" | ")); process.exit(1); });

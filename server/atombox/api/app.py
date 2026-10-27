@@ -25,6 +25,26 @@ def create_app(check: bool = True, modules=None) -> FastAPI:
     app.state.table = table
     log = journal("api")
 
+    cache = {"t": 0.0, "origines": []}
+    async def _framers() -> list[str]:
+        """les origines des applications autorisées à encadrer le webmail — relues toutes les 60 s"""
+        if time.monotonic() - cache["t"] < 60: return cache["origines"]
+        try:
+            from sqlalchemy import select
+            from urllib.parse import urlsplit
+            from ..db import async_session_factory
+            from ..schema.models import Application
+            async with async_session_factory()() as s:
+                apps = (await s.scalars(select(Application).where(Application.actif.is_(True)))).all()
+            o = set()
+            for a in apps:
+                p = a.parametres or {}; u = urlsplit(p.get("url") or "")
+                if p.get("delegation") and u.scheme in ("http", "https") and u.netloc: o.add("%s://%s" % (u.scheme, u.netloc))
+            cache.update(t=time.monotonic(), origines=sorted(o))
+        except Exception as e:
+            log.warning("origines d'encadrement illisibles : %s — 'self' seul", e)
+        return cache["origines"]
+
     @app.middleware("http")
     async def access_log(request: Request, call_next):
         t0 = time.perf_counter()
@@ -32,6 +52,10 @@ def create_app(check: bool = True, modules=None) -> FastAPI:
             reponse = await call_next(request)
         except Exception:
             log.exception("%s %s : exception", request.method, request.url.path); raise
+        # QUI PEUT AFFICHER LE WEBMAIL DANS UN CADRE (F148) : lui-même, et les applications qui ont
+        # une délégation et une adresse. Sans cet en-tête, n'importe quel site pouvait l'encadrer.
+        if not request.url.path.startswith("/api/"):
+            reponse.headers["Content-Security-Policy"] = "frame-ancestors " + " ".join(["'self'"] + await _framers())
         ms = (time.perf_counter() - t0) * 1000
         (log.warning if reponse.status_code >= 500 else log.info if reponse.status_code >= 400 else log.debug)(
             "%s %s → %d en %.0f ms", request.method, request.url.path, reponse.status_code, ms)
