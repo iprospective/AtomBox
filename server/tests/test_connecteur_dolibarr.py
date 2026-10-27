@@ -204,6 +204,10 @@ def test_le_message_d_un_contact_se_range_sur_son_tiers(api, monde):
     _tiers(api, {"valeur": "7", "libelle": "Tessier Industries", "adresses": ["Jean.Tessier@tessier.example", "compta@tessier.example"]})
     recu = recevoir(monde, courrier("Question", "t1@tessier.example", de="jean.tessier@tessier.example"))
     assert ("tiers", "7") in tags(monde, recu), "reçu d'un contact du tiers"
+    # le FIL sert les tags lui aussi : le webmail y fusionne le message ouvert (constaté le 27/10)
+    c, humain, appli = api
+    fil = c.get("/api/v1/messages/%s/fil" % recu, headers=humain).json()["messages"]
+    assert [("tiers", "7") in {(x["axe"], x["val"]) for x in m["tags"]} for m in fil if m["id"] == recu] == [True], fil
     envoye = recevoir(monde, courrier("Réponse", "t2@exemple.fr", de="contact@exemple.fr", a="compta@tessier.example"), sens="out")
     assert ("tiers", "7") in tags(monde, envoye), "un envoi se range chez celui à qui il est adressé"
     inconnu = recevoir(monde, courrier("Bonjour", "t3@nouveau.example", de="quelquun@nouveau.example"))

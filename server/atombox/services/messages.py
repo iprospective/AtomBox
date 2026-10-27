@@ -607,11 +607,17 @@ async def thread(s: AsyncSession, compte: Compte, comm_id) -> list[dict]:
     adresses = {b: (await s.get(Adresse, (await s.get(Boite, b)).adresse_id)).adresse_complete for b in boites}
     lines = (await s.execute(q)).all()
     etats = await personal.states_of(s, compte.compte_id, [cc.comm_id for _, cc in lines])
+    # LES TAGS AUSSI, comme la liste et le détail. Le fil contient le message ouvert lui-même, et le
+    # webmail FUSIONNE chaque réponse dans l'objet qu'il garde : un fil sans tags effaçait ceux du
+    # message ouvert — le tiers rangé disparaissait, « inconnu de Dolibarr » revenait (27/10).
+    from .tags import tags_of
+    tags = await tags_of(s, [cc.comm_id for _, cc in lines])
     seen, out = set(), []
     for r, cc in lines:
         if cc.comm_id in seen: continue
         seen.add(cc.comm_id)
-        out.append(serialize(r, cc, ds, adresses.get(r.boite_id), etat=etats.get((r.comm_id, r.boite_id))))
+        out.append(serialize(r, cc, ds, adresses.get(r.boite_id), etat=etats.get((r.comm_id, r.boite_id)),
+                             extra={"tags": tags.get(cc.comm_id, [])}))
     return out
 
 async def patch(s: AsyncSession, compte: Compte, comm_id, patch: dict, sens=None) -> dict | None:
