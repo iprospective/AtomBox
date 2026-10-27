@@ -473,6 +473,21 @@ function serveur(vus) {
   vrai(!A.Session.depuisFragment({ hash: "#msg=m2", pathname: "/", search: "" }, { replaceState() {} }), "sans session dans le fragment, rien ne change");
   eq(A.Session.jeton(), "jeton-delegue", "…et la session en place reste");
 
+  console.log("— le contexte Dolibarr à côté du message (F047) ————————————————————");
+  etat.messages.m3.contexte = [{ application: "Dolibarr", tiers: { id: "20", libelle: "Contexte SA", lien: "https://doli.example/societe/card.php?socid=20" },
+    encours: 2640, echu: 1440, devise: "EUR", maj: "2026-10-27T10:00:00+00:00",
+    objets: [{ axe: "facture", id: "12", reference: "FA2610-0003", libelle: "Facture", montant: 1440, statut: "impayée", etat: "due",
+               lien: "https://doli.example/compta/facture/card.php?facid=12" }] }];
+  A.Api.cache.message("m3") && delete A.Api.cache.message("m3")._complet;
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m3" }, false); await drainer(e);
+  const ctxHtml = doc.getElementById("detail").innerHTML;
+  vrai(ctxHtml.includes("Dolibarr — contexte métier") && ctxHtml.includes("Contexte SA"), "le panneau montre le tiers poussé par Dolibarr");
+  vrai(ctxHtml.includes("échu") && ctxHtml.includes('href="https://doli.example/compta/facture/card.php?facid=12"'), "l'échu, et la facture ouvre sa fiche");
+  etat.messages.m2.contexte = [];
+  A.Api.cache.message("m2") && delete A.Api.cache.message("m2")._complet;
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m2" }, false); await drainer(e);
+  vrai(!doc.getElementById("detail").innerHTML.includes("contexte métier"), "sans contexte poussé : aucun panneau inventé");
+
   console.log("— le lien profond : #msg=… ouvre le message (F152) ————————————————————");
   {
     const [, f2] = serveur([]);

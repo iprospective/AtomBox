@@ -6933,6 +6933,16 @@
         ]
       },
       {
+        "nom": "erp.contexte",
+        "contexte": "message",
+        "role": "le contexte métier POUSSÉ par l'application avec le tiers : encours, échu, objets ouverts avec liens vers leurs fiches (F047) — rien d'inventé sans données",
+        "surchargeable": "oui",
+        "decisions": [
+          "D021",
+          "D189"
+        ]
+      },
+      {
         "nom": "message.inconnu",
         "contexte": "message",
         "role": "l'expéditeur inconnu de l'application qui range les tiers par adresse : créer le tiers, ajouter comme contact — liens qui ouvrent l'ERP pré-rempli",
@@ -8507,6 +8517,21 @@
         "etat": "décidée",
         "decisions": [
           "D187"
+        ]
+      },
+      {
+        "methode": "POST",
+        "chemin": "/api/v1/application/sessions",
+        "role": "ouvrir une session pour un compte DÉLÉGUÉ à l'application par l'administrateur, qui a une boîte dans sa portée — le webmail intégré à l'ERP (F148) ; 404 sinon",
+        "portee": "jeton d'application, compte délégué",
+        "entites": [
+          "application",
+          "session",
+          "compte"
+        ],
+        "etat": "décidée",
+        "decisions": [
+          "D108"
         ]
       },
       {
