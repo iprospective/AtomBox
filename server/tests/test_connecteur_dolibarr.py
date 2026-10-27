@@ -158,13 +158,13 @@ def test_le_webmail_recoit_libelles_et_cles(api, monde):
     """RM3519 — la navigation et la complétion lisent le LIBELLÉ, et posent la CLÉ"""
     c, humain, appli = api
     ref = c.get("/api/v1/referentiels", headers=humain).json()
-    assert {"id": "propal", "label": "Propositions commerciales", "derive": False, "famille": "dolibarr"} in ref["axes"]
+    assert {"id": "propal", "label": "Propositions commerciales", "derive": False, "famille": "dolibarr", "lien": None} in ref["axes"]
     v = [x for x in ref["valeurs"]["propal"] if x["val"] == "123"]
     assert v == [{"id": "propal:123", "label": "PR2610-0012 — Tiers SA", "val": "123", "axe": "propal"}], v
     # un axe posé à la main, sans application, garde un nom lisible
     cid = c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=humain).json()["messages"][0]["id"]
     c.post("/api/v1/messages/%s/tags" % cid, json={"axe": "dossier_client", "val": "x"}, headers=humain)
-    assert {"id": "dossier_client", "label": "Dossier client", "derive": False, "famille": None} in c.get("/api/v1/referentiels", headers=humain).json()["axes"]
+    assert {"id": "dossier_client", "label": "Dossier client", "derive": False, "famille": None, "lien": None} in c.get("/api/v1/referentiels", headers=humain).json()["axes"]
 
 
 
@@ -255,3 +255,15 @@ def test_une_application_ancienne_recoit_les_axes_nouveaux(monde):
     assert applications.declare_axes(s, "dolibarr-demo") == ["tiers"]
     assert "tiers" in s.scalar(select(Application).where(Application.nom == "dolibarr-demo")).axes
     assert applications.declare_axes(s, "dolibarr-demo") == [], "idempotent"
+
+
+def test_les_tags_renvoient_aux_fiches_dolibarr(api, monde):
+    """F149 (RM3546) — une fois l'adresse de Dolibarr déclarée, chaque axe de l'application porte le
+    modèle de sa fiche ; un axe sans application (posé à la main) n'en porte pas"""
+    c, humain, appli = api
+    c.patch("/api/v1/application", json={"url": "https://doli.exemple.fr"}, headers=appli)
+    liens = {a["id"]: a["lien"] for a in c.get("/api/v1/referentiels", headers=humain).json()["axes"]}
+    assert liens["propal"] == "https://doli.exemple.fr/comm/propal/card.php?id={id}"
+    assert liens["tiers"] == "https://doli.exemple.fr/societe/card.php?socid={id}"
+    assert liens["facture"] == "https://doli.exemple.fr/compta/facture/card.php?facid={id}"
+    assert liens["dossier_client"] is None

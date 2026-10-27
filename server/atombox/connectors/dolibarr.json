@@ -48,5 +48,15 @@
     "_note": "D189 § 3 : pour un expéditeur inconnu, Dolibarr s'ouvre pré-rempli — AtomBox n'y écrit jamais. {nom}, {adresse}, {domaine} sont encodés pour l'URL.",
     "tiers": "/societe/card.php?action=create&name={nom}&email={adresse}&url={domaine}",
     "contact": "/contact/card.php?action=create&lastname={nom}&email={adresse}"
+  },
+  "fiches": {
+    "_note": "F149 : la fiche de chaque axe, {id} = la valeur du tag ; préfixé par l'adresse que le module déclare. Paramètres relevés dans Dolibarr 24.",
+    "tiers": "/societe/card.php?socid={id}",
+    "propal": "/comm/propal/card.php?id={id}",
+    "commande": "/commande/card.php?id={id}",
+    "facture": "/compta/facture/card.php?facid={id}",
+    "projet": "/projet/card.php?id={id}",
+    "commande_fournisseur": "/fourn/commande/card.php?id={id}",
+    "facture_fournisseur": "/fourn/facture/card.php?facid={id}"
   }
 }

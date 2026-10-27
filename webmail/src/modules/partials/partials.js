@@ -235,6 +235,12 @@
             synchronisation range ses messages ici.</div></div>`).join("");
   });
 
+  /* F149 : la FICHE d'un tag chez l'application qui déclare son axe (« PR2610-0012 » ouvre la
+     proposition dans Dolibarr). Le serveur sert le modèle, `{id}` est la valeur ; pas de modèle,
+     pas de lien — jamais un lien cassé. */
+  const ficheTag = t => { const a = (ABX.Ref.axes || []).find(x => x.id === t.axe);
+    return a && a.lien ? a.lien.replace("{id}", encodeURIComponent(t.val)) : null; };
+
   /* la liste des axes, rangée par famille (D188) : un <optgroup> par famille, les autres ensuite */
   const optionsAxes = ids => {
     const fam = id => ((ABX.Ref.axes || []).find(x => x.id === id) || {}).famille || null;
@@ -251,7 +257,9 @@
     return `<div class="box"><h4>Tags — plusieurs applications, sans écrasement (D017/D020)</h4>
       ${m.tags.length ? m.tags.map((t, i) => `<div class="kv">
           <span class="k">${F.esc(axeLabel(t.axe))}</span>
-          <span class="v"><b title="${F.esc(t.axe)}=${F.esc(t.val)}">${F.esc(tagLabel(t))}</b>
+          <span class="v">${ficheTag(t)
+            ? `<a class="fiche" target="_blank" rel="noopener" href="${F.esc(ficheTag(t))}" title="Ouvrir la fiche — ${F.esc(t.axe)}=${F.esc(t.val)}"><b>${F.esc(tagLabel(t))}</b> ↗</a>`
+            : `<b title="${F.esc(t.axe)}=${F.esc(t.val)}">${F.esc(tagLabel(t))}</b>`}
             <span class="tag">posé par ${F.esc(t.source)}</span>
             <button class="tagx" data-newv="${i}" title="Créer un dossier virtuel pour ce tag">⊕</button><button class="tagx" data-untag="${i}" title="Retirer ce tag">✕</button></span>
         </div>`).join("") : `<div class="dmeta">aucun tag</div>`}

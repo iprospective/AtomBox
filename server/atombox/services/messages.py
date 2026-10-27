@@ -107,8 +107,9 @@ async def _axes_and_values(s: AsyncSession) -> dict:
     for nom, val, libelle in lines:
         values.setdefault(nom, []).append({"id": "%s:%s" % (nom, val), "label": libelle or val, "val": val, "axe": nom})
     # le nom d'un axe déclaré vient de son connecteur : « Propositions commerciales », pas « Propal »
-    types = {i: t for i, t in
-             (await s.execute(select(Application.application_id, Application.type_connecteur))).all()} if axes else {}
+    apps = {i: (t, (p or {}).get("url")) for i, t, p in
+            (await s.execute(select(Application.application_id, Application.type_connecteur, Application.parametres))).all()} if axes else {}
+    types = {i: t for i, (t, _) in apps.items()}
     def label(a):
         d = declaration(types.get(a.application_id)) if a.application_id else None
         return ((d or {}).get("axes") or {}).get(a.nom, {}).get("libelle") or a.nom.replace("_", " ").capitalize()
@@ -116,7 +117,14 @@ async def _axes_and_values(s: AsyncSession) -> dict:
     from ..schema.models import Famille
     familles = list(await s.scalars(select(Famille).order_by(Famille.ordre, Famille.nom))) if axes else []
     nom_famille = {f.famille_id: f.nom for f in familles}
-    return {"axes": [{"id": a.nom, "label": label(a), "derive": a.derive, "famille": nom_famille.get(a.famille_id)} for a in axes],
+    def lien(a):
+        """F149 : la fiche d'une valeur chez l'application — `{id}` est remplacé par le webmail.
+        Rien sans adresse déclarée : un lien cassé est pire qu'une puce sans lien."""
+        if not a.application_id or a.application_id not in apps: return None
+        t, url = apps[a.application_id]
+        modele = (((declaration(t) or {}).get("fiches") or {}).get(a.nom))
+        return (url.rstrip("/") + modele) if url and modele else None
+    return {"axes": [{"id": a.nom, "label": label(a), "derive": a.derive, "famille": nom_famille.get(a.famille_id), "lien": lien(a)} for a in axes],
             "familles": [{"id": f.nom, "label": f.libelle} for f in familles],
             "valeurs": values}
 
