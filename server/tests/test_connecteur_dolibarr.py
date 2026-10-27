@@ -131,7 +131,7 @@ def test_le_module_pousse_ses_libelles(api, monde):
     assert moi["type"] == "dolibarr" and {"id": "propal", "libelle": "Propositions commerciales"} in moi["axes"]
     r = c.put("/api/v1/axes/propal/valeurs", json={"valeurs": [{"valeur": "123", "libelle": "PR2610-0012 — Tiers SA"},
                                                               {"valeur": "124", "libelle": "PR2610-0013 — Autre"}]}, headers=appli)
-    assert r.json() == {"ok": True, "crees": 1, "modifies": 1}, "123 existait (posé par la règle), 124 est neuf"
+    assert r.json() == {"ok": True, "crees": 1, "modifies": 1, "ranges": 0}, "123 existait (posé par la règle), 124 est neuf"
     l = c.get("/api/v1/messages", params={"dossier": "propal:123"}, headers=appli).json()["messages"]
     assert len(l) == 1 and [t["libelle"] for t in l[0]["tags"] if t["axe"] == "propal"] == ["PR2610-0012 — Tiers SA"]
     # contre-épreuves : un axe qui n'est pas le sien, une personne sur une route d'application
@@ -227,10 +227,17 @@ def test_le_tiers_cree_apres_coup_range_son_historique(api, monde):
     from atombox import applications
     cid = recevoir(monde, courrier("Premier contact", "t6@neuf.example", de="direction@neuf.example"))
     assert not [t for t in tags(monde, cid) if t[0] == "tiers"]
-    _tiers(api, {"valeur": "10", "libelle": "Neuf SARL", "adresses": ["direction@neuf.example"]})
-    s = monde["session"]; s.expire_all()
-    assert applications.rescan(s, "dolibarr-demo") >= 1
+    # le tiers est créé dans Dolibarr (depuis le webmail) : son déclencheur pousse la valeur — et les
+    # messages PASSÉS se rangent tout de suite, sans rattrapage (constaté en produit le 27/10)
+    r = _tiers(api, {"valeur": "10", "libelle": "Neuf SARL", "adresses": ["direction@neuf.example"]})
+    assert r["ranges"] == 1, r
     assert ("tiers", "10") in tags(monde, cid)
+    assert _tiers(api, {"valeur": "10", "libelle": "Neuf SARL", "adresses": ["direction@neuf.example"]})["ranges"] == 0, \
+        "repousser la même valeur ne range rien de plus"
+    # une adresse AJOUTÉE (un contact créé ensuite) range à son tour
+    cid2 = recevoir(monde, courrier("Commande", "t7@neuf.example", de="achats@neuf.example"))
+    assert _tiers(api, {"valeur": "10", "libelle": "Neuf SARL", "adresses": ["direction@neuf.example", "achats@neuf.example"]})["ranges"] == 1
+    assert ("tiers", "10") in tags(monde, cid2)
 
 
 def test_le_webmail_sait_ou_creer_un_inconnu(api, monde):
