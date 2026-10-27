@@ -473,5 +473,17 @@ function serveur(vus) {
   vrai(!A.Session.depuisFragment({ hash: "#msg=m2", pathname: "/", search: "" }, { replaceState() {} }), "sans session dans le fragment, rien ne change");
   eq(A.Session.jeton(), "jeton-delegue", "…et la session en place reste");
 
+  console.log("— le lien profond : #msg=… ouvre le message (F152) ————————————————————");
+  {
+    const [, f2] = serveur([]);
+    const e2 = demarrer(creerStockage(), { session: "api", fetch: f2, hash: "#msg=m3" });
+    await drainer(e2);
+    eq(e2.ABX.Store.ui.tab, "m:m3", "le message désigné par le fragment est ouvert au chargement");
+    vrai(e2.doc.getElementById("detail").innerHTML.includes("Sujet m3"), "et peint");
+    const e3 = demarrer(creerStockage(), { session: "api", fetch: f2, hash: "#msg=inconnu" });
+    await drainer(e3);
+    vrai(e3.doc.getElementById("detail").innerHTML.includes("n'existe plus"), "un identifiant inconnu : « n'existe plus », pas une erreur");
+  }
+
   bilan();
 })().catch(e => { console.error("  ✗ échec des parcours :", e.stack.split("\n").slice(0, 3).join(" | ")); process.exit(1); });

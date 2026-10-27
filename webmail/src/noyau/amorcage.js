@@ -81,7 +81,21 @@
      En POC c'est immédiat ; en prod c'est le premier aller-retour du produit. */
   /* référentiels PUIS compteurs PUIS peinture : l'arborescence a besoin des deux
      avant de s'afficher — sinon elle montre « 0 / 0 » partout (D141) */
-  ABX.pret = ABX.Ref.charger().then(() => ABX.Api.compteurs()).then(() => App.peindre("all")).then(() => true)
+  /* LE LIEN PROFOND (F152) : `#msg=<id>` ouvre ce message au chargement — depuis une fiche de l'ERP,
+     « Ouvrir dans Courrier » mène ici, pour répondre. Un identifiant hors portée se dit « n'existe
+     plus » (404, D108), jamais une erreur. Le fragment est consommé : un rechargement ne le rejoue pas. */
+  const lienProfond = () => { try { ouvrirLienProfond(); } catch (e) {
+      /* un lien profond raté ne doit JAMAIS faire tomber l'amorçage : sans cette garde, son exception
+         remontait dans la chaîne et la page entière affichait « Service indisponible » */
+      ABX.log("lien profond ignoré : " + (e && e.message || e)); } };
+  const ouvrirLienProfond = () => {
+    const h = new URLSearchParams(((typeof location !== "undefined" && location.hash) || "").replace(/^#/, ""));
+    const id = h.get("msg");
+    if (!id) return;
+    ABX.Controllers.Tabs.ouvrir({ type: "msg", id }, false);
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
+  };
+  ABX.pret = ABX.Ref.charger().then(() => ABX.Api.compteurs()).then(() => App.peindre("all")).then(lienProfond).then(() => true)
     /* l'API peut être indisponible (réseau, serveur arrêté) : l'interface TIENT —
        arborescence vide, liste qui le dit — et ne lève rien. C'est du produit
        (D141), et c'est ce que le harnais vérifie en mode produit sans réseau. */
