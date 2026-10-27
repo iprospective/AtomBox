@@ -238,6 +238,8 @@
   R.define("message.inconnu", ({ m }) => {
     if ((m.sens || "in") !== "in" || !m.from_adresse) return "";
     const adresse = m.from_adresse.trim().toLowerCase(), domaine = adresse.split("@")[1] || "";
+    /* une de MES boîtes n'est jamais « inconnue » : la copie cachée d'un envoi de l'ERP vient de moi */
+    if ((ABX.Ref.moi.boites || []).some(b => (b.adresse || "").toLowerCase() === adresse)) return "";
     const nom = (m.from_nom || "").trim() || adresse.split("@")[0];
     const remplir = modele => modele.replace(/\{(nom|adresse|domaine)\}/g, (_, k) =>
       encodeURIComponent({ nom, adresse, domaine }[k]));
