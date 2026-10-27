@@ -121,6 +121,12 @@ if [ -n "$VHOST" ]; then
       > "/etc/apache2/sites-available/$VHOST.conf"
     a2ensite -q "$VHOST.conf"; apache2ctl configtest 2>&1 | grep -v "^Syntax OK" || true; systemctl reload apache2
   fi
+  # le vhost HTTPS que certbot DÉRIVE du modèle HTTP en garde « X-Forwarded-Proto: http » : l'API
+  # se croirait servie en clair (liens des courriels de réinitialisation en http). Corrigé ici.
+  if [ -f "/etc/apache2/sites-available/$VHOST-le-ssl.conf" ] && grep -q 'X-Forwarded-Proto "http"' "/etc/apache2/sites-available/$VHOST-le-ssl.conf"; then
+    sed -i 's/X-Forwarded-Proto "http"/X-Forwarded-Proto "https"/' "/etc/apache2/sites-available/$VHOST-le-ssl.conf"
+    apache2ctl configtest >/dev/null 2>&1 && systemctl reload apache2 && log "vhost HTTPS : X-Forwarded-Proto https"
+  fi
   install -d /etc/letsencrypt/renewal-hooks/deploy
   cat > /etc/letsencrypt/renewal-hooks/deploy/atombox-imapd.sh <<HOOK
 #!/bin/sh
