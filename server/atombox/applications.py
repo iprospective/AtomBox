@@ -184,6 +184,20 @@ def rescan(s, nom: str) -> int:
     return n
 
 
+def delegate(s, nom: str, login: str, retirer: bool = False) -> list[str]:
+    """LA DÉLÉGATION (F148, D108) : les comptes AtomBox pour lesquels l'application peut ouvrir une
+    session — le webmail affiché dans la page de l'ERP, sans se reconnecter. Un geste d'ADMINISTRATEUR,
+    jamais de l'application elle-même (PATCH /application ne touche pas à cette liste) : un jeton
+    d'application volé ne doit pas pouvoir s'en accorder."""
+    app = s.scalar(select(Application).where(Application.nom == nom))
+    if app is None: raise ValueError("aucune application « %s »" % nom)
+    p = dict(app.parametres or {}); logins = set(p.get("delegation") or [])
+    (logins.discard if retirer else logins.add)(login.strip().lower())
+    p["delegation"] = sorted(logins); app.parametres = p; s.commit()
+    log.warning("application « %s » : délégation %s %s", nom, "retirée à" if retirer else "accordée pour", login)
+    return p["delegation"]
+
+
 def revoke(s, nom: str) -> bool:
     app = s.scalar(select(Application).where(Application.nom == nom))
     if app is None: return False
@@ -203,6 +217,8 @@ def main(argv=None):
     c.add_argument("--host", action="append", default=[], help="un hôte de ses Message-ID, pour la règle d'en-tête (répétable)")
     rs = sub.add_parser("rescan", help="appliquer les règles d'en-tête et d'adresse à l'historique de la portée"); rs.add_argument("--name", required=True)
     ax = sub.add_parser("axes", help="ajouter les axes que le connecteur déclare depuis la création"); ax.add_argument("--name", required=True)
+    dg = sub.add_parser("delegate", help="autoriser l'application à ouvrir une session pour ce compte (webmail intégré)")
+    dg.add_argument("--name", required=True); dg.add_argument("--login", required=True); dg.add_argument("--remove", action="store_true")
     r = sub.add_parser("revoke"); r.add_argument("--name", required=True)
     sub.add_parser("list")
     a = p.parse_args(argv)
@@ -217,6 +233,9 @@ def main(argv=None):
         # Le jeton sort sur la sortie standard, et nulle part ailleurs : il n'est pas journalisé.
         print(jeton)
         print("(montré une seule fois — à mettre dans la configuration du module)", file=sys.stderr)
+    elif a.cmd == "delegate":
+        try: print("délégation : %s" % (", ".join(delegate(s, a.name, a.login, a.remove)) or "aucune"))
+        except ValueError as e: print(str(e), file=sys.stderr); return 1
     elif a.cmd == "axes":
         try: print("axes ajoutés : %s" % (", ".join(declare_axes(s, a.name)) or "aucun"))
         except ValueError as e: print(str(e), file=sys.stderr); return 1

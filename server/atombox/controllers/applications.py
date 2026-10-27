@@ -39,6 +39,36 @@ def describe(app) -> dict:
             "parametres": app.parametres or {}}
 
 
+async def _range_history(s, app, axe, tags) -> int:
+    """la règle d'adresse (connectors.apply_address_rule), appliquée à l'historique de la portée pour
+    ces valeurs : reçus DE leurs adresses, envois VERS elles. Seulement pour l'axe de la règle."""
+    from datetime import datetime, timezone
+    from sqlalchemy import and_, func, or_
+    from ..applications import mailboxes
+    from ..schema.models import Adresse, Comm, CommTag, Participant, Rattachement
+    regle = ((declaration(app.type_connecteur) or {}).get("regle_adresse") or {}).get("axe")
+    if regle != axe.nom: return 0
+    boites = [b.boite_id for b in await mailboxes(s, app)]
+    if not boites: return 0
+    n = 0
+    for tag in tags:
+        adresses = [x.lower() for x in (tag.ref_externe or {}).get("adresses") or []]
+        if not adresses: continue
+        vers = (select(Participant.comm_id).join(Adresse, Adresse.adresse_id == Participant.adresse_id)
+                .where(Participant.comm_id == Rattachement.comm_id, Participant.role.in_(("to", "cc")),
+                       Adresse.adresse_complete.in_(adresses)).exists())
+        ids = set(await s.scalars(select(Rattachement.comm_id).join(Comm, Comm.comm_id == Rattachement.comm_id)
+                                  .where(Rattachement.boite_id.in_(boites),
+                                         or_(and_(Rattachement.sens == "in", func.lower(Comm.from_adresse).in_(adresses)),
+                                             and_(Rattachement.sens == "out", vers)))))
+        deja = set(await s.scalars(select(CommTag.comm_id).where(CommTag.tag_id == tag.tag_id, CommTag.comm_id.in_(ids)))) if ids else set()
+        for cid in ids - deja:
+            s.add(CommTag(comm_id=cid, tag_id=tag.tag_id, source=app.type_connecteur, application_id=app.application_id,
+                          pose_le=datetime.now(timezone.utc)))
+            n += 1
+    return n
+
+
 class ApplicationController(Controller):
     @action("GET", "/application")
     async def me(self, qui=Depends(current_reader)):
@@ -67,6 +97,33 @@ class ApplicationController(Controller):
         log.info("application « %s » : paramètres %s", app.nom, p)
         return describe(app)
 
+    @action("POST", "/application/sessions")
+    async def delegated_session(self, request: Request, qui=Depends(current_reader), s: AsyncSession = Depends(async_session)):
+        """LA SESSION DÉLÉGUÉE (F148) : l'application ouvre une session pour un compte que
+        l'administrateur lui a délégué (`applications delegate`), et qui a au moins une boîte dans sa
+        portée. Tout autre cas est un compte qui, pour elle, n'existe pas : 404 (D108). La session est
+        une session ordinaire, plus courte, et dit d'où elle vient (agent)."""
+        from datetime import datetime, timedelta, timezone
+        from ..api.security import new_token, token_fingerprint
+        from ..applications import mailboxes
+        from ..schema.models import Acces, Compte, Session as SessionModele
+        app = _app(qui)
+        login = str((await request.json() or {}).get("login") or "").strip().lower()
+        if not login or login not in ((app.parametres or {}).get("delegation") or []):
+            log.warning("application « %s » : session refusée pour « %s » (non délégué)", app.nom, login); raise HTTPException(404, "compte inconnu")
+        compte = await s.scalar(select(Compte).where(Compte.login == login, Compte.actif.is_(True)))
+        portee = {b.boite_id for b in await mailboxes(s, app)}
+        siennes = set(await s.scalars(select(Acces.boite_id).where(Acces.compte_id == compte.compte_id, Acces.fin.is_(None)))) if compte else set()
+        if not compte or not (portee & siennes):
+            log.warning("application « %s » : session refusée pour « %s » (hors portée)", app.nom, login); raise HTTPException(404, "compte inconnu")
+        jeton, maintenant = new_token(), datetime.now(timezone.utc)
+        expire = maintenant + timedelta(hours=8)
+        s.add(SessionModele(session_id=uuid7(), compte_id=compte.compte_id, jeton_empreinte=token_fingerprint(jeton),
+                            cree_le=maintenant, expire_le=expire, agent="délégation:" + app.nom))
+        await s.commit()
+        log.info("application « %s » : session déléguée ouverte pour %s", app.nom, login)
+        return {"jeton": jeton, "compte": login, "expire_le": expire.isoformat()}
+
     @action("PUT", "/axes/{axe}/valeurs")
     async def values(self, axe: str, request: Request, qui=Depends(current_reader), s: AsyncSession = Depends(async_session)):
         """Upsert d'un lot : la VALEUR est la clé stable (l'id chez l'application), le LIBELLÉ se
@@ -81,6 +138,7 @@ class ApplicationController(Controller):
             raise HTTPException(422, "valeurs : une liste de {valeur, libelle, actif?, ref_externe?} (%d au plus)" % MAX_VALUES)
         existants = {t.valeur: t for t in await s.scalars(select(Tag).where(Tag.axe_id == a.axe_id))}
         crees = modifies = 0
+        a_ranger = []      # les valeurs dont les ADRESSES sont neuves ou ont changé (D189)
         for v in lot:
             valeur = str((v or {}).get("valeur") or "").strip()
             if not valeur: raise HTTPException(422, "une valeur sans clé")
@@ -94,13 +152,20 @@ class ApplicationController(Controller):
                 t = Tag(tag_id=uuid7(), axe_id=a.axe_id, valeur=valeur, libelle=libelle,
                         ref_externe=v.get("ref_externe"), actif=v.get("actif", True) is not False)
                 s.add(t); existants[valeur] = t; crees += 1
+                if (t.ref_externe or {}).get("adresses"): a_ranger.append(t)
             elif (t.libelle, t.actif, t.ref_externe) != (libelle, v.get("actif", True) is not False, v.get("ref_externe", t.ref_externe)):
+                if (v.get("ref_externe") or {}).get("adresses") != (t.ref_externe or {}).get("adresses"): a_ranger.append(t)
                 t.libelle, t.actif = libelle, v.get("actif", True) is not False
                 if "ref_externe" in v: t.ref_externe = v["ref_externe"]
                 modifies += 1
+        await s.flush()
+        # LE TIERS CRÉÉ RANGE SES MESSAGES PASSÉS (D189 § 3) : la règle d'adresse ne voyait que les
+        # arrivées, et le tiers créé depuis le webmail restait sans ses messages jusqu'à un rattrapage
+        # manuel. Une valeur aux adresses neuves est appliquée tout de suite à l'historique de la portée.
+        ranges = await _range_history(s, app, a, [t for t in a_ranger if t.actif]) if a_ranger else 0
         await s.commit()
-        log.info("application « %s », axe %s : %d valeur(s) créée(s), %d modifiée(s)", app.nom, a.nom, crees, modifies)
-        return {"ok": True, "crees": crees, "modifies": modifies}
+        log.info("application « %s », axe %s : %d valeur(s) créée(s), %d modifiée(s), %d message(s) rangé(s)", app.nom, a.nom, crees, modifies, ranges)
+        return {"ok": True, "crees": crees, "modifies": modifies, "ranges": ranges}
 
 
 class AxesController(Controller):

@@ -29,7 +29,7 @@ function demarrer(stockage, opts) {
     matchMedia: () => ({ matches: false }),
     addEventListener: () => {}, alert: () => {}, confirm: () => true,
     location: { reload: () => {}, hash: (o && o.hash) || "" },
-    setTimeout, clearTimeout, encodeURIComponent, decodeURIComponent, Math, Date, JSON, Promise,
+    setTimeout, clearTimeout, encodeURIComponent, decodeURIComponent, Math, Date, JSON, Promise, URLSearchParams,
     /* pas de réseau dans le harnais : en mode produit sans serveur simulé, chaque
        appel rejette proprement — l'interface doit tenir avec une API qui répond
        « indisponible », c'est ce que le test du mode produit vérifie */

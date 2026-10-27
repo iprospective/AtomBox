@@ -32,5 +32,22 @@
       });
     },
   };
+  /* LE WEBMAIL INTÉGRÉ À UNE APPLICATION (F148). La page de l'ERP l'affiche dans un cadre avec une
+     session DÉLÉGUÉE dans le fragment : `#session=<jeton>&compte=<login>&integre=1`. Le fragment ne
+     part jamais au serveur (aucun journal ne le voit) ; on l'enregistre AVANT que le chargeur ne
+     choisisse son monde, puis on l'efface de l'adresse ET de l'historique. */
+  Session.depuisFragment = (loc, hist) => {
+    const h = new URLSearchParams(((loc && loc.hash) || "").replace(/^#/, ""));
+    if (h.get("integre") === "1") { try { sessionStorage.setItem("abx.integre", "1"); } catch (e) {} }
+    const jeton = h.get("session");
+    if (!jeton) return false;
+    Session.ouvrir({ mode: "api", jeton, compte: h.get("compte") || "" });
+    ["session", "compte", "integre"].forEach(k => h.delete(k));
+    const reste = h.toString();
+    try { hist.replaceState(null, "", loc.pathname + loc.search + (reste ? "#" + reste : "")); } catch (e) {}
+    return true;
+  };
+  Session.integre = () => { try { return sessionStorage.getItem("abx.integre") === "1"; } catch (e) { return false; } };
+  if (typeof location !== "undefined" && typeof history !== "undefined") Session.depuisFragment(location, history);
   ABX.Session = Session;
 })(window.ABX = window.ABX || {});
