@@ -56,7 +56,8 @@ function serveur(vus) {
                  { id: "sent", label: "Envoyés", icon: "📤", sortant: true },
                  { id: "trash", label: "Corbeille", icon: "🗑", vue: true }],
       util: [{ id: "d1", label: "Clients", icon: "📁", boite: "moi@exemple.fr" }],
-      axes: [{ id: "client", label: "Client", famille: null }, { id: "propal", label: "Propositions commerciales", famille: "dolibarr" },
+      axes: [{ id: "client", label: "Client", famille: null }, { id: "propal", label: "Propositions commerciales", famille: "dolibarr",
+               lien: "https://doli.example/comm/propal/card.php?id={id}" },
              { id: "commande", label: "Commandes clients", famille: "dolibarr" }],
       familles: [{ id: "dolibarr", label: "Dolibarr" }], valeurs: etat.valeurs,
       applications: [{ nom: "dolibarr-demo", type: "dolibarr", libelle: "Dolibarr", axe_tiers: "tiers", url: "https://doli.example",
@@ -427,6 +428,10 @@ function serveur(vus) {
   A.Controllers.List.charger(); await drainer(e);
   vrai(doc.getElementById("list").innerHTML.includes("PR2610-0012 — Tiers SA"), "et la puce de la liste montre le libellé");
   vrai(doc.getElementById("list").innerHTML.includes("Dolibarr › Propositions commerciales"), "la famille nomme l'axe au survol (D188)");
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m1" }, false); await drainer(e);
+  vrai(doc.getElementById("detail").innerHTML.includes('href="https://doli.example/comm/propal/card.php?id=123"'),
+       "le tag ouvre la fiche Dolibarr de la proposition (F149)");
+  vrai(!doc.getElementById("detail").innerHTML.includes("card.php?id=Acme"), "un axe sans modèle (client, à la main) n'a pas de lien");
 
   console.log("— la famille range les axes (D188) ————————————————————");
   A.Controllers.Nav.peindre();
