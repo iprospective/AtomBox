@@ -59,6 +59,9 @@ function serveur(vus) {
       axes: [{ id: "client", label: "Client", famille: null }, { id: "propal", label: "Propositions commerciales", famille: "dolibarr" },
              { id: "commande", label: "Commandes clients", famille: "dolibarr" }],
       familles: [{ id: "dolibarr", label: "Dolibarr" }], valeurs: etat.valeurs,
+      applications: [{ nom: "dolibarr-demo", type: "dolibarr", libelle: "Dolibarr", axe_tiers: "tiers", url: "https://doli.example",
+        creation: { tiers: "https://doli.example/societe/card.php?action=create&name={nom}&email={adresse}&url={domaine}",
+                    contact: "https://doli.example/contact/card.php?action=create&lastname={nom}&email={adresse}" } }],
       statuts: [{ id: "new", label: "Nouveau" }, { id: "todo", label: "À faire" }, { id: "processed", label: "Traité" }],
       vues: ["trash", "archives", "traites"], virtuels: etat.virtuels });
     /* le filtre en amont, comme le vrai : `boites=` restreint la liste ET les compteurs (D166) */
@@ -442,6 +445,19 @@ function serveur(vus) {
      "descendre propal l'échange avec commande, son voisin dans la famille (avant : " + ordreAvant + ")");
   const commandeBas = doc.getElementById("nav").querySelectorAll(".axop").find(b => b.dataset.mv === "down" && b.dataset.axe === "propal");
   vrai(commandeBas && "disabled" in commandeBas._attrs, "et propal, dernier de sa famille, ne descend pas chez « Autres axes »");
+
+  console.log("— l'expéditeur inconnu de Dolibarr (D189) ————————————————");
+  etat.messages.m2.tags = [];
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m2" }, false); await drainer(e);
+  const detInc = doc.getElementById("detail").innerHTML;
+  vrai(detInc.includes("est inconnu de") && detInc.includes("Dolibarr"), "un message sans tiers signale l'expéditeur inconnu");
+  vrai(detInc.includes("societe/card.php?action=create&amp;name=Paul&amp;email=paul%40exemple.fr&amp;url=exemple.fr"),
+       "« Créer le tiers » ouvre Dolibarr pré-rempli : nom, adresse encodée, domaine");
+  vrai(detInc.includes("contact/card.php?action=create&amp;lastname=Paul&amp;email=paul%40exemple.fr"), "« Ajouter comme contact » aussi");
+  etat.messages.m2.tags = [{ axe: "tiers", val: "7", source: "dolibarr", libelle: "Tessier" }];
+  A.Api.cache.message("m2").tags = etat.messages.m2.tags;
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m2" }, false); await drainer(e);
+  vrai(!doc.getElementById("detail").innerHTML.includes("est inconnu de"), "un message rangé sur un tiers ne le signale plus");
 
   bilan();
 })().catch(e => { console.error("  ✗ échec des parcours :", e.stack.split("\n").slice(0, 3).join(" | ")); process.exit(1); });

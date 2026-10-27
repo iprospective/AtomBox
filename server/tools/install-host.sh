@@ -112,9 +112,15 @@ grep -qE '^ATOMBOX_IMAP_HOST=.+' /etc/atombox/env && systemctl restart atombox-i
 # 8. le vhost (HTTP ; certbot le passe en HTTPS) et le crochet qui livre le certificat à l'IMAP
 if [ -n "$VHOST" ]; then
   for m in proxy proxy_http headers; do a2query -q -m "$m" 2>/dev/null || a2enmod -q "$m"; done
-  sed -e "s/atombox.dev.lxc/$VHOST/g" -e "s/127.0.0.1:8010/127.0.0.1:$PORT/g" "$R/server/tools/atombox.dev.lxc.conf" \
-    > "/etc/apache2/sites-available/$VHOST.conf"
-  a2ensite -q "$VHOST.conf"; apache2ctl configtest 2>&1 | grep -v "^Syntax OK" || true; systemctl reload apache2
+  # POSÉ UNE FOIS, JAMAIS RÉÉCRIT : certbot transforme ce vhost en redirection vers HTTPS. Le
+  # réécrire à chaque livraison a remis le webmail EN CLAIR sur le port 80 (mmi, 26/10).
+  if [ -f "/etc/apache2/sites-available/$VHOST.conf" ]; then
+    log "vhost $VHOST : déjà là, laissé tel quel"
+  else
+    sed -e "s/atombox.dev.lxc/$VHOST/g" -e "s/127.0.0.1:8010/127.0.0.1:$PORT/g" "$R/server/tools/atombox.dev.lxc.conf" \
+      > "/etc/apache2/sites-available/$VHOST.conf"
+    a2ensite -q "$VHOST.conf"; apache2ctl configtest 2>&1 | grep -v "^Syntax OK" || true; systemctl reload apache2
+  fi
   install -d /etc/letsencrypt/renewal-hooks/deploy
   cat > /etc/letsencrypt/renewal-hooks/deploy/atombox-imapd.sh <<HOOK
 #!/bin/sh

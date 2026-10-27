@@ -71,10 +71,11 @@ def monde(tmp_path_factory):
     admin.execute('DROP DATABASE "%s"' % nom); admin.close()
 
 
-def recevoir(monde, raw, boite="contact@exemple.fr"):
+def recevoir(monde, raw, boite="contact@exemple.fr", sens=None):
     from atombox.ingestion.ingestion import ingest
     b, d = monde["inbox"][boite]
-    return str(ingest(monde["session"], monde["store"], b, raw, dossier_id=d)["comm_id"])
+    kw = {"sens": sens} if sens else {}
+    return str(ingest(monde["session"], monde["store"], b, raw, dossier_id=d, **kw)["comm_id"])
 
 
 def tags(monde, cid):
@@ -173,8 +174,8 @@ def test_la_famille_range_les_axes(api, monde):
     ref = c.get("/api/v1/referentiels", headers=humain).json()
     assert {"id": "dolibarr", "label": "Dolibarr"} in ref["familles"]
     dolibarr = sorted(a["id"] for a in ref["axes"] if a["famille"] == "dolibarr")
-    assert dolibarr == ["commande", "commande_fournisseur", "facture", "facture_fournisseur", "projet", "propal"], \
-        "le connecteur range ses six axes dans sa famille"
+    assert dolibarr == ["commande", "commande_fournisseur", "facture", "facture_fournisseur", "projet", "propal", "tiers"], \
+        "le connecteur range ses sept axes dans sa famille (le tiers depuis D189)"
     # ranger à la main un axe sans famille, avec un libellé ; puis l'en sortir
     r = c.patch("/api/v1/axes/dossier_client", json={"famille": "interne", "famille_libelle": "Suivi interne"}, headers=humain)
     assert r.json() == {"ok": True, "axe": "dossier_client", "famille": "interne"}
@@ -187,3 +188,70 @@ def test_la_famille_range_les_axes(api, monde):
     assert c.patch("/api/v1/axes/inconnu", json={"famille": "x"}, headers=humain).status_code == 404
     assert c.patch("/api/v1/axes/propal", json={}, headers=humain).status_code == 422
     assert c.patch("/api/v1/axes/propal", json={"famille": "x"}, headers=appli).status_code == 401
+
+
+
+# ---- D189 : le tiers devient un axe, posé par une règle d'adresse (RM3547) --------------------------
+
+def _tiers(api, *valeurs):
+    c, humain, appli = api
+    r = c.put("/api/v1/axes/tiers/valeurs", json={"valeurs": list(valeurs)}, headers=appli)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_le_message_d_un_contact_se_range_sur_son_tiers(api, monde):
+    _tiers(api, {"valeur": "7", "libelle": "Tessier Industries", "adresses": ["Jean.Tessier@tessier.example", "compta@tessier.example"]})
+    recu = recevoir(monde, courrier("Question", "t1@tessier.example", de="jean.tessier@tessier.example"))
+    assert ("tiers", "7") in tags(monde, recu), "reçu d'un contact du tiers"
+    envoye = recevoir(monde, courrier("Réponse", "t2@exemple.fr", de="contact@exemple.fr", a="compta@tessier.example"), sens="out")
+    assert ("tiers", "7") in tags(monde, envoye), "un envoi se range chez celui à qui il est adressé"
+    inconnu = recevoir(monde, courrier("Bonjour", "t3@nouveau.example", de="quelquun@nouveau.example"))
+    assert not [t for t in tags(monde, inconnu) if t[0] == "tiers"], "l'inconnu n'a pas de tiers"
+
+
+def test_une_adresse_partagee_donne_deux_tiers(api, monde):
+    _tiers(api, {"valeur": "8", "libelle": "Atelier A", "adresses": ["cabinet@expert.example"]},
+                {"valeur": "9", "libelle": "Atelier B", "adresses": ["cabinet@expert.example"]})
+    cid = recevoir(monde, courrier("Bilans", "t4@expert.example", de="cabinet@expert.example"))
+    assert {("tiers", "8"), ("tiers", "9")} <= tags(monde, cid), "multi-classement (D017)"
+
+
+def test_hors_portee_la_regle_d_adresse_ne_pose_rien(api, monde):
+    cid = recevoir(monde, courrier("Ailleurs", "t5@tessier.example", de="jean.tessier@tessier.example", a="ventes@ailleurs.example"),
+                   boite="ventes@ailleurs.example")
+    assert not [t for t in tags(monde, cid) if t[0] == "tiers"]
+
+
+def test_le_tiers_cree_apres_coup_range_son_historique(api, monde):
+    from atombox import applications
+    cid = recevoir(monde, courrier("Premier contact", "t6@neuf.example", de="direction@neuf.example"))
+    assert not [t for t in tags(monde, cid) if t[0] == "tiers"]
+    _tiers(api, {"valeur": "10", "libelle": "Neuf SARL", "adresses": ["direction@neuf.example"]})
+    s = monde["session"]; s.expire_all()
+    assert applications.rescan(s, "dolibarr-demo") >= 1
+    assert ("tiers", "10") in tags(monde, cid)
+
+
+def test_le_webmail_sait_ou_creer_un_inconnu(api, monde):
+    c, humain, appli = api
+    assert c.get("/api/v1/referentiels", headers=humain).json()["applications"] == [], "sans adresse déclarée : pas de lien cassé"
+    assert c.patch("/api/v1/application", json={"url": "pas une url"}, headers=appli).status_code == 422
+    assert c.patch("/api/v1/application", json={"url": "https://doli.exemple.fr/"}, headers=appli).status_code == 200
+    (app,) = c.get("/api/v1/referentiels", headers=humain).json()["applications"]
+    assert app["axe_tiers"] == "tiers" and app["url"] == "https://doli.exemple.fr"
+    assert app["creation"]["tiers"].startswith("https://doli.exemple.fr/societe/card.php?action=create&name={nom}")
+    assert "{adresse}" in app["creation"]["contact"]
+
+
+def test_une_application_ancienne_recoit_les_axes_nouveaux(monde):
+    """l'application de mmi est née avec les six axes de D187 ; l'axe tiers (D189) lui manque"""
+    from atombox import applications
+    from atombox.schema.models import Application
+    from sqlalchemy import select
+    s = monde["session"]; s.expire_all()
+    app = s.scalar(select(Application).where(Application.nom == "dolibarr-demo"))
+    app.axes = [a for a in app.axes if a != "tiers"]; s.commit()
+    assert applications.declare_axes(s, "dolibarr-demo") == ["tiers"]
+    assert "tiers" in s.scalar(select(Application).where(Application.nom == "dolibarr-demo")).axes
+    assert applications.declare_axes(s, "dolibarr-demo") == [], "idempotent"

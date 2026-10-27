@@ -68,3 +68,42 @@ def apply_header_rule(s, comm_id, boite_id, message_id, in_reply_to, references)
                 n += 1
                 log.info("règle d'en-tête %s : %s=%s posé sur %s", app.nom, nom_axe, valeur, comm_id)
     return n
+
+
+def apply_address_rule(s, comm_id, boite_id, sens: str | None = None) -> int:
+    """LA RÈGLE D'ADRESSE (D189) : un message REÇU d'une adresse que porte une valeur de l'axe
+    déclaré (`regle_adresse.axe`, le tiers), ou ENVOYÉ vers l'une d'elles, reçoit le tag. Les
+    adresses d'une valeur sont dans `tag.ref_externe.adresses`, poussées par l'application.
+    Deux tiers qui partagent une adresse : deux tags (D017). Idempotent."""
+    from sqlalchemy.dialects.postgresql import array
+    from ..applications import mailbox_ids_sync
+    from ..schema.models import Adresse, Application, Axe, Comm, CommTag, Participant, Tag
+    apps = [a for a in s.scalars(select(Application).where(Application.actif.is_(True)))
+            if ((declaration(a.type_connecteur) or {}).get("regle_adresse") or {}).get("axe")]
+    if not apps: return 0
+    comm = s.get(Comm, comm_id)
+    if comm is None: return 0
+    if (sens or "in") == "in":
+        adresses = [comm.from_adresse] if comm.from_adresse else []
+    else:   # un envoi se range chez ceux à qui il est adressé
+        adresses = list(s.scalars(select(Adresse.adresse_complete).join(Participant, Participant.adresse_id == Adresse.adresse_id)
+                                  .where(Participant.comm_id == comm_id, Participant.role.in_(("to", "cc")))))
+    adresses = sorted({(a or "").strip().lower() for a in adresses if a and "@" in a})
+    if not adresses: return 0
+    n = 0
+    for app in apps:
+        if boite_id not in mailbox_ids_sync(s, app): continue
+        nom_axe = declaration(app.type_connecteur)["regle_adresse"]["axe"]
+        axe = s.scalar(select(Axe).where(Axe.nom == nom_axe, Axe.application_id == app.application_id))
+        if axe is None: continue
+        # `?|` : la liste des adresses de la valeur contient-elle l'une des nôtres ? Un balayage de
+        # l'axe — quelques milliers de tiers au plus ; un index viendra si le nombre l'exige.
+        tags = s.scalars(select(Tag).where(Tag.axe_id == axe.axe_id, Tag.actif.is_(True),
+                                           Tag.ref_externe["adresses"].op("?|")(array(adresses))))
+        for tag in tags:
+            if s.get(CommTag, (comm_id, tag.tag_id)) is None:
+                s.add(CommTag(comm_id=comm_id, tag_id=tag.tag_id, source=app.type_connecteur,
+                              application_id=app.application_id, pose_le=datetime.now(timezone.utc)))
+                n += 1
+                log.info("règle d'adresse %s : %s=%s posé sur %s", app.nom, nom_axe, tag.valeur, comm_id)
+    return n
