@@ -128,3 +128,25 @@ def test_le_dernier_appel_se_voit_et_la_revocation_coupe(api, monde):
     assert applications.revoke(s, "dolibarr-demo")
     assert c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=appli).status_code == 401
     assert c.get("/api/v1/messages", params={"dossier": "inbox"}, headers=humain).status_code == 200
+
+
+def test_les_echanges_d_un_tiers_par_ses_adresses(api, monde):
+    """D108, RM3523 — l'onglet « Échanges » d'une fiche tiers : tout le courrier avec ses adresses, dans
+    les deux sens, quel que soit le dossier ; jamais tout quand la liste est vide"""
+    from atombox.ingestion.ingestion import ingest
+    from atombox.schema.models import Dossier
+    from atombox.store import Store
+    from sqlalchemy import select
+    c, humain, appli = api
+    s = monde["session"]
+    inbox = s.scalar(select(Dossier).where(Dossier.alias_imap == "INBOX").order_by(Dossier.boite_id).limit(1))
+    ingest(s, Store(os.environ["ATOMBOX_STORE"]), inbox.boite_id, read("reponse.eml"), dossier_id=inbox.dossier_id)
+    def sujets(**p):
+        r = c.get("/api/v1/messages", params=dict({"dossier": "tous", "filtre": "tous"}, **p), headers=humain)
+        assert r.status_code == 200, r.text
+        return sorted(m["sujet"] for m in r.json()["messages"])
+    tessier = sujets(adresses="Jean.Tessier@tessier-industries.example")
+    assert len(tessier) == 2, "reçu de lui ET envoyé à lui : %s" % tessier
+    assert sujets(adresses="personne@nulle-part.example") == []
+    assert sujets(adresses="") == [], "une liste vide ne montre rien, jamais tout"
+    assert len(sujets(adresses="jean.tessier@tessier-industries.example,compta@fournisseur.example")) == 3

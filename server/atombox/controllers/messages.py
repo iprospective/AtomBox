@@ -37,9 +37,9 @@ class MessagesController(Controller):
     @action("GET", "")
     async def listing(self, dossier: str = Query("inbox"), kind: str | None = None, axe: str | None = None, filtre: str | None = "file",
                     tri: str | None = "date_desc", sens: str | None = None, statut: str | None = None, tout: int = 0,
-                    boites: str | None = None,
+                    boites: str | None = None, adresses: str | None = None,
                     compte: Compte = Depends(current_reader), s: AsyncSession = Depends(async_session)):
-        l = await svc.listing(s, compte, dossier, kind, filtre, tri, sens, statut, tout=bool(tout), wanted=boites)
+        l = await svc.listing(s, compte, dossier, kind, filtre, tri, sens, statut, tout=bool(tout), wanted=boites, adresses=adresses)
         log.debug("liste %s/%s pour %s : %d", dossier, filtre, compte.login, len(l))
         return {"messages": l, "total": len(l)}
 
