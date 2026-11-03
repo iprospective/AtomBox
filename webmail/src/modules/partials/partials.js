@@ -179,8 +179,26 @@
   });
 
   /* ---- contexte métier --------------------------------------------------- */
+  /* LE CONTEXTE MÉTIER SERVI (F047) : ce que l'application a POUSSÉ avec le tiers — encours, échu,
+     objets ouverts —, livré avec le détail du message. Rien de calculé ni de demandé ici. */
+  const cible = () => ABX.Session && ABX.Session.integre() ? "_top" : "_blank";
+  const lienOuTexte = (url, texte) => url
+    ? `<a target="${cible()}" rel="noopener" href="${F.esc(url)}">${F.esc(texte)}</a>` : F.esc(texte);
+  R.define("erp.contexte", ({ m }) => (m.contexte || []).map(x => `<div class="box erp"><h4>📇 ${F.esc(x.application)} — contexte métier</h4>
+      <div class="kv"><span class="k">Tiers</span><span><b>${lienOuTexte(x.tiers.lien, x.tiers.libelle)}</b></span></div>
+      ${x.encours != null ? `<div class="kv"><span class="k">Encours</span><span><b>${F.euro(x.encours)}</b>
+        ${x.echu ? `<span class="st due">dont ${F.euro(x.echu)} échu</span>` : `<span class="st ok">rien d'échu</span>`}</span></div>` : ""}
+      ${(x.objets || []).length ? `<table class="erpl">${x.objets.map(o => `<tr>
+        <td>${F.esc(o.libelle || o.axe || "")}</td><td><b>${lienOuTexte(o.lien, o.reference || "")}</b></td>
+        <td class="num">${o.montant != null ? F.euro(o.montant) : ""}</td>
+        <td class="num"><span class="st ${F.esc(o.etat || "wait")}">${F.esc(o.statut || "")}</span></td></tr>`).join("")}</table>`
+        : `<div class="dmeta">aucun objet ouvert</div>`}
+      ${x.maj ? `<div class="dmeta" style="margin-top:6px">à jour au ${new Date(x.maj).toLocaleString("fr-FR")} — poussé par ${F.esc(x.application)}</div>` : ""}
+    </div>`).join(""));
+
   R.define("erp.panel", ({ m }) => {
     if (ABX.V0()) return "";
+    if (Array.isArray(m.contexte)) return R.render("erp.contexte", { m });   // le produit : le contexte servi
     const Erp = ABX.Erp, t = Erp.tagDe(m);
     if (!t) return "";
     const f = Erp.fiche(t.axe, t.val);

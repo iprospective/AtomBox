@@ -507,6 +507,33 @@ def _composition(r: Rattachement, c: Comm, ds: dict, adresse: str, dest: list, c
             "a": ", ".join(dest), "cc": ", ".join(copies), "sujet": c.sujet or "",
             "corps": corps, "pieces_jointes": [], "reference": ref}
 
+async def _contexts(s: AsyncSession, comm_id) -> list[dict]:
+    """LE CONTEXTE MÉTIER (F047, D021) : pour chaque tiers d'application que porte le message, ce que
+    l'application a POUSSÉ avec lui — encours, échu, objets ouverts. Affiché, jamais calculé ni
+    demandé ici : AtomBox n'appelle pas l'ERP. Les objets reçoivent le lien de leur fiche (F149)."""
+    from ..schema.models import Application, Axe, CommTag, Tag
+    from ..connectors import declaration
+    rows = (await s.execute(select(Tag, Axe, Application).join(CommTag, CommTag.tag_id == Tag.tag_id)
+                            .join(Axe, Axe.axe_id == Tag.axe_id).join(Application, Application.application_id == Axe.application_id)
+                            .where(CommTag.comm_id == comm_id, Application.actif.is_(True)))).all()
+    out = []
+    for tag, axe, app in rows:
+        d = declaration(app.type_connecteur) or {}
+        ctx = (tag.ref_externe or {}).get("contexte")
+        if axe.nom != (d.get("regle_adresse") or {}).get("axe") or not isinstance(ctx, dict): continue
+        url = ((app.parametres or {}).get("url") or "").rstrip("/")
+        fiches = d.get("fiches") or {}
+        lien = lambda nom_axe, i: (url + fiches[nom_axe]).replace("{id}", str(i)) if url and nom_axe in fiches and i is not None else None
+        objets = []
+        for o in (ctx.get("objets") or [])[:20]:
+            if isinstance(o, dict): objets.append(dict(o, lien=lien(o.get("axe"), o.get("id"))))
+        out.append({"application": d.get("libelle") or app.type_connecteur,
+                    "tiers": {"id": tag.valeur, "libelle": tag.libelle, "lien": lien(axe.nom, tag.valeur)},
+                    "encours": ctx.get("encours"), "echu": ctx.get("echu"), "devise": ctx.get("devise") or "EUR",
+                    "objets": objets, "maj": ctx.get("maj")})
+    return out
+
+
 async def detail(s: AsyncSession, compte: Compte, comm_id, sens=None, store=None) -> dict | None:
     boites = [b.boite_id for b in await account_mailboxes(s, compte)]
     r = await s.scalar(_place(comm_id, boites, sens))
@@ -535,6 +562,9 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, sens=None, store=None
         "tags": (await tags_of(s, [comm_id])).get(comm_id, []), "reference": ref,
         "destinataires": list(dest) + list(copies), "composition": _composition(r, c, ds, adresse, dest, copies, corps, ref),
         "corps": corps, "reponse_possible": e.reponse_possible if e else None, "list_id": e.list_id if e else None,
+        # le contexte métier (F047) : seulement au DÉTAIL — absent de la liste et du fil, il n'y est pas
+        # écrasé par la fusion du cache du webmail (la leçon du fil sans tags, 27/10)
+        "contexte": await _contexts(s, comm_id),
         "pieces_jointes": [ {"pj_id": str(p.piece_jointe_id), "ordre": l.ordre, "nom": l.nom_declare or ("piece-%d" % l.ordre), "octets": p.taille_octets,
                              "mime_declare": l.type_declare, "mime_detecte": p.type_detecte, "sha256": p.blob_ref, "partage_par": p.nb_references,
                              "content_id": l.content_id, "disposition": l.disposition,

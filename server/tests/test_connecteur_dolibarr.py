@@ -323,3 +323,26 @@ def test_seuls_atombox_et_les_applications_deleguees_encadrent_le_webmail(api, m
     assert "https://doli.exemple.fr" in csp and "/sous/chemin" not in csp, "l'ORIGINE, pas le chemin : %s" % csp
     assert "content-security-policy" not in {k.lower() for k in c.get("/api/v1/referentiels", headers=humain).headers}, \
         "l'API n'en a pas besoin"
+
+
+# ---- F047 : le contexte métier poussé avec le tiers (RM3549) ----------------------------------------
+
+def test_le_contexte_du_tiers_accompagne_le_message(api, monde):
+    c, humain, appli = api
+    c.patch("/api/v1/application", json={"url": "https://doli.exemple.fr"}, headers=appli)
+    ctx = {"encours": 2640.0, "echu": 1440.0, "devise": "EUR", "maj": "2026-10-27T10:00:00+00:00",
+           "objets": [{"axe": "facture", "id": "12", "reference": "FA2610-0003", "libelle": "Facture", "montant": 1440.0, "statut": "impayée", "etat": "due"},
+                      {"axe": "propal", "id": "4", "reference": "PR2610-0009", "libelle": "Proposition", "montant": 1200.0, "statut": "ouverte", "etat": "wait"}]}
+    _tiers(api, {"valeur": "20", "libelle": "Contexte SA", "adresses": ["achat@contexte.example"], "ref_externe": {"contexte": ctx}})
+    cid = recevoir(monde, courrier("Relance", "t8@contexte.example", de="achat@contexte.example"))
+    d = c.get("/api/v1/messages/" + cid, headers=humain).json()
+    (x,) = d["contexte"]
+    assert x["application"] == "Dolibarr" and x["tiers"] == {"id": "20", "libelle": "Contexte SA", "lien": "https://doli.exemple.fr/societe/card.php?socid=20"}
+    assert (x["encours"], x["echu"]) == (2640.0, 1440.0)
+    assert x["objets"][0]["lien"] == "https://doli.exemple.fr/compta/facture/card.php?facid=12"
+    # sans contexte poussé, rien : pas de panneau inventé
+    sans = recevoir(monde, courrier("Bonjour", "t9@tessier.example", de="jean.tessier@tessier.example"))
+    assert c.get("/api/v1/messages/" + sans, headers=humain).json()["contexte"] == []
+    # la liste et le fil ne portent pas de contexte : la fusion du cache ne l'efface pas
+    fil = c.get("/api/v1/messages/%s/fil" % cid, headers=humain).json()["messages"]
+    assert all("contexte" not in m for m in fil)
