@@ -459,6 +459,11 @@ function serveur(vus) {
   vrai(detInc.includes("societe/card.php?action=create&amp;name=Paul&amp;email=paul%40exemple.fr&amp;url=exemple.fr"),
        "« Créer le tiers » ouvre Dolibarr pré-rempli : nom, adresse encodée, domaine");
   vrai(detInc.includes("contact/card.php?action=create&amp;lastname=Paul&amp;email=paul%40exemple.fr"), "« Ajouter comme contact » aussi");
+  etat.messages.m3.tags = []; etat.messages.m3.from_adresse = "moi@exemple.fr";
+  A.Api.cache.message("m3") && Object.assign(A.Api.cache.message("m3"), { tags: [], from_adresse: "moi@exemple.fr" });
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m3" }, false); await drainer(e);
+  vrai(!doc.getElementById("detail").innerHTML.includes("est inconnu de"), "une de mes boîtes n'est jamais signalée inconnue (copie d'un envoi de l'ERP)");
+  A.Controllers.Tabs.ouvrir({ type: "msg", id: "m2" }, false); await drainer(e);
   etat.messages.m2.tags = [{ axe: "tiers", val: "7", source: "dolibarr", libelle: "Tessier" }];
   A.Api.cache.message("m2").tags = etat.messages.m2.tags;
   A.Controllers.Tabs.ouvrir({ type: "msg", id: "m2" }, false); await drainer(e);
