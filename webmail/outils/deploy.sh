@@ -73,7 +73,7 @@ fi
 export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-/run/user/$(id -u)/ssh-agent.sock}"
 
 echo "→ index du CDC"
-python3 "$RACINE/../outils/gen-cdc-index.py"
+python3 "$RACINE/../tools/gen-cdc-index.py"
 
 echo "→ feuille de style (scss par module → css/app.css)"
 [ -d node_modules ] || npm ci --no-audit --no-fund
