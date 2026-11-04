@@ -16,6 +16,7 @@
     peindre(quoi) {
       const q = quoi || "all";
       let attente = Promise.resolve();
+      App.ecarterOrphelins();
       if (q === "all" || q === "tabs")   ABX.Controllers.Tabs.peindre();
       if (q === "all" || q === "nav")    ABX.Controllers.Nav.peindre();
       if (q === "all" || q === "list")   attente = ABX.Controllers.List.charger();
@@ -24,8 +25,20 @@
       return attente;
     },
 
+    /* UN ONGLET DONT LE MODULE N'EST PAS CHARGÉ est écarté, pas peint. Un onglet « page » (aide, CDC
+       de la maquette) mémorisé dans le navigateur survit au passage en mode produit, qui ne charge
+       pas ce module : peindre son titre jetait une exception, et plus aucun message ne s'ouvrait
+       (04/11). */
+    ecarterOrphelins() {
+      const ui = St.ui, servi = t => t.type !== "page" || (ABX.Controllers.Pages && ABX.Views.Pages);
+      if (ui.tabs.every(servi)) return;
+      ui.tabs = ui.tabs.filter(servi);
+      if (!ui.tabs.some(t => t.key === ui.tab)) ui.tab = ui.tabs.length ? ui.tabs[ui.tabs.length - 1].key : null;
+    },
+
     /* Le panneau de détail affiche l'onglet actif : un message, ou une composition. */
     peindreDetail() {
+      App.ecarterOrphelins();
       const ui = St.ui, t = ui.tabs.find(x => x.key === ui.tab);
       if (!t) return void D.paint("detail", `<div class="empty">Aucun onglet ouvert.<br><br>
         <small>Clique un message pour l'ouvrir, double-clique pour l'épingler.<br>
