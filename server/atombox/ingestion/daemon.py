@@ -124,6 +124,12 @@ def sync_down(s, releve: Poller, boite_id, adresse: str, dossier, batch: int = 5
         change = apply_down_sync(s, r, f)
         if change:
             n += 1
+            # ÉTAT.DESCENDU (RM3632) : un changement venu du fournisseur (un client branché directement
+            # sur le serveur mail) se voit aussi en direct. Pas `rattachement.change` : celui-là
+            # repartirait vers le fournisseur — la boucle.
+            from ..modules import events
+            events.emit(s, "etat.descendu", {"comm_id": str(r.comm_id), "boite_id": str(r.boite_id),
+                                              "sens": r.sens, "change": change}, cible=None)
             log.info("%s/%s uid %d : %s (venu d'IMAP)", adresse, dossier.alias_imap, uid, ", ".join(change))
     if n: s.commit()
     return n

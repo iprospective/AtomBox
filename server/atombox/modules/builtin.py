@@ -6,6 +6,7 @@ from ..controllers.status import StatusController
 from ..controllers.references import ReferencesController
 from ..controllers.tree import TreeController
 from ..controllers.messages import MessagesController
+from ..controllers.live import EventsController
 from ..controllers.folders import VirtualFoldersController, SettingsController, AttachmentsController
 from ..controllers.search import SearchController
 from ..controllers.applications import ApplicationController, AxesController
@@ -37,6 +38,7 @@ class ModuleMessages(Module):
     nom = "messages"; version = "0.1"; description = "référentiels, arborescence, liste, message, fil, rattachement, création — ce que le webmail lit (D141)"; interne = True
     controllers = [ReferencesController, TreeController, MessagesController, VirtualFoldersController,
                    SettingsController, AttachmentsController, SearchController,
-                   FoldersController, IdentitiesController, AddressBookController, ApplicationController, AxesController]
+                   FoldersController, IdentitiesController, AddressBookController, ApplicationController, AxesController,
+                   EventsController]
 
 BUILTIN_MODULES = [ModuleSession, ModuleStatus, ModuleIngestion, ModuleMessages, SendingModule, ModuleSync]

@@ -45,6 +45,16 @@ def _mirror(adresse: str, action: str, *args) -> None:
         rel.close()
 
 
+def _announce(s, boite_id, quoi: str, alias: str, avant: str | None = None):
+    """DOSSIER.CHANGE (RM3632) : le direct le relaie aux écrans de cette boîte — un dossier créé, renommé
+    ou supprimé ailleurs (Thunderbird, un autre onglet) apparaît sans recharger. Synchrone ou non."""
+    from ..modules import events
+    charge = {"boite_id": str(boite_id), "quoi": quoi, "dossier": alias, **({"avant": avant} if avant else {})}
+    if s.__class__.__name__ == "AsyncSession":
+        return events.emit_async(s, "dossier.change", charge, cible=None)
+    events.emit(s, "dossier.change", charge, cible=None)
+
+
 def serialize_folder(d: Dossier) -> dict:
     return {"id": str(d.dossier_id), "nom": d.nom, "alias_imap": d.alias_imap,
             "protege": bool(d.protege), "ordre": d.ordre}
@@ -120,7 +130,9 @@ async def create_folder(s: AsyncSession, boite: Boite, nom: str, parent: Dossier
     _mirror((await s.get(Adresse, boite.adresse_id)).adresse_complete, "create_folder", alias)
     d = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom=nom, alias_imap=alias,
                 parent_id=parent.dossier_id if parent else None, protege=False)
-    s.add(d); await s.commit()
+    s.add(d); await s.flush()
+    await _announce(s, boite.boite_id, "cree", alias)
+    await s.commit()
     log.info("dossier « %s » créé dans %s", alias, boite.boite_id)
     return serialize_folder(d)
 
@@ -137,6 +149,7 @@ async def rename_folder(s: AsyncSession, boite: Boite, d: Dossier, nom: str) -> 
     for enfant in await s.scalars(select(Dossier).where(Dossier.boite_id == boite.boite_id,
                                                          Dossier.alias_imap.like(old + "/%"))):
         enfant.alias_imap = alias + enfant.alias_imap[len(old):]
+    await _announce(s, boite.boite_id, "renomme", alias, old)
     await s.commit()
     return serialize_folder(d)
 
@@ -146,6 +159,7 @@ async def delete_folder(s: AsyncSession, boite: Boite, d: Dossier) -> None:
     check_deletable(d, n or 0, k or 0)
     _mirror((await s.get(Adresse, boite.adresse_id)).adresse_complete, "delete_folder", d.alias_imap)
     await s.execute(forget_as_origin(d.dossier_id))
+    await _announce(s, boite.boite_id, "supprime", d.alias_imap)
     await s.delete(d); await s.commit()
     log.info("dossier « %s » supprimé", d.alias_imap)
 
@@ -167,6 +181,7 @@ def create_folder_sync(s, boite: Boite, alias: str) -> Dossier:
             d = Dossier(dossier_id=uuid7(), boite_id=boite.boite_id, nom=readable(parts[i]), alias_imap=a,
                         parent_id=parent.dossier_id if parent else None, protege=False)
             s.add(d); s.flush()
+            _announce(s, boite.boite_id, "cree", a)
             log.info("dossier « %s » créé dans %s (IMAP)", a, boite.boite_id)
         elif d.exit_reason:
             raise FolderRefused("on ne range pas de dossier sous une boîte d'état (%s)" % a, "CANNOT")
@@ -202,6 +217,7 @@ def rename_folder_sync(s, boite: Boite, d: Dossier, new_alias: str) -> Dossier:
     for enfant in s.scalars(select(Dossier).where(Dossier.boite_id == boite.boite_id,
                                                   Dossier.alias_imap.like(old + "/%"))):
         enfant.alias_imap = new + enfant.alias_imap[len(old):]
+    _announce(s, boite.boite_id, "renomme", new, old)
     s.commit()
     log.info("dossier « %s » renommé « %s » (IMAP)", old, new)
     return d
@@ -213,6 +229,7 @@ def delete_folder_sync(s, boite: Boite, d: Dossier) -> None:
     check_deletable(d, n or 0, k or 0)
     _mirror(s.get(Adresse, boite.adresse_id).adresse_complete, "delete_folder", d.alias_imap)
     s.execute(forget_as_origin(d.dossier_id))
+    _announce(s, boite.boite_id, "supprime", d.alias_imap)
     s.delete(d); s.commit()
     log.info("dossier « %s » supprimé (IMAP)", d.alias_imap)
 

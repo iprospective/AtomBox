@@ -84,6 +84,15 @@ async def _scope(s: AsyncSession, compte: Compte, comm_id) -> bool:
     return r is not None
 
 
+async def _announce(s: AsyncSession, comm_id, axe: str, valeur: str, quoi: str):
+    """TAGS.CHANGE (RM3632) : relayé aux écrans des boîtes où le message a une place"""
+    from ..modules import events
+    from ..schema.models import Rattachement
+    boites = [str(b) for b in await s.scalars(select(Rattachement.boite_id).where(Rattachement.comm_id == comm_id).distinct())]
+    await events.emit_async(s, "tags.change", {"comm_id": str(comm_id), "boites": boites, "axe": axe,
+                                               "val": valeur, "quoi": quoi}, cible=None)
+
+
 async def add(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur: str,
                 source: str = "manuel") -> list | None:
     """Rend la liste des tags du message, ou None si le message est hors de portée."""
@@ -113,6 +122,8 @@ async def add(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur: st
         s.add(CommTag(comm_id=comm_id, tag_id=tag.tag_id, source=source,
                       application_id=app.application_id if app is not None else None,
                       pose_le=datetime.now(timezone.utc)))
+        await s.flush()
+        await _announce(s, comm_id, axe.nom, tag.valeur, "pose")
         await s.commit()
         log.info("tag %s=%s posé sur %s par %s (%s)", axe.nom, tag.valeur, comm_id, compte.login, source)
     else:
@@ -141,6 +152,7 @@ async def remove(s: AsyncSession, compte: Compte, comm_id, axe_nom: str, valeur:
         log.warning("tag %s=%s retiré à la main sur %s alors qu'il vient de « %s » — il sera reposé",
                     axe.nom, tag.valeur, comm_id, link.source)
     await s.delete(link)
+    await _announce(s, comm_id, axe.nom, tag.valeur, "retire")
     await s.commit()
     log.info("tag %s=%s retiré de %s par %s", axe.nom, tag.valeur, comm_id, compte.login)
     return (await tags_of(s, [comm_id])).get(comm_id, [])
