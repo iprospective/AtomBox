@@ -19,7 +19,7 @@
   "use strict";
   const TETE    = ["src/poc/prng.js", "src/poc/markdown.js", "src/poc/journal-requetes.service.js", "src/poc/cdc-index.js"];
   const DONNEES = ["src/poc/fixtures.js", "src/poc/corpus.js"];
-  const FIN     = ["src/poc/contexte.cdc.js", "src/poc/journal-requetes.vue.js", "src/poc/pages.vue.js",
+  const FIN     = ["src/poc/contexte.cdc.js", "src/poc/journal-requetes.vue.js", "src/poc/fiches.vue.js", "src/poc/pages.vue.js",
                    "src/poc/api-trace.js", "src/poc/serveur.poc.js",
                    "src/poc/pages.controleur.js", "src/poc/pocbar.js"];
   const Chargeur = {

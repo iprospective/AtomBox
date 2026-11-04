@@ -163,6 +163,27 @@ js = """/* INDEX DU CDC — FICHIER GÉNÉRÉ, ne pas éditer à la main.
                     "plan": plan, "vrac": vrac, "modele": modele },
                   ensure_ascii=False, indent=2))
 
+# ---- LE CDC ATOMIQUE (RM3627) : l'index composé par le moteur (`pm-cdc.py composer`, RM3626) ----
+# Les objets un par un, leurs relations TYPÉES et leurs inverses calculés : c'est ce qui donne à la
+# visionneuse une FICHE par fonctionnalité, avec toute la chaîne de ses décisions. Le moteur vit
+# dans le système PM ; sans lui (un poste sans PM), la visionneuse garde ses vues d'avant.
+def atome():
+    import subprocess, sys
+    pm = os.path.join(os.environ.get("MMI_PM_CORE", "/zfs/workspaces/.mmi-pm-core"), "scripts", "pm-cdc.py")
+    if not os.path.isfile(pm) or not os.path.isdir(os.path.join(CDC, "cdc")):
+        print("gen : pas de CDC atomique (ou pas de moteur) — fiches absentes"); return None
+    r = subprocess.run([sys.executable, pm, "--docs-dir", CDC, "composer"], capture_output=True, text=True)
+    if r.returncode:
+        print("gen : le moteur a échoué — fiches absentes : " + r.stderr[-300:]); return None
+    ix = json.loads(r.stdout)
+    for o in ix["objets"].values():            # la prose des chapitres est déjà dans `textes`
+        if o.get("type") == "chapitre": o["corps"] = ""
+    return ix
+
+_ATOME = atome()
+if _ATOME is not None:
+    js = js.replace("  ABX.CDC = ", "  ABX.CDC_ATOME = %s;\n  ABX.CDC = " % json.dumps(_ATOME, ensure_ascii=False), 1)
+
 io.open(os.path.abspath(SORTIE), "w", encoding="utf-8").write(js)
 print("%s : %d décisions, %d questions, %d chapitres, %d fonctionnalités, %d entités, %d sections, %d notes de vrac, %d fichiers du modèle, %d Ko"
       % (os.path.relpath(SORTIE), len(decisions), len(questions), len(chapitres),

@@ -6,6 +6,8 @@
   "use strict";
   const F = ABX.Fmt, P = ABX.Providers;
 
+  /* les fiches du CDC atomique (RM3627) — présentes si l'index atomique a été embarqué */
+  const Fi = () => (ABX.CDC_ATOME && ABX.Views.Fiche) || null;
   const PAGES = [["aide","Aide"], ["features","Fonctionnalités"],
                  ["cdc","CDC"], ["dict","Dictionnaire"], ["roadmap","Feuille de route"]];
 
@@ -197,13 +199,13 @@
       <tr>${COLS_F.map(([k, l]) => `<th class="trih${k === tri ? " on" : ""}" data-trif="${k}">${l}${k === tri ? (desc ? " ↓" : " ↑") : ""}</th>`).join("")}</tr>
       ${feats.map(f => `<tr>
         <td>${f.rang || "—"}</td>
-        <td><b>${F.esc(f.id)}</b></td>
-        <td>${F.esc(f.libelle)}</td>
+        <td><b>${Fi() ? Fi().lien(f.id) : F.esc(f.id)}</b></td>
+        <td>${Fi() && Fi().objet(f.id) ? Fi().lien(f.id, f.libelle) : F.esc(f.libelle)}</td>
         <td class="hint">${F.esc(f.domaine)}</td>
         <td>${jal(f.jalon)}</td>
         <td><span class="st ${ETATS[f.etat] || ""}">${F.esc(f.etat)}</span></td>
-        <td class="hash">${f.depend_de === null || f.depend_de === undefined ? "<i>à renseigner</i>" : (f.depend_de.length ? f.depend_de.join(", ") : "racine")}</td>
-        <td><span class="hash">${F.esc(f.refs)}</span></td></tr>`).join("")}
+        <td class="hash">${f.depend_de === null || f.depend_de === undefined ? "<i>à renseigner</i>" : (f.depend_de.length ? f.depend_de.map(x => Fi() ? Fi().lien(x) : F.esc(x)).join(", ") : "racine")}</td>
+        <td><span class="hash">${(f.decisions || []).concat(f.questions || []).map(x => Fi() ? Fi().lien(x) : F.esc(x)).join(", ") || "—"}</span></td></tr>`).join("")}
       </table></div>`;
   }
 
@@ -402,7 +404,7 @@
           <div class="chips" style="margin-top:9px">${PAGES.map(([k, l]) =>
             `<span class="chip${k === p ? " on" : ""}" data-page="${k}">${l}</span>`).join("")}</div>
         </div>
-        <div class="admin doc">${RENDU[p]()}</div>`;
+        <div class="admin doc">${Fi() && ABX.Store.ui.fiche ? Fi().render(ABX.Store.ui.fiche) : ""}${RENDU[p]()}</div>`;
     },
   };
 })(window.ABX = window.ABX || {});

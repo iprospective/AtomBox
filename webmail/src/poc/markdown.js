@@ -22,9 +22,12 @@
     t = t.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<i>$2</i>");
     t = t.replace(/~~([^~]+)~~/g, "<s>$1</s>");
     /* D138, Q054, C009 : cliquables vers leur section quand elle existe */
-    t = t.replace(/\b([DQC]\d{2,3}b?)\b/g, (m0, id) =>
-      ABX.CDC && ABX.CDC.sections && ABX.CDC.sections[id]
-        ? `<a href="#" class="cdc-lien" data-sec="${id}">${id}</a>` : m0);
+    /* RM3627 : tout identifiant qui a une FICHE (F, D, Q, C, N) y mène ; sinon, la section du registre */
+    t = t.replace(/\b([FDQCN]\d{2,4}[a-z]?)\b/g, (m0, id) =>
+      ABX.CDC_ATOME && ABX.Views.Fiche && ABX.Views.Fiche.objet(id)
+        ? `<a href="#" class="cdc-fiche" data-fiche="${ABX.Views.Fiche.objet(id).id}">${id}</a>`
+        : ABX.CDC && ABX.CDC.sections && ABX.CDC.sections[id]
+          ? `<a href="#" class="cdc-lien" data-sec="${id}">${id}</a>` : m0);
     return t;
   }
 
