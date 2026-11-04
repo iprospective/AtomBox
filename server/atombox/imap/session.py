@@ -174,11 +174,27 @@ class Session:
         if "FAST" in requested: requested = ["FLAGS", "INTERNALDATE", "RFC822.SIZE"]
         elif "ALL" in requested: requested = ["FLAGS", "INTERNALDATE", "RFC822.SIZE", "ENVELOPE"]
         elif "FULL" in requested: requested = ["FLAGS", "INTERNALDATE", "RFC822.SIZE", "ENVELOPE", "BODY"]
+        # LIRE LE CORPS MARQUE LU (RFC 3501 § 6.4.5) : `BODY[…]` sans `.PEEK`, `RFC822`, `RFC822.TEXT`.
+        # Le 04/11, l'application mail d'Android : un message lu sur le téléphone redevenait non lu à
+        # la synchronisation suivante — elle compte sur ce marquage implicite, quand Thunderbird envoie
+        # un STORE explicite. Jamais en lecture seule (EXAMINE), jamais sur un PEEK. Le changement se
+        # dit dans la même réponse : FLAGS est ajouté pour les messages qui viennent d'être marqués.
+        implicit = not self.read_only and any(
+            d.startswith("BODY[") or d in ("RFC822", "RFC822.TEXT") for d in requested)
+        marked = set()
+        if implicit:
+            unseen = [u for u in targeted if (lambda m: m is not None and "\\Seen" not in m.flags)(
+                self.view.message(self.mailbox, u))]
+            if unseen:
+                self.view.store_flags(self.compte, self.mailbox, unseen, ["\\Seen"], [])
+                marked = set(unseen)
         lines = []
         for uid in targeted:
             m = self.view.message(self.mailbox, uid)
             if m is None: continue
             chunks = []
+            if uid in marked and "FLAGS" not in requested:
+                chunks += self._element(m, "FLAGS")
             # UID TOUJOURS RENDU sur un UID FETCH, même si le client ne l'a pas demandé : la
             # RFC l'impose, et un client qui ne le reçoit pas ne sait pas de quoi on lui parle.
             if by_uid and "UID" not in requested: requested = requested + ["UID"]
