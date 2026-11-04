@@ -130,7 +130,7 @@ def test_un_vrai_client_se_connecte_liste_et_lit(serveur_imap):
 
         code, data = c.uid("FETCH", listing[0], "(BODY.PEEK[])")
         raw = data[0][1]
-        expected = serveur_imap["magasin"].read(_blob(serveur_imap["session"], int(listing[0])))
+        expected = serveur_imap["magasin"].read_message(_comm(serveur_imap["session"], int(listing[0])))
         assert raw == expected, "l'octet servi est CELUI DU MAGASIN, pas une reconstruction (D025, RM3213)"
 
         code, data = c.uid("FETCH", listing[0], "(FLAGS RFC822.SIZE ENVELOPE)")
@@ -158,7 +158,7 @@ def test_l_octet_servi_est_celui_du_magasin_MEME_avec_des_accents(serveur_imap):
         uid = c.uid("SEARCH", None, "ALL")[1][0].split()[0]
         code, data = c.uid("FETCH", uid, "(BODY.PEEK[])")
         servi = data[0][1]
-        expected = serveur_imap["magasin"].read(_blob(serveur_imap["session"], int(uid)))
+        expected = serveur_imap["magasin"].read_message(_comm(serveur_imap["session"], int(uid)))
         assert b"D\xc3\xa9veloppement" in servi, "l'accent est double-encodé : %r" % servi[-60:]
         assert servi == expected, "l'octet servi n'est pas celui du magasin"
         entete = data[0][0].decode("latin-1")
@@ -196,11 +196,11 @@ def test_ce_qu_on_ne_sert_pas_est_refuse_franchement(serveur_imap):
         except Exception: pass
 
 
-def _blob(session, uid):
+def _comm(session, uid):
+    """le message servi sous `uid` : relu par son UUID, reconstitué (RM3631)"""
     from sqlalchemy import select
-    from atombox.schema.models import CommEmail, Rattachement
-    r = session.scalar(select(Rattachement).where(Rattachement.uid_servi == uid))
-    return session.get(CommEmail, r.comm_id).blob_ref
+    from atombox.schema.models import Rattachement
+    return str(session.scalar(select(Rattachement).where(Rattachement.uid_servi == uid)).comm_id)
 
 
 def _etat(session, sujet_ou_uid=None, comm_id=None):

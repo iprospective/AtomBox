@@ -550,7 +550,7 @@ async def detail(s: AsyncSession, compte: Compte, comm_id, sens=None, store=None
     if store is not None and store.exists(str(comm_id)):
         try:
             from ..ingestion.analysis import analyze
-            corps = analyze(store.read(str(comm_id))).corps_texte
+            corps = analyze(store.read_message(str(comm_id))).corps_texte
         except Exception as ex: log.warning("corps de %s illisible : %s", comm_id, ex)
     from .tags import tags_of
     provenance = await _provenance_of(s, comm_id)
@@ -807,7 +807,7 @@ async def _source_to_forward(s: AsyncSession, compte: Compte, corps: dict, store
         log.warning("transfert refuse : %s hors de la portee de %s", src_id, compte.login)
         return None, None
     if not store.exists(str(src_id)): return src_id, None      # purgé : le transfert part sans lui (Q030)
-    return src_id, store.read(str(src_id))
+    return src_id, store.read_message(str(src_id))
 
 
 async def _add_parts(s: AsyncSession, comm_id, pieces, store, when) -> None:
@@ -966,7 +966,7 @@ async def replace_draft(s: AsyncSession, compte: Compte, comm_id, corps: dict, s
     raw_bytes = _compose(compte, adresse, corps, comm_id, now, None, source)
     from ..ingestion.analysis import analyze
     a = analyze(raw_bytes)
-    if store is not None: store.write(str(comm_id), raw_bytes, replace=True)
+    if store is not None: store.write_message(str(comm_id), raw_bytes, replace=True)   # RM3631 : en squelette
     c.sujet, c.sujet_normalise = a.sujet, a.sujet_normalise
     c.snippet, c.corps_texte, c.taille = a.snippet, a.corps_texte or None, len(raw_bytes)
     c.nb_pieces_jointes = len(a.pieces)
@@ -1037,14 +1037,19 @@ async def create(s: AsyncSession, compte: Compte, corps: dict, store=None, ip_cl
     a = analyze(raw_bytes)
     from ..store import fingerprint as fingerprint_of
     from ..schema.models import Blob
+    pieces_ecrites = []
     if store is not None:
-        store.write(str(comm_id), raw_bytes)
-        raw, info = store.put(raw_bytes)
+        # RM3631 : en squelette ; la ligne `blob` de l'empreinte du message est son identité, sans fichier à son nom
+        w = store.write_message(str(comm_id), raw_bytes)
+        raw, pieces_ecrites = w["empreinte"], w["blobs"]
+        info = {"taille_octets": w["taille_octets"], "taille_stockee": w["taille_stockee"], "compression": w["compression"]}
     else:
         raw, info = fingerprint_of(raw_bytes), {"taille_octets": len(raw_bytes), "taille_stockee": len(raw_bytes), "compression": "aucune"}
-    b = await s.get(Blob, raw)
-    if b: b.nb_references += 1
-    else: s.add(Blob(empreinte=raw, taille_octets=info["taille_octets"], taille_stockee=info["taille_stockee"], compression=info["compression"], cree_le=now, nb_references=1))
+    for e_, i_ in [(raw, info)] + pieces_ecrites:
+        b = await s.get(Blob, e_)
+        if b: b.nb_references += 1
+        else: s.add(Blob(empreinte=e_, taille_octets=i_["taille_octets"], taille_stockee=i_["taille_stockee"], compression=i_["compression"], cree_le=now, nb_references=1))
+        await s.flush()
     c = Comm(comm_id=comm_id, type="email", date_recue=now, date_declaree=now, date_ingestion=now, sens="out", sujet=a.sujet,
              sujet_normalise=a.sujet_normalise, thread_id=comm_id, nature="humain", from_adresse=adresses[boite.boite_id], from_nom=compte.nom,
              taille=len(raw_bytes), nb_pieces_jointes=len(a.pieces), est_chiffre=False, est_signe=False, snippet=a.snippet, corps_texte=a.corps_texte or None)

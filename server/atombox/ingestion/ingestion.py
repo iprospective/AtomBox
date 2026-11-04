@@ -54,12 +54,30 @@ def address_of(s: Session, full: str) -> Adresse:
 
 def blob_of(s: Session, store: Store, raw_bytes: bytes) -> Blob:
     e, info = store.put(raw_bytes)
+    return blob_row(s, e, info)
+
+def blob_row(s: Session, e: str, info: dict) -> Blob:
+    """la ligne d'un blob déjà écrit : créée, ou une référence de plus (D087)"""
     b = s.get(Blob, e)
     if b: b.nb_references += 1; return b
     b = Blob(empreinte=e, taille_octets=info["taille_octets"], taille_stockee=info["taille_stockee"], compression=info["compression"],
              cree_le=datetime.now(timezone.utc), nb_references=1)
     s.add(b); s.flush()
     return b
+
+def message_of(s: Session, store: Store, comm_id, raw_bytes: bytes) -> Blob:
+    """Le message, écrit en SQUELETTE (RM3631, D208, D209) : ses parties base64 vont, décodées, dans
+    les blobs dédupliqués — ceux des pièces jointes. Le brut n'est plus écrit deux fois (sous l'UUID
+    de la comm ET sous son empreinte) : la ligne `blob` de l'empreinte du message reste, elle est son
+    IDENTITÉ et la preuve de la reconstitution (`compression = squelette`), sans fichier à son nom.
+    Une reconstitution infidèle garde le brut ENTIER pour ce message : compté, signalé."""
+    w = store.write_message(str(comm_id), raw_bytes)
+    for e, info in w["blobs"]:
+        blob_row(s, e, info)
+    if w["brut_garde"]:
+        events.emit(s, "stockage.brut_garde", {"comm_id": str(comm_id), "taille": len(raw_bytes)}, cible=None)
+    return blob_row(s, w["empreinte"], {"taille_octets": w["taille_octets"], "taille_stockee": w["taille_stockee"],
+                                        "compression": w["compression"]})
 
 def ingest(s: Session, store: Store, boite_id, raw_bytes: bytes, *, uid=None, uid_validity=None, dossier_id=None,
             date_recue: datetime | None = None, sens: str = "in", dossier_alias: str | None = None,
@@ -84,8 +102,7 @@ def ingest(s: Session, store: Store, boite_id, raw_bytes: bytes, *, uid=None, ui
         if refs:
             parent = s.scalar(select(Comm).join(CommEmail, CommEmail.comm_id == Comm.comm_id).where(CommEmail.message_id.in_(refs)).limit(1))
             if parent and parent.thread_id: thread_id = parent.thread_id
-        store.write(str(comm_id), raw_bytes)               # le message brut, sous l'UUID de la comm (D145)
-        raw = blob_of(s, store, raw_bytes)                    # et son blob, pour la reconstruction à l'octet (D025)
+        raw = message_of(s, store, comm_id, raw_bytes)       # le squelette sous l'UUID de la comm (D145, RM3631)
         s.add(Comm(comm_id=comm_id, type="email", date_recue=date_recue or a.date_declaree or datetime.now(timezone.utc),
                    date_declaree=a.date_declaree, date_ingestion=datetime.now(timezone.utc), sens=sens, sujet=a.sujet,
                    sujet_normalise=a.sujet_normalise, thread_id=thread_id, nature=a.nature, from_adresse=a.from_adresse,

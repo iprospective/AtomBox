@@ -375,6 +375,8 @@ def test_4_les_regles_tiennent_sur_le_flux(chaine):
         "une règle qui n'a jamais rien attrapé se voit depuis la page d'état — c'est TOUT l'intérêt du compteur"
     assert not any(r["nom"] == "Compta : à traiter" for r in etat["regles_muettes"]), \
         "et une règle qui travaille n'y figure pas"
+    assert etat["magasin"]["messages_en_squelette"] > 0 and etat["magasin"]["bruts_gardes"] == 0, \
+        "les messages relevés sont stockés en squelette, et aucun n'a dû garder son brut (RM3631, D209)"
 
     # ── une règle ne BOUCLE PAS sur sa propre action ────────────────────────────────────────────
     # La facture a été DÉPLACÉE dans IMAP par la règle. À la relève suivante, le démon la retrouve

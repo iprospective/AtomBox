@@ -59,6 +59,10 @@ async def status(s: AsyncSession, compte) -> dict:
     raw_bytes = await s.scalar(select(func.coalesce(func.sum(Blob.taille_stockee), 0)))
     bruts = await s.scalar(select(func.coalesce(func.sum(Blob.taille_octets), 0)))
     orphelins = await s.scalar(select(func.count()).select_from(Blob).where(Blob.nb_references <= 0)) or 0
+    # RM3631 (D209) : les messages en squelette, et ceux dont le brut a dû être GARDÉ — à regarder, pas à taire
+    squelettes = await s.scalar(select(func.count()).select_from(Blob).where(Blob.compression == "squelette")) or 0
+    bruts_gardes = await s.scalar(select(func.count()).select_from(Blob).where(Blob.compression == "squelette-brut")) or 0
+    if bruts_gardes: log.warning("%d message(s) au brut gardé : leur reconstitution n'était pas fidèle (D209)", bruts_gardes)
 
     # --- les règles muettes (D075 § 1) : celles qui n'ont jamais rien attrapé
     muettes = [{"nom": f.nom, "cree": iso(None)} for f in await s.scalars(
@@ -75,6 +79,7 @@ async def status(s: AsyncSession, compte) -> dict:
         "files": files, "en_echec": derniers,
         "magasin": {"chemin": magasin_dir, "blobs": blobs, "octets_stockes": int(raw_bytes or 0),
                     "octets_bruts": int(bruts or 0), "orphelins": orphelins,
+                    "messages_en_squelette": squelettes, "bruts_gardes": bruts_gardes,
                     "gain": round(1 - (raw_bytes or 0) / (bruts or 1), 3)},
         "contenu": {"messages": messages, "pieces_jointes": pieces,
                     "rattachements": await s.scalar(select(func.count()).select_from(Rattachement)) or 0,
