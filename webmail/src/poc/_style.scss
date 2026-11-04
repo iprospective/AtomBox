@@ -91,3 +91,12 @@
 .trih{cursor:pointer;user-select:none;white-space:nowrap}
 .trih:hover{color:var(--accent)}
 .trih.on{color:var(--accent)}
+
+// Les fiches du CDC atomique (RM3627) : une fiche en tête de page, la chaîne des décisions dépliable.
+.fiche { border-left: 3px solid #4a7bd0; }
+.fiche-tete { font-size: 15px; margin: 4px 0; }
+.fiche-id { font-family: monospace; background: #eef3fb; border-radius: 3px; padding: 1px 5px; }
+.fiche h4 { margin: 14px 0 6px; }
+.fiche-noeud { margin: 6px 0 6px 14px; }
+.fiche-noeud > summary { cursor: pointer; }
+.fiche-texte { margin: 6px 0 6px 18px; padding-left: 10px; border-left: 2px solid #e2e2e2; }

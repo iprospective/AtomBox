@@ -27,6 +27,15 @@
         const zone = el.querySelector && el.querySelector(".lecture");
         if (zone && zone.scrollIntoView) zone.scrollIntoView({ block: "start" });
       });
+      /* LES FICHES (RM3627) : un identifiant cliqué ouvre sa fiche en tête de la page ; « fermer » la
+         retire. La fiche n'est pas persistée : c'est une lecture, pas un réglage. */
+      D.on(el, ".cdc-fiche", "onclick", (a, e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        St.ui.fiche = a.dataset.fiche || null;
+        Pages.peindre(t);
+        const zone = el.querySelector && el.querySelector(".fiche");
+        if (zone && zone.scrollIntoView) zone.scrollIntoView({ block: "start" });
+      });
       /* Tri des fonctionnalités : un clic trie, un second inverse. Persisté. */
       D.on(el, "th[data-trif]", "onclick", th => {
         const k = th.dataset.trif;

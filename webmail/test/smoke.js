@@ -107,7 +107,7 @@ console.log("— la page CDC organisée comme docs/ (plan, vrac, modèle) ——
 
 console.log("— tri des fonctionnalités par colonne ————————————————");
 {
-  const ui = A.Store.ui, ids = h => [...h.matchAll(/<td><b>(F\d{3})<\/b><\/td>/g)].map(m => m[1]);
+  const ui = A.Store.ui, ids = h => [...h.matchAll(/<td><b>(?:<a [^>]*>)?(F\d{3})(?:<\/a>)?<\/b><\/td>/g)].map(m => m[1]);   // l'id est un lien vers sa fiche (RM3627)
   ui.triFeat = "jalon"; ui.triFeatDesc = false;
   const parJalon = ids(A.Views.Pages.render("features"));
   const j = id => A.CDC.dict.fonctionnalites.find(f => f.id === id).jalon;
@@ -122,6 +122,27 @@ console.log("— tri des fonctionnalités par colonne ————————�
        "trié par ordre de codage : base → ingestion → synchronisation");
   ui.triFeat = "domaine"; ui.triFeatDesc = false;
   vrai(A.Views.Pages.render("features").includes('class="trih on"'), "l'en-tête actif est marqué");
+}
+
+console.log("— les fiches du CDC atomique (RM3627) ——————————————————————");
+{
+  const Fi = A.Views.Fiche, X = A.CDC_ATOME;
+  vrai(!!X && Object.keys(X.objets).length > 600, "l'index atomique est embarqué (" + (X ? Object.keys(X.objets).length : 0) + " objets)");
+  const f = Fi.render("F147");
+  vrai(f.includes("Pourquoi : la chaîne des décisions") && f.includes('data-fiche="D176"') && f.includes("<details"),
+       "la fiche d'une fonctionnalité : le quoi, puis la chaîne de ses décisions, dépliable");
+  const d = Fi.render("D187");
+  vrai(d.includes("réalise") && d.includes('data-fiche="D019"') && d.includes("Ce sur quoi elle repose"),
+       "la fiche d'une décision : ce sur quoi elle repose (réalise D019…)");
+  vrai(d.includes("amendée par") && d.includes('data-fiche="D189"'), "…et ce qui repose sur elle (amendée par D189)");
+  vrai(Fi.render("D189").includes("§ 1"), "une relation partielle garde sa partie (amende D187 § 1)");
+  vrai(!!Fi.objet("D009b") && Fi.objet("D009b").id !== "D009b", "un ancien identifiant mène à sa fiche (alias)");
+  vrai(A.Markdown.rendre("voir F147").includes('data-fiche="F147"'), "dans tout texte, une fonctionnalité citée est un lien vers sa fiche");
+  vrai(A.Views.Pages.render("features").includes('class="cdc-fiche" data-fiche="F001"'), "la table : chaque fonctionnalité mène à sa fiche");
+  A.Store.ui.fiche = "F147";
+  vrai(A.Views.Pages.render("features").indexOf('class="box fiche"') > -1, "une fiche ouverte s'affiche en tête de la page");
+  A.Store.ui.fiche = null;
+  vrai(Fi.render("ZZ999").includes("aucune fiche"), "un identifiant inconnu : « aucune fiche », pas une erreur");
 }
 
 console.log("— la V0 : le client IMAP (D140) ——————————————————————");
@@ -190,8 +211,8 @@ console.log("— tout le CDC dans la maquette (textes, sections, dictionnaire) �
   const h = M.rendre("## Titre\n\n| a | b |\n|---|---|\n| **x** | `y` |\n\n> citation\n\n- un\n- deux\n\nVoir [le 03](cdc-rm2881-03-modele-donnees.md) et D138.");
   vrai(h.includes("<h3>") && h.includes("<table") && h.includes("<blockquote>") && h.includes("<li>deux</li>"),
        "le rendu markdown couvre titres, tableaux, citations, listes");
-  vrai(h.includes('data-chap="03"') && h.includes('data-sec="D138"'),
-       "les liens internes du CDC deviennent des liens de navigation");
+  vrai(h.includes('data-chap="03"') && (h.includes('data-fiche="D138"') || h.includes('data-sec="D138"')),
+       "les liens internes du CDC deviennent des liens de navigation — vers la FICHE quand elle existe (RM3627)");
   vrai(M.rendre("<script>x</script>").includes("&lt;script&gt;"), "le HTML source est échappé");
   A.Store.ui.cdc = { chap: "03" };
   vrai(A.Views.Pages.render("cdc").includes("Le tronc s'appelle"), "la page CDC affiche le texte d'un chapitre");
