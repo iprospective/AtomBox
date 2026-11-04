@@ -2,14 +2,16 @@
 (function (ABX) {
   "use strict";
   const R = ABX.Registry, F = ABX.Fmt;
-  const TITRES = { global: "Partout", liste: "Dans la liste", message: "Sur le message ouvert" };
+  const TITRES = { global: "Partout", liste: "Dans la liste", message: "Sur le message ouvert",
+                   "pièce jointe": "Dans la visionneuse des pièces jointes" };
+  const TOUCHE = { Escape: "Échap", ArrowLeft: "←", ArrowRight: "→" };
 
   R.define("raccourcis.aide", ({ table }) => {
-    const groupes = ["global", "liste", "message"].map(c => {
+    const groupes = ["global", "liste", "message", "pièce jointe"].map(c => {
       const l = table.filter(r => r.contexte === c);
       if (!l.length) return "";
       return `<section><h4>${F.esc(TITRES[c] || c)}</h4>` +
-        l.map(r => `<div class="racl"><kbd>${F.esc(r.touche === "Escape" ? "Échap" : r.touche)}</kbd>` +
+        l.map(r => `<div class="racl"><kbd>${F.esc(TOUCHE[r.touche] || r.touche)}</kbd>` +
                    `<span>${F.esc(r.libelle)}</span></div>`).join("") + `</section>`;
     }).join("");
     return `<div class="racbox" role="dialog" aria-label="Raccourcis clavier">
