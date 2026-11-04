@@ -505,5 +505,28 @@ function serveur(vus) {
     vrai(e3.doc.getElementById("detail").innerHTML.includes("n'existe plus"), "un identifiant inconnu : « n'existe plus », pas une erreur");
   }
 
+  console.log("— un onglet d'un module absent n'empêche pas d'ouvrir un message (04/11) ————————");
+  {
+    /* Un onglet « page » (aide, CDC de la maquette) mémorisé dans le navigateur : le produit ne charge
+       pas ce module, et peindre les onglets jetait « ABX.Views.Pages is undefined » — plus aucun
+       message ne s'ouvrait. */
+    const [, f4] = serveur([]);
+    const ls = creerStockage();
+    ls.setItem("abx.db.v3", JSON.stringify({ v: 3, ui: { tabs: [{ key: "p:aide", type: "page", page: "aide" }], tab: "p:aide" } }));
+    let e4, erreur = null;
+    try {
+      e4 = demarrer(ls, { session: "api", fetch: f4 });
+      await drainer(e4);
+      e4.ABX.Controllers.Tabs.ouvrir({ type: "msg", id: "m1" }, false); await drainer(e4);
+    } catch (x) { erreur = x; }
+    vrai(!erreur, "aucune exception : " + (erreur && erreur.message));
+    vrai(e4 && e4.doc.getElementById("detail").innerHTML.includes("Sujet m1"), "le message s'ouvre");
+    vrai(e4 && !e4.ABX.Store.ui.tabs.some(t => t.type === "page"), "l'onglet orphelin est écarté");
+    // l'écart est idempotent, et ne touche jamais un onglet servi
+    const avant = JSON.stringify(e4.ABX.Store.ui.tabs);
+    e4.ABX.Controllers.App.ecarterOrphelins();
+    eq(JSON.stringify(e4.ABX.Store.ui.tabs), avant, "écarter une seconde fois ne change rien");
+  }
+
   bilan();
 })().catch(e => { console.error("  ✗ échec des parcours :", e.stack.split("\n").slice(0, 3).join(" | ")); process.exit(1); });

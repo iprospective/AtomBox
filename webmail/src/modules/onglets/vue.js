@@ -13,7 +13,7 @@
       if (t.type === "compo") return t.data.sujet || "(sans sujet)";
       if (t.type === "admin") return "Administration";
       if (t.type === "pj")    return "Pièces jointes";
-      if (t.type === "page")  return ABX.Views.Pages.titre(t.page);
+      if (t.type === "page")  return ABX.Views.Pages ? ABX.Views.Pages.titre(t.page) : "Page";
       const m = ABX.Api.cache.message(t.id);
       return m ? m.sujet : "(message effacé)";
     },
