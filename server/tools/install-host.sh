@@ -70,7 +70,7 @@ runuser -u postgres -- psql -tAc "select 1 from pg_database where datname='atomb
 # 5. l'environnement : posé une fois, jamais écrasé (il porte les secrets)
 if [ ! -f /etc/atombox/env ]; then
   sed -e "s#^ATOMBOX_STORE=.*#ATOMBOX_STORE=/var/lib/atombox/magasin#" \
-      -e "s#^ATOMBOX_IMAPD_LISTEN=.*#ATOMBOX_IMAPD_LISTEN=0.0.0.0#" \
+      -e "s#^ATOMBOX_IMAPD_LISTEN=.*#ATOMBOX_IMAPD_LISTEN=0.0.0.0,::#" \
       -e "s#^ATOMBOX_IMAPD_PORT=.*#ATOMBOX_IMAPD_PORT=993#" \
       "$R/server/tools/atombox.env.example" > /etc/atombox/env
   cat >> /etc/atombox/env <<ENV

@@ -511,7 +511,7 @@ def test_idle_annonce_le_message_qui_arrive(serveur_imap, monkeypatch):
         assert l == "* %d EXISTS" % (n + 1), "le client apprend le message SANS rien demander : %r" % l
         assert time.monotonic() - t0 < 3, "et dans les secondes, pas à la prochaine interrogation"
         fin = c.cmd("DONE", tag="a3")
-        assert fin[-1] == "a3 OK IDLE terminé", fin
+        assert fin[-1] == "a3 OK IDLE termine", fin
     finally:
         c.close()
 
@@ -533,7 +533,7 @@ def test_idle_ne_garde_pas_de_transaction_ouverte(serveur_imap, monkeypatch):
             tenues = admin.execute("select count(*) from pg_stat_activity where datname = %s "
                                    "and state like 'idle in transaction%%'", (base,)).fetchone()[0]
         assert tenues == 0, "%d connexion(s) « idle in transaction » pendant IDLE" % tenues
-        assert c.cmd("DONE", tag="a3")[-1] == "a3 OK IDLE terminé"
+        assert c.cmd("DONE", tag="a3")[-1] == "a3 OK IDLE termine"
     finally:
         c.close()
 

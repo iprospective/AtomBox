@@ -8,7 +8,7 @@ sur les UID ; on ne la refait pas :
 
 | Réglage | Défaut | Rôle |
 |---|---|---|
-| `ATOMBOX_IMAPD_LISTEN` | `127.0.0.1` | l'interface. **En conteneur, cette boucle locale est celle DU CONTENEUR** — un client sur la machine hôte ne voit rien ; il faut alors écouter sur l'adresse du conteneur, ce qui exige TLS |
+| `ATOMBOX_IMAPD_LISTEN` | `127.0.0.1` | l'interface, ou plusieurs séparées par des virgules (`0.0.0.0,::` : IPv4 ET IPv6 — un nom qui a une adresse IPv6 l'exige). **En conteneur, cette boucle locale est celle DU CONTENEUR** — un client sur la machine hôte ne voit rien ; il faut alors écouter sur l'adresse du conteneur, ce qui exige TLS |
 | `ATOMBOX_IMAPD_PORT` | `1143` | **pas 143** : un Dovecot tourne déjà sur cette machine. Avec TLS, l'usage est **1993** |
 | `ATOMBOX_IMAPD_CERT` / `_KEY` | — | si les deux sont donnés, le port sert du TLS IMPLICITE dès le premier octet. Un certificat auto-signé se pose avec `tools/make-imapd-cert.sh` |
 | `ATOMBOX_IMAPD_ALLOW_CLEAR` | — | `1` pour accepter le clair HORS de la boucle locale. Sans lui, l'écouteur refuse de démarrer : les mots de passe passeraient en clair sur le réseau |
@@ -20,6 +20,8 @@ ne doit pas faire attendre les autres.
 from __future__ import annotations
 import asyncio
 import os
+import re
+import unicodedata
 import ssl
 from ..journal import journal
 from .session import Session
@@ -122,8 +124,37 @@ class Listener:
         Le texte du protocole est de l'ASCII, donc indifférent au choix. Les quelques mots français
         des réponses tiennent dans le latin-1 ; `replace` couvre le reste sans fausser le compte."""
         for l in lines:
-            writer.write(l.encode("latin-1", "replace") + b"\r\n")
+            writer.write(ascii_status(l).encode("latin-1", "replace") + b"\r\n")
         await writer.drain()
+
+
+# Une réponse d'ÉTAT : étiquetée ou non, OK / NO / BAD / BYE / PREAUTH — jamais une réponse de données.
+_ETAT = re.compile(r"^(?:\*|[^ ]+) (?:OK|NO|BAD|BYE|PREAUTH)\b")
+_LITTERAL = re.compile(r"\{\d+\}\r\n")
+_ASCII = str.maketrans({"—": "-", "–": "-", "«": '"', "»": '"', "’": "'", "\u00a0": " ", "\u202f": " "})
+
+
+def ascii_status(line: str) -> str:
+    """LE TEXTE D'ÉTAT EN ASCII, et lui seul (RM3516).
+
+    La RFC 3501 veut le texte d'une réponse (`resp-text`) en ASCII 7 bits. Nos messages sont en
+    français : « AtomBox prêt » partait avec un octet 0xEA, et un client strict — l'application mail
+    d'Android, le 04/11 — abandonnait dès l'accueil. On retire donc les accents des réponses d'ÉTAT
+    (« prêt » → « pret »). Jamais d'une réponse de DONNÉES (FETCH, littéraux) : ses caractères sont
+    les octets du message, décodés en latin-1, et les toucher fausserait le contenu et les tailles."""
+    if not _ETAT.match(line) or _LITTERAL.search(line):
+        return line
+    t = unicodedata.normalize("NFKD", line.translate(_ASCII))
+    return "".join(ch for ch in t if ord(ch) < 128)
+
+
+def listen_hosts(value: str | None) -> list[str]:
+    """`ATOMBOX_IMAPD_LISTEN` : une ou plusieurs adresses, séparées par des virgules (RM3516).
+
+    `0.0.0.0` n'écoute qu'en IPv4 : un nom qui a aussi une adresse IPv6 envoie alors les clients
+    IPv6 (un téléphone en 4G, souvent) sur un port fermé. `0.0.0.0,::` écoute sur les deux."""
+    hosts = [h.strip() for h in (value or "").split(",") if h.strip()]
+    return list(dict.fromkeys(hosts)) or ["127.0.0.1"]
 
 
 def tls_context(cert: str | None = None, key: str | None = None):
@@ -168,16 +199,18 @@ async def main():
     from ..store import Store
     url = os.environ["DATABASE_URL"]
     store = Store(settings.read("ATOMBOX_STORE", "./magasin"))
-    host = settings.read("ATOMBOX_IMAPD_LISTEN", "127.0.0.1")
+    hosts = listen_hosts(settings.read("ATOMBOX_IMAPD_LISTEN", "127.0.0.1"))
     port = int(settings.read("ATOMBOX_IMAPD_PORT", "1143"))
     tls = tls_context()
     clair = settings.read("ATOMBOX_IMAPD_ALLOW_CLEAR", "") == "1"
-    check_transport(host, tls is not None, allow_clear=clair)
+    for h in hosts:                       # le clair n'est permis que si TOUTES sont locales
+        check_transport(h, tls is not None, allow_clear=clair)
+    host = hosts[0] if len(hosts) == 1 else hosts
     listener = Listener(lambda: open_db(url), store, tls=tls is not None)
     server = await asyncio.start_server(listener.client, host, port, ssl=tls)
     if tls is None and clair:
         log.warning("IMAP en CLAIR sur %s:%d, ASSUMÉ (ATOMBOX_IMAPD_ALLOW_CLEAR=1) : les mots de passe passent en clair", host, port)
-    log.info("IMAP sur %s:%d (%s)", host, port, "TLS implicite" if tls else "clair")
+    log.info("IMAP sur %s port %d (%s)", ", ".join(hosts), port, "TLS implicite" if tls else "clair")
     async with server:
         await server.serve_forever()
 
