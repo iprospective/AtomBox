@@ -145,6 +145,7 @@ CE_QUI_LES_TIENT = {
     "MOVE":        ("_c_move",),
     "SPECIAL-USE": ("_c_list",),                   # les attributs \\Trash, \\Archive… dans LIST
     "NAMESPACE":   ("_c_namespace",),
+    "ID":          ("_c_id",),
     "STARTTLS":    ("_c_starttls",),
     "IDLE":        ("_c_idle",),
 }

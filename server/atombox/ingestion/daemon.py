@@ -28,8 +28,29 @@ from .. import settings
 
 log = journal("daemon")
 
-def _folder(s, boite_id, alias: str) -> Dossier:
+def _folder(s, boite_id, alias: str, presents=()) -> Dossier:
     d = s.scalar(select(Dossier).where(Dossier.boite_id == boite_id, Dossier.alias_imap == alias))
+    # UN DOSSIER DU FOURNISSEUR QUI EST UNE BOÎTE D'ÉTAT (« Archives », « Spam »…) est ADOPTÉ par la
+    # boîte d'état d'AtomBox, si celle-ci pointe vers un nom que le fournisseur n'a pas — au lieu d'en
+    # faire un dossier ordinaire à côté (04/11). Un ordinaire déjà créé ainsi y est fondu.
+    from ..services.mailbox import state_named, state_box, fold_into_state
+    etat = state_named(alias)
+    if etat and (d is None or d.exit_reason is None):
+        box = state_box(s, boite_id, etat)
+        if box is not None and box.alias_imap != alias and box.alias_imap not in presents:
+            if d is not None:
+                from ..services import personal_state as personal
+                from ..schema.models import Acces
+                # le journal veut un auteur : celui qui relève, sinon le premier membre de la boîte
+                qui = personal.polling_account(s, boite_id) or s.scalar(
+                    select(Acces.compte_id).where(Acces.boite_id == boite_id, Acces.fin.is_(None)).limit(1))
+                n = fold_into_state(s, d, box, qui)
+                log.info("dossier « %s » fondu dans la boîte d'état %s (%d message(s))", alias, etat, n)
+            else:
+                box.alias_imap, box.uid_validity, box.uid_suivant = alias, None, None
+                log.info("dossier « %s » du fournisseur adopté par la boîte d'état %s", alias, etat)
+            s.commit()
+            return box
     if d: return d
     from ..imap import mutf7
     # `alias_imap` : le nom du FIL (modified UTF-7) ; `nom` : ce qu'on LIT (« Pièces », pas « Pi&AOg-ces »)
@@ -42,8 +63,9 @@ def poll_mailbox(s, store: Store, releve: Poller, boite_id, adresse: str) -> int
     """un passage complet sur tous les dossiers d'une boîte ; rend le nombre de messages ingérés"""
     n = 0
     log.debug("%s : relève", adresse)
-    for alias in releve.folders():
-        d = _folder(s, boite_id, alias)
+    presents = releve.folders()
+    for alias in presents:
+        d = _folder(s, boite_id, alias, presents)
         validity, uidnext = releve.select_folder(alias)
         since = d.uid_suivant or 1
         if d.uid_validity is not None and d.uid_validity != validity:

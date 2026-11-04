@@ -53,6 +53,8 @@ class Listener:
             self.live += 1
             db = self.factory()
             session = Session(View(db, self.store), self.store)
+            # QUI : l'adresse et le port du client, complétés par le nom qu'il annonce (ID)
+            session.qui = session.view.qui = "%s:%s" % (peer[0], peer[1]) if isinstance(peer, tuple) else str(peer)
             log.info("connexion IMAP de %s (%d vivante(s), %s)", peer, self.live, "TLS" if self.tls else "clair")
             try:
                 await self._send(writer, session.greeting())

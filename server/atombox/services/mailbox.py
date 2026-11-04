@@ -51,7 +51,9 @@ log = journal("api")
 STATES = {
     "processed": ("Traités", "Processed", None,
                   ("PROCESSED", "TRAITÉS", "TRAITES")),
-    "archived": ("Archivés", "Archive", "\\Archive",
+    # « Archives » (04/11) : le nom de Thunderbird et de Dovecot. Servir « Archive » faisait créer
+    # « Archives » à côté par Thunderbird — deux dossiers, et le message n'était pas archivé.
+    "archived": ("Archivés", "Archives", "\\Archive",
                  ("ARCHIVE", "ARCHIVES", "ARCHIVED", "ARCHIVÉS", "ARCHIVÉ", "ALL MAIL")),
     "deleted": ("Corbeille", "Trash", "\\Trash",
                 ("TRASH", "DELETED ITEMS", "DELETED MESSAGES", "CORBEILLE")),
@@ -169,6 +171,53 @@ def move_sync(s, r: Rattachement, valeur: str | None, compte_id, cible: Dossier 
 
 def state_of_folder(d: Dossier | None) -> str | None:
     return d.exit_reason if d is not None else None
+
+
+def state_named(name: str | None) -> str | None:
+    """l'état dont ce nom IMAP est un des noms (« Archive », « ARCHIVES », « Spam »…), ou None.
+
+    Un client qui a gardé l'ancien nom servi, ou qui cherche le sien, doit trouver LA boîte d'état —
+    jamais en créer une seconde à côté."""
+    last = (name or "").split("/")[-1].strip().upper()
+    for etat, (_nom, servi, _special, alias) in STATES.items():
+        if last == servi.upper() or last in alias:
+            return etat
+    return None
+
+
+def state_box(s, boite_id, etat: str):
+    return s.scalar(select(Dossier).where(Dossier.boite_id == boite_id, Dossier.exit_reason == etat))
+
+
+def fold_into_state(s, ordinary: Dossier, box: Dossier, compte_id=None) -> int:
+    """UN DOSSIER ORDINAIRE QUI EST EN FAIT UNE BOÎTE D'ÉTAT se fond dans elle (04/11, mmi).
+
+    La boîte d'état « Archive » d'AtomBox avait été créée avant que la relève ne voie le dossier
+    « Archives » du fournisseur ; la relève en avait fait un dossier ORDINAIRE à côté. Deux dossiers
+    pour une idée, et un message rangé dans « Archives » n'était pas archivé. Ici : chaque message
+    passe dans la boîte d'état (même service que le geste, donc l'état et sa trace), la boîte
+    d'état adopte le nom du dossier CHEZ LE FOURNISSEUR (et sa position de relève), et le dossier
+    ordinaire disparaît. Rien ne remonte vers le fournisseur : le message y est déjà là où il faut."""
+    from ..sync import in_down_sync
+    etat = box.exit_reason
+    n = 0
+    with in_down_sync():
+        for r in list(s.scalars(select(Rattachement).where(Rattachement.dossier_id == ordinary.dossier_id))):
+            origine = r.dossier_origine_id          # le déplacement la réécrirait : ce dossier va disparaître
+            move_sync(s, r, etat, compte_id, cible=box)
+            r.dossier_origine_id = origine
+            n += 1
+    # ceux qui le citent comme ORIGINE (sortis d'« Archives » vers la corbeille…) y reviendraient : c'est
+    # désormais la boîte d'état
+    for r in s.scalars(select(Rattachement).where(Rattachement.dossier_origine_id == ordinary.dossier_id)):
+        r.dossier_origine_id = box.dossier_id
+    s.flush()
+    alias, validity, suivant = ordinary.alias_imap, ordinary.uid_validity, ordinary.uid_suivant
+    s.delete(ordinary)
+    s.flush()
+    box.alias_imap, box.uid_validity, box.uid_suivant = alias, validity, suivant
+    s.flush()
+    return n
 
 
 def served_name(d: Dossier) -> str:

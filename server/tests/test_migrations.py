@@ -162,7 +162,7 @@ UPDATE rattachement SET motif_sortie = 'archive', sorti_le = now() - interval '4
         boites = dict(c.execute("""select "alias_imap", "exit_reason" from "dossier"
                                     where "exit_reason" is not null
                                       and "boite_id" = '11111111-0000-7000-8000-000000000004'""").fetchall())
-        assert boites == {"Processed": "processed", "Archive": "archived",
+        assert boites == {"Processed": "processed", "Archives": "archived",
                           "Trash": "deleted", "Junk": "junk"}, boites
         assert c.execute("""select count(*) from "dossier" where "special_use" = '\\Trash'
                              and "boite_id" = '11111111-0000-7000-8000-000000000004'""").fetchone()[0] == 1, \

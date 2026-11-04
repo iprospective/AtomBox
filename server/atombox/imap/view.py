@@ -214,9 +214,11 @@ class View:
                                d.uid_servi_suivant or 1, d.special_use, d.exit_reason)
 
     def open_mailbox(self, compte, name):
-        for n, d in self._folders(compte):
+        folders = self._folders(compte)
+        for n, d in folders:
             if n.lower() == (name or "").lower(): return self._mailbox(n, d)
-        return None
+        d = self._state_alias(folders, name)
+        return self._mailbox(next(n for n, x in folders if x is d), d) if d is not None else None
 
     def status(self, compte, name):
         b = self.open_mailbox(compte, name)
@@ -230,6 +232,38 @@ class View:
                                        needs_attention_by(compte.compte_id))) or 0
         return {"MESSAGES": len(b.uids), "RECENT": 0, "UIDNEXT": b.uid_next,
                 "UIDVALIDITY": b.uid_validity, "UNSEEN": unread}
+
+    def flags_of(self, mailbox) -> dict:
+        """{uid: (drapeaux…)} de TOUT un dossier, en trois requêtes — pas une par message.
+
+        C'est ce que NOOP et IDLE comparent toutes les trois secondes pour annoncer un changement
+        d'état fait ailleurs ; lire chaque message comme `message()` le fait serait trop cher. Même
+        règle que `ServedMessage` : `\\Seen` et `\\Flagged` de l'état PERSONNEL du compte connecté
+        (« à revoir » efface `\\Seen`, D175 § 2), `\\Answered` du rattachement."""
+        from ..schema.models import Marker, MarkerPersonal, ReadState
+        from ..services.personal_state import TO_REVIEW
+        rows = self.s.execute(select(Rattachement.uid_servi, Rattachement.comm_id, Rattachement.boite_id,
+                                     Rattachement.repondu_le)
+                              .where(Rattachement.dossier_id == mailbox.dossier_id,
+                                     Rattachement.uid_servi.isnot(None))).all()
+        if not rows or self.compte is None:
+            return {r.uid_servi: (("\\Answered",) if r.repondu_le else ()) for r in rows}
+        ids = [r.comm_id for r in rows]
+        etats = {(x.comm_id, x.boite_id): x for x in self.s.scalars(
+            select(ReadState).where(ReadState.compte_id == self.compte.compte_id, ReadState.comm_id.in_(ids)))}
+        revoir = set(self.s.execute(
+            select(MarkerPersonal.comm_id, MarkerPersonal.boite_id)
+            .join(Marker, Marker.marker_id == MarkerPersonal.marker_id)
+            .where(MarkerPersonal.compte_id == self.compte.compte_id, MarkerPersonal.comm_id.in_(ids),
+                   Marker.code == TO_REVIEW)).all())
+        out = {}
+        for r in rows:
+            e, f = etats.get((r.comm_id, r.boite_id)), []
+            if e is not None and e.opened_at is not None and (r.comm_id, r.boite_id) not in revoir: f.append("\\Seen")
+            if e is not None and e.flagged: f.append("\\Flagged")
+            if r.repondu_le is not None: f.append("\\Answered")
+            out[r.uid_servi] = tuple(f)
+        return out
 
     # ── que contient-il ─────────────────────────────────────────────────────────────────────────
     def message(self, mailbox, uid: int):
@@ -289,8 +323,22 @@ class View:
     # ── que peut-on écrire ──────────────────────────────────────────────────────────────────────
     def folder_named(self, compte, name):
         """le Dossier derrière un nom IMAP, ou None — la destination d'un MOVE"""
-        for n, d in self._folders(compte):
+        folders = self._folders(compte)
+        for n, d in folders:
             if n.lower() == (name or "").lower(): return d
+        return self._state_alias(folders, name)
+
+    @staticmethod
+    def _state_alias(folders, name):
+        """« Archive » (l'ancien nom), « Spam »… → LA boîte d'état de la même boîte aux lettres :
+        un client qui garde un ancien nom ou cherche le sien ne doit jamais en créer une seconde."""
+        from ..services.mailbox import state_named
+        etat = state_named(name)
+        if not etat: return None
+        prefix = (name or "").rsplit("/", 1)[0].lower() + "/" if "/" in (name or "") else ""
+        for n, d in folders:
+            if d.exit_reason == etat and (n.lower().startswith(prefix) if prefix else "/" not in n):
+                return d
         return None
 
     def move(self, compte, mailbox, uids: list[int], dest_name: str):
@@ -320,7 +368,7 @@ class View:
                 self._announce(r, dossier_avant)
             pairs.append((uid, r.uid_servi))
         self.s.commit()
-        if pairs: log.info("MOVE de %d message(s) vers « %s » (état %s)",
+        if pairs: log.info("%s MOVE de %d message(s) vers « %s » (état %s)", getattr(self, "qui", ""),
                              len(pairs), dest_name, dest.exit_reason or "aucun")
         return pairs
 
