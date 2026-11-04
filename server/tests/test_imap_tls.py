@@ -188,3 +188,56 @@ def test_l_outil_pose_un_certificat_de_serveur_et_pas_une_autorite(tmp_path):
                                                    "ATOMBOX_IMAPD_CERT_DIR": str(tmp_path / "imapd")},
                         capture_output=True, text=True, timeout=60)
     assert r2.returncode == 2 and "--force" in r2.stdout
+
+
+# ── RM3516 : l'accueil d'un client strict, et l'IPv6 ───────────────────────────────────────────────
+# Le 04/11, Thunderbird se connectait à mmi mais l'application mail d'Android disait « impossible
+# d'établir une connexion ». Deux causes, chacune suffisante : le nom a une adresse IPv6 et
+# l'écouteur n'écoutait qu'en IPv4 ; et l'accueil disait « AtomBox prêt » — un octet 0xEA dans un
+# texte que la RFC 3501 veut en ASCII 7 bits (resp-text = TEXT-CHAR).
+
+def test_l_accueil_et_les_reponses_d_etat_sont_en_ascii(ecouteur_tls):
+    """les OCTETS reçus, pas la chaîne : c'est sur eux qu'un client strict s'arrête"""
+    raw = socket.create_connection(("127.0.0.1", ecouteur_tls), timeout=10)
+    s = _client_qui_fait_confiance().wrap_socket(raw, server_hostname="localhost")
+    try:
+        accueil = s.recv(4096)
+        assert accueil.startswith(b"* OK"), accueil
+        assert all(b < 128 for b in accueil), accueil
+        s.sendall(b"a1 LOGIN x\r\n")              # une erreur, dont le texte est en français
+        rep = s.recv(4096)
+        assert rep.startswith(b"a1 BAD") and all(b < 128 for b in rep), rep
+    finally:
+        s.close()
+
+
+def test_le_texte_d_etat_est_ramene_a_l_ascii_mais_jamais_les_donnees():
+    from atombox.imap.server import ascii_status
+    assert ascii_status("* OK [CAPABILITY IMAP4rev1] AtomBox prêt") == "* OK [CAPABILITY IMAP4rev1] AtomBox pret"
+    assert ascii_status("a2 NO [INUSE] la boîte est ouverte — la fermer d'abord") == \
+        "a2 NO [INUSE] la boite est ouverte - la fermer d'abord"
+    # une réponse de DONNÉES n'est jamais touchée : ses octets sont ceux du message (latin-1 = octets)
+    fetch = '* 1 FETCH (ENVELOPE ("Sujet é" NIL))'
+    assert ascii_status(fetch) == fetch
+    litteral = "* 2 FETCH (BODY[] {3}\r\né\r\n)"
+    assert ascii_status(litteral) == litteral
+
+
+def test_l_ecoute_accepte_plusieurs_adresses():
+    from atombox.imap.server import listen_hosts
+    assert listen_hosts("0.0.0.0,::") == ["0.0.0.0", "::"]
+    assert listen_hosts(" 0.0.0.0 , :: ") == ["0.0.0.0", "::"]
+    assert listen_hosts("127.0.0.1") == ["127.0.0.1"]
+    assert listen_hosts("") == ["127.0.0.1"]
+
+
+def test_le_clair_est_refuse_si_une_seule_des_adresses_est_sur_le_reseau():
+    from atombox.imap.server import listen_hosts
+    with pytest.raises(SystemExit):
+        for h in listen_hosts("127.0.0.1,::"):
+            check_transport(h, tls=False)
+
+
+def test_l_installation_ecoute_en_ipv4_et_en_ipv6():
+    script = (ICI.parent / "tools" / "install-host.sh").read_text(encoding="utf-8")
+    assert "ATOMBOX_IMAPD_LISTEN=0.0.0.0,::" in script
