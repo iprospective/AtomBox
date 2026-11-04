@@ -257,7 +257,7 @@ def test_deplacer_vers_archive_change_l_etat_et_le_message_y_reste(serveur_imap)
         # 1. l'état, en base
         state, dossier, uid = _etat(s, comm_id=cid)
         assert state == "archived", "un MOVE vers Archive ÉCRIT l'état : c'est toute la demande"
-        assert dossier == "Archive", "…et le contenant suit (D183)"
+        assert dossier == "Archives", "…et le contenant suit (D183)"
         # L'UID VIENT DU COMPTEUR D'ARCHIVE, et pas du message : c'est ça qu'il faut vérifier, et
         # non « il a changé » — les deux compteurs peuvent coïncider, et le test passerait à côté.
         from sqlalchemy import select as _sel
@@ -439,6 +439,113 @@ def test_un_geste_fait_par_imap_remonte_vers_la_boite_source(serveur_imap):
         dernier = evenements()[-1]
         assert len(evenements()) == avant + 3 and dernier.get("dossier_avant"), \
             ("un déplacement remonte, avec le dossier d'origine (la source doit DÉPLACER)", dernier)
+    finally:
+        c.logout()
+
+
+def test_une_seule_boite_d_archives_quel_que_soit_le_nom(serveur_imap):
+    """04/11 sur mmi : « Archive » (la boîte d'état d'AtomBox) et « Archives » (créé par Thunderbird,
+    ou venu du fournisseur) coexistaient ; un message rangé dans « Archives » n'était pas archivé.
+    Le nom servi est « Archives » ; « Archive » reste reconnu ; on ne peut pas créer un second."""
+    c = _connecte(serveur_imap)
+    try:
+        noms = _noms(c)
+        assert "Archives" in noms and "Archive" not in noms, noms
+        assert c.select("Archive")[0] == "OK", "l'ancien nom ouvre LA boîte d'archives"
+        typ, data = c.create("Archives")
+        assert typ == "NO" and b"ALREADYEXISTS" in data[0], (typ, data)
+        typ, data = c.create("Archive")
+        assert typ == "NO" and b"ALREADYEXISTS" in data[0], "ni sous l'ancien nom"
+    finally:
+        c.logout()
+
+
+def test_la_releve_adopte_ou_fond_le_dossier_d_archives_du_fournisseur(serveur_imap):
+    from sqlalchemy import select
+    from atombox.ingestion.daemon import _folder
+    from atombox.schema.models import Dossier, Rattachement
+    from atombox.services.mailbox import state_box
+    from atombox.uuid7 import uuid7
+    s = serveur_imap["session"]
+    s.expire_all()
+    box = s.scalar(select(Dossier).where(Dossier.exit_reason == "archived").limit(1))
+    boite = box.boite_id
+    # 1. le fournisseur a « Archives » et pas le nom que la boîte d'état croit : ADOPTÉ
+    box.alias_imap = "Archive"; s.commit()
+    d = _folder(s, boite, "Archives", ["INBOX", "Archives"])
+    assert d.dossier_id == box.dossier_id and d.alias_imap == "Archives"
+    assert s.scalar(select(Dossier).where(Dossier.boite_id == boite, Dossier.alias_imap == "Archives",
+                                          Dossier.exit_reason.is_(None))) is None, "aucun dossier ordinaire à côté"
+    # 2. un dossier ORDINAIRE « Archives » déjà créé (le cas de mmi) : FONDU, ses messages archivés
+    box.alias_imap = "Archive"
+    ordinaire = Dossier(dossier_id=uuid7(), boite_id=boite, nom="Archives", alias_imap="Archives", protege=False,
+                        uid_validity=42, uid_suivant=7)
+    s.add(ordinaire); s.flush()
+    cid = _un_message_en_inbox(s)
+    r = s.scalar(select(Rattachement).where(Rattachement.comm_id == cid))
+    from atombox.served_uid import assign
+    r.dossier_id, r.uid_servi = ordinaire.dossier_id, assign(s, ordinaire.dossier_id)
+    s.commit()
+    d = _folder(s, boite, "Archives", ["INBOX", "Archives"])
+    s.expire_all()
+    r = s.scalar(select(Rattachement).where(Rattachement.comm_id == cid))
+    assert d.dossier_id == box.dossier_id and r.dossier_id == box.dossier_id and r.exit_reason == "archived", \
+        "le message est dans LA boîte d'archives, et archivé"
+    assert s.get(Dossier, ordinaire.dossier_id) is None, "le dossier ordinaire a disparu"
+    box = state_box(s, boite, "archived")
+    assert (box.alias_imap, box.uid_validity, box.uid_suivant) == ("Archives", 42, 7), \
+        "la boîte d'état reprend le nom ET la position de relève du dossier fournisseur"
+    # remettre le message en file : les tests partagent la base
+    from atombox.services.mailbox import move_sync
+    from atombox.schema.models import Compte
+    move_sync(s, r, None, s.scalar(select(Compte.compte_id).where(Compte.login == "mathieu")))
+    box.uid_validity, box.uid_suivant = None, None
+    s.commit()
+
+
+def test_un_changement_d_etat_fait_ailleurs_est_annonce_en_direct(serveur_imap):
+    """04/11 : lu sur le téléphone, le message restait non lu dans Thunderbird jusqu'à ce qu'il rouvre
+    le dossier. Le serveur annonçait les arrivées et les disparitions, pas les changements d'état.
+    Désormais NOOP (et IDLE) annoncent `* n FETCH (UID u FLAGS (…))` pour ce qui a changé AILLEURS,
+    et jamais l'écho de ce que la session vient de faire elle-même."""
+    from sqlalchemy import delete
+    from atombox.schema.models import MarkerPersonal, ReadState
+    s = serveur_imap["session"]
+    cid = _un_message_en_inbox(s)
+    s.execute(delete(ReadState).where(ReadState.comm_id == cid))
+    s.execute(delete(MarkerPersonal).where(MarkerPersonal.comm_id == cid))
+    s.commit()
+    uid = str(_etat(s, comm_id=cid)[2])
+    thunderbird, telephone = _connecte(serveur_imap), _connecte(serveur_imap)
+    try:
+        thunderbird.select("INBOX"); telephone.select("INBOX")
+        thunderbird.noop(); thunderbird.untagged_responses.clear()
+        assert telephone.uid("STORE", uid, "+FLAGS", "(\\Seen)")[0] == "OK"
+        thunderbird.noop()
+        annonces = thunderbird.untagged_responses.get("FETCH", [])
+        assert any(b"UID " + uid.encode() in a and b"\\Seen" in a for a in annonces), \
+            ("Thunderbird apprend la lecture faite sur le téléphone", annonces)
+        thunderbird.untagged_responses.clear()
+        thunderbird.noop()
+        assert not thunderbird.untagged_responses.get("FETCH"), "annoncé une fois, pas à chaque NOOP"
+        telephone.untagged_responses.clear()
+        telephone.noop()
+        assert not telephone.untagged_responses.get("FETCH"), "jamais l'écho de son propre geste"
+    finally:
+        thunderbird.logout(); telephone.logout()
+
+
+def test_le_client_se_presente_et_le_journal_le_dit(serveur_imap, caplog):
+    """ID (RFC 2971) : le nom du client suit son adresse dans le journal (04/11)."""
+    import logging
+    imaplib.Commands.setdefault("ID", ("NONAUTH", "AUTH", "SELECTED"))
+    c = _connecte(serveur_imap)
+    try:
+        with caplog.at_level(logging.INFO, logger="atombox.imap"):
+            typ, data = c._simple_command("ID", '("name" "Thunderbird" "version" "140.4")')
+            assert typ == "OK"
+            c.select("INBOX"); c.noop()
+        assert any("Thunderbird_140.4" in r.getMessage() for r in caplog.records), [r.getMessage() for r in caplog.records]
     finally:
         c.logout()
 

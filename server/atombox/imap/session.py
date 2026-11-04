@@ -26,7 +26,7 @@ log = journal("imap")
 # DÉMARRER en clair ailleurs que sur la boucle locale (voir `server.check_transport`). Une session
 # n'a donc jamais à négocier quoi que ce soit. Elle annonçait `STARTTLS` hors TLS — sans qu'aucune
 # commande le serve : la règle d'au-dessus, contredite trois lignes plus bas.
-CAPABILITIES = ["IMAP4rev1", "AUTH=PLAIN", "UIDPLUS", "MOVE", "SPECIAL-USE", "NAMESPACE", "IDLE"]
+CAPABILITIES = ["IMAP4rev1", "AUTH=PLAIN", "UIDPLUS", "MOVE", "SPECIAL-USE", "NAMESPACE", "IDLE", "ID"]
 
 # Les drapeaux qu'un message peut porter chez nous. `\\Seen` et `\\Flagged` sont PERSONNELS depuis
 # D175 ; `\\Deleted` n'est pas un drapeau posé à côté mais une TRANSITION vers la corbeille (D183) —
@@ -73,6 +73,8 @@ class Session:
         self.done = False
         self.read_only = True     # SELECT ouvre en écriture, EXAMINE non (RFC 3501 § 6.3.2)
         self.awaiting_literal = None  # (ligne_partielle, octets_attendus) quand un littéral est en cours
+        self.qui = ""                 # « ip:port client » — qui fait quoi, dans le journal (04/11)
+        self._flags: dict = {}        # l'instantané des drapeaux du dossier sélectionné, pour NOOP/IDLE
         self._literals: list[bytes] = []   # les littéraux de la commande en cours, octets intacts
         self.idling = None            # l'étiquette de l'IDLE en cours, ou None (RFC 2177)
 
@@ -188,6 +190,7 @@ class Session:
             if unseen:
                 self.view.store_flags(self.compte, self.mailbox, unseen, ["\\Seen"], [])
                 marked = set(unseen)
+                self._flags = self._flags_of(self.mailbox)
         lines = []
         for uid in targeted:
             m = self.view.message(self.mailbox, uid)
@@ -291,6 +294,26 @@ class Session:
 
     def _c_noop(self, tag, args): return self._refresh() + ["%s OK NOOP" % tag]
 
+    def _flags_of(self, mailbox) -> dict:
+        """l'instantané des drapeaux ; une vue qui ne sait pas le dire (une doublure) n'annonce rien"""
+        f = getattr(self.view, "flags_of", None)
+        return f(mailbox) if f is not None and mailbox is not None else {}
+
+    def _c_id(self, tag, args):
+        """ID (RFC 2971) : le client dit qui il est (« Thunderbird », « K-9 Mail »…), nous aussi.
+
+        Le 04/11, impossible de dire depuis le journal QUELLE session avait été prévenue d'un
+        déplacement : le téléphone et Thunderbird venaient de la même adresse. Le nom annoncé suit
+        désormais l'adresse dans chaque ligne qui compte."""
+        champs = args[0] if args and isinstance(args[0], list) else []
+        info = {str(champs[i]).lower(): str(champs[i + 1]) for i in range(0, len(champs) - 1, 2)}
+        nom = " ".join(x for x in (info.get("name"), info.get("version")) if x and x != "NIL")
+        if nom:
+            self.qui = ("%s %s" % (self.qui, nom.replace(" ", "_"))).strip()
+            self.view.qui = self.qui
+            log.info("%s se présente : %s", self.qui, nom)
+        return ['* ID ("name" "AtomBox")', "%s OK ID" % tag]
+
     def _c_check(self, tag, args): return self._refresh() + ["%s OK CHECK" % tag]
 
     def _refresh(self) -> list[str]:
@@ -323,8 +346,20 @@ class Session:
                 current.pop(rank - 1)
         if len(resulting) != len(current):
             lines.append("* %d EXISTS" % len(resulting))
-        if lines: log.info("boîte « %s » : %d disparu(s), %d au total", self.mailbox.name,
-                            len(previous) - len(current), len(resulting))
+        # LES CHANGEMENTS D'ÉTAT FAITS AILLEURS (04/11) : lu sur le téléphone, le message restait non lu
+        # dans Thunderbird jusqu'à ce qu'il rouvre le dossier. RFC 3501 § 7.4.2 : une réponse FETCH
+        # non sollicitée dit au client que les drapeaux ont changé. UID inclus : le client sait de quel
+        # message on parle sans recompter.
+        new_flags = self._flags_of(fresh)
+        old_flags = getattr(self, "_flags", {}) or {}
+        changed = 0
+        for i, uid in enumerate(resulting, 1):
+            if uid in old_flags and new_flags.get(uid, ()) != old_flags[uid]:
+                lines.append("* %d FETCH (UID %d FLAGS (%s))" % (i, uid, " ".join(new_flags.get(uid, ()))))
+                changed += 1
+        self._flags = new_flags
+        if lines: log.info("%s boîte « %s » : %d disparu(s), %d changé(s), %d au total", self.qui, self.mailbox.name,
+                            len(previous) - len(current), changed, len(resulting))
         self.mailbox, self.uids = fresh, resulting
         return lines
 
@@ -355,7 +390,7 @@ class Session:
             log.warning("échec d'authentification IMAP pour %r", login)
             return ["%s NO identifiants refusés" % tag]
         self.compte = compte
-        log.info("session IMAP ouverte par %s", login)
+        log.info("%s session IMAP ouverte par %s", self.qui, login)
         return ["%s OK [CAPABILITY %s] bonjour" % (tag, " ".join(self._capabilities()))]
 
     # ── avec authentification ───────────────────────────────────────────────────────────────────
@@ -512,6 +547,7 @@ class Session:
             self.mailbox = None
             return ["%s NO boîte aux lettres inconnue" % tag]
         self.mailbox, self.uids = mailbox, mailbox.uids
+        self._flags = self._flags_of(mailbox)
         self.read_only = (what == "EXAMINE")
         # LE CLIENT DOIT SAVOIR CE QU'IL PEUT ÉCRIRE, exactement. Annoncer PERMANENTFLAGS () quand
         # on accepte les STORE ferait que Thunderbird n'essaierait même pas ; annoncer des drapeaux
@@ -621,6 +657,7 @@ class Session:
         elif op == "-FLAGS": to_add, to_remove = [], known_flags
         else: return ["%s BAD opération de STORE inconnue : %s" % (tag, op)]
         self.view.store_flags(self.compte, self.mailbox, targeted, to_add, to_remove)
+        self._flags = self._flags_of(self.mailbox)   # son propre geste n'est pas une nouvelle
         lines = []
         if not silent:
             for uid in targeted:
