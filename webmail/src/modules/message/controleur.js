@@ -80,6 +80,8 @@
       if (!p) return null;
       if (p.comm_id) return ABX.Controllers.Tabs.ouvrir({ type: "msg", id: p.comm_id }, false);
       Message.logPieceJointe(m, i);
+      // F154 : la visionneuse, par-dessus le message, avec les flèches vers les autres pièces
+      if (ABX.Controllers.Visionneuse) return ABX.Controllers.Visionneuse.ouvrir(m, i);
       const pj = p.b && p.b.pj_id;
       if (!pj) return null;
       return Promise.resolve(ABX.Api.contenuPieceJointe(m.id, pj)).then(blob => {

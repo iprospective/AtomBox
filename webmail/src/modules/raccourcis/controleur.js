@@ -53,6 +53,9 @@
     { touche: "r",      contexte: "message", libelle: "répondre",                 fait: ecrire("rep") },
     { touche: "R",      contexte: "message", libelle: "répondre à tous",          fait: ecrire("reptous") },
     { touche: "f",      contexte: "message", libelle: "transférer",               fait: ecrire("tr") },
+    // la visionneuse des pièces jointes (F154) : documentées ici, traitées par elle tant qu'elle est ouverte
+    { touche: "ArrowLeft",  contexte: "pièce jointe", libelle: "pièce précédente",   fait: () => {} },
+    { touche: "ArrowRight", contexte: "pièce jointe", libelle: "pièce suivante",     fait: () => {} },
   ];
 
   const Raccourcis = {
@@ -67,6 +70,12 @@
     },
 
     traiter(e) {
+      // la visionneuse ouverte a le clavier (← → Échap) ; les autres raccourcis attendent sa fermeture
+      const Vi = ABX.Controllers.Visionneuse;
+      if (Vi && Vi.ouverte) {
+        if (e && !e.ctrlKey && !e.metaKey && !e.altKey && Vi.touche(e.key)) { if (e.preventDefault) e.preventDefault(); return true; }
+        return false;
+      }
       const k = Raccourcis.touche(e); if (k === null) return false;
       const r = TABLE.find(x => x.touche === k);
       if (!r) return false;

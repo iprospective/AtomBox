@@ -97,7 +97,8 @@ function serveur(vus) {
     if (/^\/messages\/[^/]+\/fil$/.test(nu)) return rep({ fil: [] });
     /* les octets d'une pièce ne sont pas du JSON : la réponse porte un blob, comme la vraie */
     if (/^\/messages\/[^/]+\/pieces-jointes\/[^/]+$/.test(nu) && m === "GET")
-      return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve({ size: 2048 }) });
+      return Promise.resolve({ ok: true, status: 200, blob: () => Promise.resolve({ size: 2048,
+        text: () => Promise.resolve("<script>alert('pj')</script><b>bonjour</b>") }) });
     if (/^\/messages\/[^/]+$/.test(nu) && m === "GET") return rep(etat.messages[nu.split("/")[2]] || null);
     if (/^\/messages\/[^/]+$/.test(nu) && m === "PUT") return rep({ ok: true, modifies: 1, message: etat.messages[nu.split("/")[2]] });
     if (nu === "/dossiers-virtuels" && m === "POST") { const d = { id: "perso:v1", label: corps.label, criteres: corps.criteres };
@@ -318,6 +319,66 @@ function serveur(vus) {
   /* le service seul, en plus du câblage : une pièce sans octets servis ne casse rien */
   const rendu = await A.Controllers.Message.ouvrirPiece(A.Api.cache.message("m3"), 0);
   vrai(rendu !== undefined, "ouvrirPiece rend ce que le serveur a donné, sans jeter");
+
+  console.log("— la visionneuse des pièces jointes (F154, D207) ——————————————");
+  {
+    const Vi = A.Controllers.Visionneuse, vis = () => doc.getElementById("visionneuse");
+    // sans URL d'objet (le harnais n'en a pas), les gestes du navigateur s'abstiennent sans jeter
+    eq(Vi.objetURL({ size: 1 }), null, "objetURL : rien à créer sans URL d'objet");
+    eq(Vi.telecharger({ size: 1 }, "x.pdf"), null, "telecharger : rien sans URL d'objet ni lien");
+    Vi.liberer("blob:inexistant");
+    Vi.ouvrirMessage();
+    const urls = [], liberees = [];
+    Vi.objetURL = b => { const u = "blob:test-" + urls.length; urls.push(u); return u; };   // le harnais n'a pas d'URL d'objet
+    Vi.liberer = u => { if (u) liberees.push(u); };
+    A.Controllers.Tabs.ouvrir({ type: "msg", id: "m3" }, false); await drainer(e);
+    n = vus.length;
+    geste("detail", ".pjc", 0); await drainer(e);
+    vrai(Vi.ouverte && !vis().hidden, "cliquer une pièce ouvre la visionneuse, pas un onglet du navigateur");
+    vrai(vis().innerHTML.includes("devis.pdf") && vis().innerHTML.includes("1 / 2"), "le nom et la position : 1 / 2");
+    eq(Vi.pieces().length, 2, "la visionneuse parcourt les pièces DU message");
+    vrai(vis().innerHTML.includes('<iframe class="visio-pdf" src="blob:test-0"'), "un PDF s'affiche dans la visionneuse");
+    eq(vus.slice(n).filter(v => v.includes("/pieces-jointes/p1")).length, 1, "ses octets sont demandés une fois");
+    geste("visionneuse", "#vi_suiv"); await drainer(e);
+    vrai(vis().innerHTML.includes("2 / 2") && vis().innerHTML.includes("Ouvrir le message"),
+         "→ : la pièce suivante — un message qu'on possède propose de l'ouvrir");
+    n = vus.length;
+    const K0 = A.Controllers.Raccourcis;
+    K0.traiter({ key: "ArrowLeft", target: { tagName: "BODY" }, preventDefault() {} }); await drainer(e);
+    vrai(vis().innerHTML.includes("1 / 2"), "← au clavier : retour à la première");
+    eq(vus.slice(n).filter(v => v.includes("/pieces-jointes/")).length, 0, "revenir ne redemande pas les octets");
+    K0.traiter({ key: "ArrowRight", target: { tagName: "BODY" }, preventDefault() {} }); await drainer(e);
+    vrai(vis().innerHTML.includes("2 / 2"), "→ au clavier aussi");
+    geste("visionneuse", "#vi_msg"); await drainer(e);
+    vrai(!Vi.ouverte && ui.tab === "m:m1", "« Ouvrir le message » ferme la visionneuse et ouvre le message (D168)");
+    vrai(liberees.includes("blob:test-0"), "fermer libère les octets gardés");
+    // une pièce HTML n'est JAMAIS rendue ; un type non affichable a sa fiche et « Enregistrer »
+    const faux = { id: "m3", pieces_jointes: [
+      { nom: "page.html", b: { pj_id: "p8", mime: "text/html" } },
+      { nom: "tarifs.xlsx", b: { pj_id: "p9", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ko: 344, ic: "📊" } }] };
+    await Vi.ouvrir(faux, 0); await drainer(e);
+    vrai(vis().innerHTML.includes("&lt;script&gt;") && !vis().innerHTML.includes("<script>"),
+         "une page HTML se lit comme du TEXTE : jamais exécutée (D207)");
+    vrai(vis().innerHTML.includes("jamais exécutée"), "et la visionneuse le dit");
+    await Vi.aller(+1); await drainer(e);
+    vrai(vis().innerHTML.includes("tarifs.xlsx") && vis().innerHTML.includes('id="vi_enreg2"'),
+         "un fichier non affichable a sa fiche et « Enregistrer »");
+    n = vus.length;
+    geste("visionneuse", "#vi_enreg2"); await drainer(e);
+    vrai(vus.slice(n).some(v => v.includes("/pieces-jointes/p9")), "Enregistrer demande les octets de la pièce");
+    geste("visionneuse", "#vi_enreg"); await drainer(e);
+    K0.traiter({ key: "Escape", target: { tagName: "BODY" }, preventDefault() {} });
+    vrai(!Vi.ouverte && vis().hidden, "Échap ferme la visionneuse");
+    await Vi.ouvrir(faux, 1); await drainer(e);
+    geste("visionneuse", "#vi_prec"); await drainer(e);
+    vrai(vis().innerHTML.includes("page.html"), "‹ : la pièce précédente");
+    const fond = vis().querySelector("#vi_fond");
+    fond.onclick({ target: fond }); await drainer(e);
+    vrai(!Vi.ouverte, "un clic sur le fond ferme");
+    await Vi.ouvrir(faux, 1); await drainer(e);
+    geste("visionneuse", "#vi_fermer"); await drainer(e);
+    vrai(!Vi.ouverte, "✕ ferme");
+  }
 
   console.log("— l'arborescence : dossier virtuel, épingle, renommer —");
   const nav = A.Controllers.Nav;
