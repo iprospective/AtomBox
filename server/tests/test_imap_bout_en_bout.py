@@ -403,6 +403,46 @@ def test_lire_le_corps_marque_lu_et_ca_tient_a_la_resynchronisation(serveur_imap
         c.logout()
 
 
+def test_un_geste_fait_par_imap_remonte_vers_la_boite_source(serveur_imap):
+    """F113 : ce qu'on fait dans Thunderbird ou sur le téléphone (lu, drapeau, déplacement) doit
+    partir vers la boîte SOURCE, comme un clic du webmail — sinon la relève suivante lit « non lu »
+    chez le fournisseur, qui fait foi en V0, et le message REPASSE en non lu (04/11, mmi).
+
+    Le webmail émet `rattachement.change` ; le serveur IMAP d'AtomBox n'émettait rien."""
+    from sqlalchemy import delete, select
+    from atombox.schema.models import Evenement, MarkerPersonal, ReadState
+    s = serveur_imap["session"]
+    cid = _un_message_en_inbox(s)
+    s.execute(delete(ReadState).where(ReadState.comm_id == cid))
+    s.execute(delete(MarkerPersonal).where(MarkerPersonal.comm_id == cid))
+    s.commit()
+    uid = str(_etat(s, comm_id=cid)[2])
+
+    def evenements():
+        s.expire_all()
+        return [e.charge for e in s.scalars(select(Evenement).where(Evenement.type == "rattachement.change"))
+                if e.charge.get("comm_id") == str(cid)]
+
+    avant = len(evenements())
+    c = _connecte(serveur_imap)
+    try:
+        c.select("INBOX")
+        assert c.uid("FETCH", uid, "(BODY[])")[0] == "OK"          # lu sur le téléphone
+        assert len(evenements()) == avant + 1, "lire marque lu ET l'annonce à la source"
+        assert c.uid("STORE", uid, "+FLAGS", "(\\Flagged)")[0] == "OK"
+        assert len(evenements()) == avant + 2, "un drapeau posé dans Thunderbird remonte aussi"
+        assert c.uid("FETCH", uid, "(BODY[])")[0] == "OK"
+        assert len(evenements()) == avant + 2, "relire un message déjà lu ne réannonce rien"
+        dossier_avant = _etat(s, comm_id=cid)
+        typ, _ = c.uid("MOVE", uid, "Archive")
+        assert typ == "OK"
+        dernier = evenements()[-1]
+        assert len(evenements()) == avant + 3 and dernier.get("dossier_avant"), \
+            ("un déplacement remonte, avec le dossier d'origine (la source doit DÉPLACER)", dernier)
+    finally:
+        c.logout()
+
+
 # ── APPEND (RM3499) : ce que Thunderbird fait pour ranger un envoyé ou enregistrer un brouillon ──
 # Un message en ISO-8859-1, EXPRÈS : l'octet 0xE9 n'est pas de l'UTF-8 valide. L'écouteur décodait
 # autrefois les littéraux en UTF-8 avec remplacement — ce message serait ressorti avec « � » à

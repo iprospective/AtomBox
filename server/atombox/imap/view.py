@@ -313,7 +313,11 @@ class View:
             if r is None: continue
             # L'ÉTAT SUIT LA DESTINATION : une boîte d'état l'impose, un dossier ordinaire le remet
             # à rien — sortir de la corbeille en déplaçant vers INBOX, c'est la même écriture.
+            dossier_avant = r.dossier_id
             move_sync(self.s, r, dest.exit_reason, compte.compte_id, cible=dest)
+            self.s.flush()
+            if r.dossier_id != dossier_avant:
+                self._announce(r, dossier_avant)
             pairs.append((uid, r.uid_servi))
         self.s.commit()
         if pairs: log.info("MOVE de %d message(s) vers « %s » (état %s)",
@@ -388,6 +392,21 @@ class View:
         except PermissionError as e:
             raise f.FolderRefused(str(e), "CANNOT")
 
+    def _announce(self, r, dossier_avant=None):
+        """LA SYNCHRONISATION MONTANTE (F113) d'un geste fait par IMAP, comme d'un clic du webmail.
+
+        Le 04/11 : des messages lus dans Thunderbird ou sur le téléphone repassaient en non lu. Le
+        webmail émet `rattachement.change`, et la tâche de synchronisation pose l'état dans la boîte
+        SOURCE ; le serveur IMAP d'AtomBox n'émettait rien. La relève suivante lisait « non lu »
+        chez le fournisseur, qui fait foi en V0, et défaisait la lecture. Même émission ici, dans la
+        transaction du geste ; jamais pour un changement venu d'IMAP (la boucle)."""
+        from ..sync import down_sync
+        if down_sync(): return
+        from ..modules import events
+        events.emit(self.s, "rattachement.change",
+                    {"comm_id": str(r.comm_id), "boite_id": str(r.boite_id), "sens": r.sens,
+                     "dossier_avant": str(dossier_avant) if dossier_avant else None}, cible=None)
+
     def store_flags(self, compte, mailbox, uids: list[int], to_add: list[str], to_remove: list[str]):
         """STORE — les drapeaux qu'on sait écrire, et rien d'autre.
 
@@ -405,6 +424,7 @@ class View:
             r = self.s.scalar(select(Rattachement).where(Rattachement.dossier_id == mailbox.dossier_id,
                                                         Rattachement.uid_servi == uid))
             if r is None: continue
+            dossier_avant = r.dossier_id
             for f in to_add:
                 if f == "\\Seen":
                     self.s.execute(personal.open_stmt(compte.compte_id, r.comm_id, r.boite_id))
@@ -422,6 +442,8 @@ class View:
                     self.s.execute(personal.flag_stmt(compte.compte_id, r.comm_id, r.boite_id, False))
                 elif f == "\\Deleted" and r.exit_reason == "deleted":
                     move_sync(self.s, r, None, compte.compte_id)
+            self.s.flush()
+            self._announce(r, dossier_avant if r.dossier_id != dossier_avant else None)
             touched.append(uid)
         self.s.commit()
         return touched
