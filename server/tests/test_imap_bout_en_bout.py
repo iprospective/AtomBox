@@ -359,6 +359,50 @@ def test_retirer_seen_ne_detruit_pas_l_ouverture(serveur_imap):
         except Exception: pass
 
 
+def test_lire_le_corps_marque_lu_et_ca_tient_a_la_resynchronisation(serveur_imap):
+    """RFC 3501 § 6.4.5 : `FETCH BODY[]` (sans `.PEEK`), `RFC822` et `RFC822.TEXT` posent `\\Seen`.
+
+    Le 04/11, l'application mail d'Android : un message lu sur le téléphone redevenait non lu à la
+    synchronisation suivante. Thunderbird envoie un `STORE +FLAGS (\\Seen)` explicite ; l'application
+    d'Android compte sur le marquage IMPLICITE de la lecture — que nous ne faisions pas. `PEEK` et une
+    boîte ouverte par EXAMINE, eux, ne marquent rien."""
+    from sqlalchemy import delete, select
+    from atombox.schema.models import MarkerPersonal, ReadState
+    s = serveur_imap["session"]
+    cid = _un_message_en_inbox(s)
+    s.execute(delete(ReadState).where(ReadState.comm_id == cid))
+    s.execute(delete(MarkerPersonal).where(MarkerPersonal.comm_id == cid))
+    s.commit()
+    uid = str(_etat(s, comm_id=cid)[2])
+
+    def lu():
+        s.expire_all()
+        r = s.scalar(select(ReadState).where(ReadState.comm_id == cid))
+        return r is not None and r.opened_at is not None
+
+    c = _connecte(serveur_imap)
+    try:
+        c.select("INBOX", readonly=True)                      # EXAMINE
+        assert c.uid("FETCH", uid, "(BODY[])")[0] == "OK"
+        assert not lu(), "une boîte ouverte en lecture seule ne marque rien"
+        c.select("INBOX")
+        assert c.uid("FETCH", uid, "(BODY.PEEK[])")[0] == "OK"
+        assert not lu(), "PEEK ne marque rien : c'est son sens"
+        typ, data = c.uid("FETCH", uid, "(BODY[])")
+        assert typ == "OK" and lu(), "lire le corps marque le message lu"
+        entetes = b" ".join(x[0] if isinstance(x, tuple) else x for x in data if x)
+        assert b"\\Seen" in entetes, ("le client apprend le changement dans la même réponse", entetes)
+    finally:
+        c.logout()
+    c = _connecte(serveur_imap)                                # la resynchronisation
+    try:
+        c.select("INBOX")
+        assert b"\\Seen" in c.uid("FETCH", uid, "(FLAGS)")[1][0]
+        assert uid.encode() not in c.uid("SEARCH", "UNSEEN")[1][0].split()
+    finally:
+        c.logout()
+
+
 # ── APPEND (RM3499) : ce que Thunderbird fait pour ranger un envoyé ou enregistrer un brouillon ──
 # Un message en ISO-8859-1, EXPRÈS : l'octet 0xE9 n'est pas de l'UTF-8 valide. L'écouteur décodait
 # autrefois les littéraux en UTF-8 avec remplacement — ce message serait ressorti avec « � » à
