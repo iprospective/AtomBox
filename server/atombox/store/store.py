@@ -84,5 +84,49 @@ class Store:
             return self._d.decompress(contenu, max_output_size=1 << 31)
         return contenu
 
+    # ── un MESSAGE (RM3631, D208, D209) : son squelette, ses pièces dans les blobs ──────────────────
+    def write_message(self, comm_id, raw: bytes, replace: bool = False) -> dict:
+        """Écrit le message sous l'UUID de sa comm, en SQUELETTE : ses parties base64 vont, décodées,
+        dans les blobs dédupliqués. Vérifié avant de rendre : relu du disque, le message doit redonner
+        l'empreinte du reçu ; sinon il est gardé ENTIER dans le conteneur (`brut_garde`), et dit.
+
+        Rend {empreinte, taille_octets, taille_stockee, compression, brut_garde, blobs: [(empreinte, info)]} ;
+        `blobs` = les pièces écrites, que l'appelant enregistre (compteur de références, D087)."""
+        from . import skeleton as Sq
+        h = fingerprint(raw)
+        sq, segs = Sq.decompose(raw)
+        blobs, manif = [], {"h": h, "segments": []}
+        for sg in segs:
+            e, info = self.put(sg["content"])
+            blobs.append((e, info))
+            manif["segments"].append(dict(sg["params"], o=sg["o"], b=e))
+        info = self.write(comm_id, Sq.container(sq, manif), replace=replace)
+        brut_garde = False
+        try:
+            ok = self.read_message(comm_id) == raw
+        except Exception as ex:                               # noqa: BLE001 — tout échec est un repli
+            log.warning("message %s : relecture du squelette impossible (%s)", comm_id, ex); ok = False
+        if not ok:
+            # garde-fou (D209) : le message ENTIER, dans le conteneur ; compté, signalé, jamais perdu
+            log.warning("message %s : la reconstitution ne redonne pas l'octet reçu — brut gardé", comm_id)
+            info = self.write(comm_id, Sq.container(raw, {"h": h, "segments": [], "brut": True}), replace=True)
+            blobs, brut_garde = [], True
+        return {"empreinte": h, "taille_octets": len(raw), "taille_stockee": info["taille_stockee"],
+                "compression": "squelette-brut" if brut_garde else "squelette", "brut_garde": brut_garde, "blobs": blobs,
+                "nouveau": info["nouveau"]}
+
+    def read_message(self, comm_id) -> bytes:
+        """LE chemin de lecture d'un message (RM3631) : reconstitué à l'octet, empreinte vérifiée.
+        Un message d'avant RM3631 (écrit tel quel) est rendu tel quel."""
+        from . import skeleton as Sq
+        data = self.read(comm_id)
+        c = Sq.read_container(data)
+        if c is None: return data
+        manif, sq = c
+        raw = Sq.assemble(sq, manif, self.read)
+        if fingerprint(raw) != manif.get("h"):
+            raise ValueError("message %s : la reconstitution ne redonne pas l'empreinte enregistrée" % comm_id)
+        return raw
+
     def _compression_of(self, path) -> str:
         with open(path, "rb") as f: return "zstd" if f.read(4) == ZSTD_MAGIC else "aucune"

@@ -53,7 +53,7 @@ class SendingModule(Module):
             identite = Identite(identite_id=uuid7(), boite_id=boite_id, nom_affiche=comm.from_nom or expediteur, adresse_id=boite.adresse_id, au_nom_de=False, par_defaut=True)
             s.add(identite); s.flush()
         store = Store(settings.read("ATOMBOX_STORE", "./magasin"))
-        raw_bytes = store.read(str(comm_id))
+        raw_bytes = store.read_message(str(comm_id))
         envoi = s.scalar(select(Envoi).where(Envoi.comm_id == comm_id))
         if envoi is None:
             envoi = Envoi(envoi_id=uuid7(), comm_id=comm_id, identite_id=identite.identite_id, retour_enveloppe=expediteur)

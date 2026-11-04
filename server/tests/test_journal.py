@@ -32,7 +32,7 @@ def test_chaque_module_ecrit_dans_le_journal_et_jamais_print():
     sans_journal, prints = [], []
     for f in glob.glob(os.path.join(paquet, "**", "*.py"), recursive=True):
         rel = os.path.relpath(f, paquet); s = open(f, encoding="utf-8").read()
-        if re.search(r"^\s*print\(", s, re.M) and rel not in ("bootstrap.py", "applications.py"): prints.append(rel)   # un script CLI parle sur sa sortie standard (le jeton d'une application ne sort que là)
+        if re.search(r"^\s*print\(", s, re.M) and rel not in ("bootstrap.py", "applications.py", "store/migrate.py"): prints.append(rel)   # un script CLI (migrate : le bilan du gain, RM3631) parle sur sa sortie standard (le jeton d'une application ne sort que là)
         if rel in ("journal.py", "__init__.py", "uuid7.py") or "/migrations/" in rel or rel.startswith("schema/models") or rel.startswith("api/contract") or rel.startswith("api/dependencies") or rel.startswith("api/routing") or rel.startswith("ingestion/analysis") or rel.startswith("imap/mime") or rel.startswith("imap/search") or rel.startswith("imap/mutf7") or rel.startswith("ingestion/identity") or rel.startswith("modules/__init__") or rel.endswith("__init__.py"):
             continue
         if "journal(" not in s: sans_journal.append(rel)

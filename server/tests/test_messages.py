@@ -411,7 +411,7 @@ def test_un_message_envoye_a_soi_meme_apparait_aussi_en_reception(monde):
     s = monde["session"]; s.expire_all()
     store = Store(os.environ["ATOMBOX_STORE"])
     inbox = s.scalar(select(Dossier).where(Dossier.alias_imap == "INBOX"))
-    r = ingest(s, store, inbox.boite_id, store.read(cid), dossier_id=inbox.dossier_id, sens="in")
+    r = ingest(s, store, inbox.boite_id, store.read_message(cid), dossier_id=inbox.dossier_id, sens="in")
     assert str(r["comm_id"]) == cid and r["nouveau"] is False, "le MÊME message (D064), pas un double"
 
     # 3. il est dans la boîte de réception, LU, sous son identifiant nu…

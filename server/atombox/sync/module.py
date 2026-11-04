@@ -76,7 +76,7 @@ class ModuleSync(Module):
         if dossier is None or not (dossier.alias_imap or dossier.nom):
             log.warning("%s : dossier des envoyés inconnu — rien à copier", comm_id); return
         from ..store import Store
-        raw_bytes = Store(settings.read("ATOMBOX_STORE", "./magasin")).read(str(comm_id))
+        raw_bytes = Store(settings.read("ATOMBOX_STORE", "./magasin")).read_message(str(comm_id))
         e = s.get(CommEmail, comm_id)
         boite = s.get(Boite, boite_id); adresse = s.get(Adresse, boite.adresse_id).adresse_complete
         releve = open_mailbox(adresse)

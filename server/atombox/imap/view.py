@@ -88,7 +88,12 @@ class ServedMessage:
     # ── la structure MIME, lue sur l'OCTET stocké (RM3499, `imap/mime.py`) ──────────────────────
     def _raw(self):
         if not hasattr(self, "_raw_cache"):
-            self._raw_cache = self._store.read(self._blob) if (self._blob and self._store is not None) else None
+            # RM3631 : le message se lit par SA comm, reconstitué ; le blob de son empreinte n'a plus de fichier
+            if self._store is None: self._raw_cache = None
+            else:
+                try: self._raw_cache = self._store.read_message(str(self._c.comm_id))
+                except FileNotFoundError:          # un message très ancien, rangé sous sa seule empreinte
+                    self._raw_cache = self._store.read(self._blob) if self._blob else None
         return self._raw_cache
 
     def _tree(self):
