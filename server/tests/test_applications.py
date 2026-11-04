@@ -150,3 +150,113 @@ def test_les_echanges_d_un_tiers_par_ses_adresses(api, monde):
     assert sujets(adresses="personne@nulle-part.example") == []
     assert sujets(adresses="") == [], "une liste vide ne montre rien, jamais tout"
     assert len(sujets(adresses="jean.tessier@tessier-industries.example,compta@fournisseur.example")) == 3
+
+
+# ---- RM3632 : le direct (SSE) — la portée, le curseur, les événements de l'écran ------------------
+
+def _evenements(monde, type_):
+    from sqlalchemy import select
+    from atombox.schema.models import Evenement
+    s = monde["session"]; s.expire_all()
+    return [e for e in s.scalars(select(Evenement).where(Evenement.type == type_).order_by(Evenement.evenement_id))]
+
+
+def test_poser_ou_retirer_un_tag_s_annonce_aux_boites_du_message(api, monde):
+    c, humain, appli = api
+    cid = monde["ids"]["ventes@ailleurs.example"]
+    avant = len(_evenements(monde, "tags.change"))
+    assert c.post("/api/v1/messages/%s/tags" % cid, json={"axe": "propal", "val": "77"}, headers=humain).status_code == 200
+    assert c.delete("/api/v1/messages/%s/tags/propal=77" % cid, headers=humain).status_code == 200
+    evs = _evenements(monde, "tags.change")[avant:]
+    assert [e.charge["quoi"] for e in evs] == ["pose", "retire"], [e.charge for e in evs]
+    assert evs[0].charge["boites"], "la boîte du message est dite : c'est sur elle que porte la portée"
+
+
+def test_un_dossier_cree_renomme_supprime_par_imap_s_annonce(monde):
+    from sqlalchemy import select
+    from atombox.schema.models import Boite, Dossier
+    from atombox.services import folders_util as f
+    s = monde["session"]
+    boite = s.scalars(select(Boite)).first()
+    avant = len(_evenements(monde, "dossier.change"))
+    d = f.create_folder_sync(s, boite, "Projets")
+    f.rename_folder_sync(s, boite, d, "Chantiers")
+    f.delete_folder_sync(s, boite, s.get(Dossier, d.dossier_id))
+    evs = _evenements(monde, "dossier.change")[avant:]
+    assert [(e.charge["quoi"], e.charge["dossier"]) for e in evs] == \
+        [("cree", "Projets"), ("renomme", "Chantiers"), ("supprime", "Chantiers")], [e.charge for e in evs]
+    assert evs[1].charge["avant"] == "Projets"
+
+
+def test_le_direct_ne_relaie_que_la_portee_et_reprend_au_curseur(api, monde):
+    import asyncio
+    from atombox.db import async_session_factory
+    from atombox.services import live
+    from atombox.schema.models import Boite, Adresse
+    from sqlalchemy import select
+    c, humain, appli = api
+    s = monde["session"]
+    boites = {a.adresse_complete: str(b.boite_id) for b, a in s.execute(
+        select(Boite, Adresse).join(Adresse, Adresse.adresse_id == Boite.adresse_id)).all()}
+
+    async def depuis(cursor, portee):
+        async with async_session_factory()() as s2:
+            return await live.since(s2, cursor, portee)
+
+    async def maintenant():
+        async with async_session_factory()() as s2:
+            return await live.latest(s2)
+
+    curseur = asyncio.run(maintenant())
+    dedans, dehors = monde["ids"]["contact@exemple.fr"], monde["ids"]["ventes@ailleurs.example"]
+    c.post("/api/v1/messages/%s/tags" % dedans, json={"axe": "propal", "val": "501"}, headers=humain)
+    c.post("/api/v1/messages/%s/tags" % dehors, json={"axe": "propal", "val": "502"}, headers=humain)
+    vus, curseur2 = asyncio.run(depuis(curseur, {boites["contact@exemple.fr"]}))
+    assert [e[2]["val"] for e in vus] == ["501"], ("une boîte hors portée ne s'annonce JAMAIS", vus)
+    tous, _ = asyncio.run(depuis(curseur, set(boites.values())))
+    assert [e[2]["val"] for e in tous] == ["501", "502"], "la personne qui a les deux boîtes voit les deux"
+    assert asyncio.run(depuis(curseur2, set(boites.values())))[0] == [], "au curseur, rien en double"
+
+
+def test_la_route_sse_pousse_dans_la_portee_de_l_application(api, monde, monkeypatch):
+    """un VRAI serveur (uvicorn) et un vrai client : le client de test de Starlette attend la fin de la
+    réponse, ce qu'un flux SSE n'a jamais"""
+    import socket, threading, time, httpx, uvicorn
+    from atombox.api.app import create_app
+    monkeypatch.setenv("ATOMBOX_LIVE_POLL", "0.05")
+    from atombox import applications
+    c, humain, _ = api
+    # une application À ELLE (un test précédent révoque celle du module), même portée : exemple.fr
+    _app, jeton = applications.create(monde["session"], "direct-test", "dolibarr", domaines=["exemple.fr"], axes=["projet"])
+    appli = {"Authorization": "Bearer " + jeton}
+    dedans, dehors = monde["ids"]["contact@exemple.fr"], monde["ids"]["ventes@ailleurs.example"]
+    with socket.socket() as so:
+        so.bind(("127.0.0.1", 0)); port = so.getsockname()[1]
+    serveur = uvicorn.Server(uvicorn.Config(create_app(), host="127.0.0.1", port=port, log_level="warning", lifespan="off"))
+    threading.Thread(target=serveur.run, daemon=True).start()
+    for _ in range(100):
+        if serveur.started: break
+        time.sleep(0.05)
+    assert serveur.started
+    lignes, pret = [], threading.Event()
+
+    def ecouter():
+        with httpx.stream("GET", "http://127.0.0.1:%d/api/v1/evenements" % port, headers=appli, timeout=15) as r:
+            lignes.append("status %d %s" % (r.status_code, r.headers.get("content-type")))
+            for l in r.iter_lines():
+                lignes.append(l)
+                if l.startswith(": connecte"): pret.set()
+                if l.startswith("data:") and '"601"' in l: break
+
+    t = threading.Thread(target=ecouter, daemon=True); t.start()
+    try:
+        assert pret.wait(10), ("la connexion s'ouvre et le dit", lignes)
+        c.post("/api/v1/messages/%s/tags" % dehors, json={"axe": "propal", "val": "602"}, headers=humain)
+        c.post("/api/v1/messages/%s/tags" % dedans, json={"axe": "propal", "val": "601"}, headers=humain)
+        t.join(10)
+        assert not t.is_alive(), ("l'événement de la portée arrive en direct", lignes)
+        assert lignes[0].startswith("status 200 text/event-stream"), lignes[0]
+        assert "event: tags.change" in lignes and any(l.startswith("id: ") for l in lignes)
+        assert not any('"602"' in l for l in lignes), "rien d'une boîte hors portée de l'application"
+    finally:
+        serveur.should_exit = True

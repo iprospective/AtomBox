@@ -589,5 +589,60 @@ function serveur(vus) {
     eq(JSON.stringify(e4.ABX.Store.ui.tabs), avant, "écarter une seconde fois ne change rien");
   }
 
+  console.log("— le direct : le webmail reste connecté, et se met à jour seul (RM3632) ————————");
+  {
+    const Dx = A.Direct;
+    // 1. le découpage des trames, même coupées en plein milieu par le réseau
+    let [tr, reste] = Dx.decouper("retry: 3000\n: connecte\n\nid: e1\nevent: message.ingere\ndata: {\"comm_id\":\"m1\"}\n\nid: e2\nevent: tags");
+    eq(tr.length, 1, "une trame complète, le commentaire « connecte » ignoré");
+    eq(tr[0].id + " " + tr[0].event + " " + tr[0].data, 'e1 message.ingere {"comm_id":"m1"}', "id, événement, données");
+    [tr, reste] = Dx.decouper(reste + '.change\ndata: {}\n\n');
+    vrai(tr.length === 1 && tr[0].event === "tags.change" && reste === "", "la trame coupée se recolle");
+    vrai(Dx.decouper(": ping\n\n")[0].length === 0, "le battement de cœur ne dit rien");
+    // 2. un événement → l'écran relit le référentiel, les compteurs, la liste et le message ouvert
+    A.Controllers.Tabs.ouvrir({ type: "msg", id: "m1" }, false); await drainer(e);
+    const m1 = A.Api.cache.message("m1");
+    n = vus.length;
+    Dx.recevoir("message.ingere", { comm_id: "m1", boite_id: "b1" });
+    Dx.recevoir("rattachement.change", { comm_id: "m1", boite_id: "b1" });
+    clearTimeout(Dx._minuterie); Dx._minuterie = null;
+    await Dx.appliquer(); await drainer(e);
+    const relu = vus.slice(n);
+    vrai(relu.includes("GET /referentiels") && relu.some(v => v.startsWith("GET /arborescence")),
+         "un message arrivé : référentiel et compteurs relus " + JSON.stringify(relu));
+    vrai(relu.some(v => v.startsWith("GET /messages?") || v === "GET /messages"), "la liste est relue");
+    vrai(relu.includes("GET /messages/m1"), "le message ouvert qui a changé est relu");
+    eq(relu.filter(v => v === "GET /referentiels").length, 1, "deux événements d'un coup : une seule relecture");
+    // sans flux lisible (le harnais n'a pas de TextDecoder), le direct S'ABSTIENT : l'écran marche comme avant
+    eq(Dx.possible(), false, "sans décodeur de flux, le direct ne s'ouvre pas");
+    eq(Dx.demarrer(), null, "et demarrer() n'ouvre rien");
+    Dx.trame({ id: "e5", event: "tags.change", data: "{}" });
+    clearTimeout(Dx._minuterie); Dx._minuterie = null; Dx._lot.splice(0);
+    eq(Dx.curseur, "e5", "une trame reçue avance le curseur");
+    Dx.etat = "coupe"; Dx.signaler();
+    eq(doc.documentElement.getAttribute("data-direct"), "coupe", "l'état se lit sur la page (data-direct)");
+    // 3. un VRAI flux : la connexion, une trame, la coupure, la reprise AU CURSEUR
+    const { TextEncoder, TextDecoder } = require("util");
+    const appels = [];
+    const flux = morceaux => ({ ok: true, status: 200, body: { getReader() {
+      let i = 0; return { read: () => Promise.resolve(i < morceaux.length ? { done: false, value: new TextEncoder().encode(morceaux[i++]) } : { done: true }) }; } } });
+    Dx.possible = () => true;
+    Dx.decodeur = () => new TextDecoder();
+    vrai(typeof Dx.decodeur().decode === "function", "le décodeur prêté décode");
+    const recus = [];
+    const recevoir0 = Dx.recevoir; Dx.recevoir = (t, d) => recus.push(t + ":" + (d.comm_id || ""));
+    const fx = (url, init) => { appels.push({ url, h: init && init.headers }); return Promise.resolve(flux(["id: e7\nevent: etat.de", "scendu\ndata: {\"comm_id\":\"m2\"}\n\n"])); };
+    Dx.curseur = null; Dx.etat = "ferme"; Dx.attenteInitiale = 1;
+    await Dx.demarrer(fx);
+    vrai(recus.includes("etat.descendu:m2"), "la trame du flux arrive à l'écran " + JSON.stringify(recus));
+    eq(Dx.curseur, "e7", "le curseur suit le dernier événement vu");
+    eq(appels[0].url, "/api/v1/evenements", "la route du direct");
+    vrai(appels[0].h.Authorization === "Bearer " + A.Session.jeton() && !appels[0].url.includes(A.Session.jeton()), "le jeton part dans l'EN-TÊTE, jamais dans l'URL " + JSON.stringify(appels[0]));
+    await new Promise(r => setTimeout(r, 20)); await drainer(e);
+    vrai(appels.length >= 2 && appels[1].h["Last-Event-ID"] === "e7", "coupé, il se rétablit seul, AU CURSEUR : rien de perdu");
+    Dx.arreter();
+    Dx.recevoir = recevoir0;
+  }
+
   bilan();
 })().catch(e => { console.error("  ✗ échec des parcours :", e.stack.split("\n").slice(0, 3).join(" | ")); process.exit(1); });

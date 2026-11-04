@@ -95,7 +95,10 @@
     ABX.Controllers.Tabs.ouvrir({ type: "msg", id }, false);
     try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {}
   };
-  ABX.pret = ABX.Ref.charger().then(() => ABX.Api.compteurs()).then(() => App.peindre("all")).then(lienProfond).then(() => true)
+  ABX.pret = ABX.Ref.charger().then(() => ABX.Api.compteurs()).then(() => App.peindre("all")).then(lienProfond)
+    /* LE DIRECT (RM3632) : une fois l'écran prêt, la connexion persistante ; elle s'abstient seule
+       là où elle ne peut pas (maquette, navigateur sans flux lisible) */
+    .then(() => { if (ABX.Direct) ABX.Direct.demarrer(); return true; })
     /* l'API peut être indisponible (réseau, serveur arrêté) : l'interface TIENT —
        arborescence vide, liste qui le dit — et ne lève rien. C'est du produit
        (D141), et c'est ce que le harnais vérifie en mode produit sans réseau. */
