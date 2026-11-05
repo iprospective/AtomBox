@@ -20,6 +20,17 @@ def trouver_cdc():
     sys.exit("gen : aucun .mmi-pm/docs au-dessus de " + __file__ + " — passer CDC_DIR")
 
 CDC = os.environ.get("CDC_DIR") or trouver_cdc()
+
+def prefixe_declare():
+    """RM3639 : le préfixe des vues du CDC, DÉCLARÉ dans le meta.yml du projet (cdc: {prefixe: …}) — jamais en dur"""
+    import yaml as _y
+    try:
+        meta = _y.safe_load(io.open(os.path.join(os.path.dirname(os.path.abspath(CDC)), "meta.yml"), encoding="utf-8")) or {}
+        return str(((meta.get("cdc") or {}).get("prefixe")) or "atombox")
+    except (OSError, ValueError):
+        return "atombox"
+
+P = os.environ.get("CDC_PREFIXE") or prefixe_declare()
 DEPOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 SORTIE = os.path.join(DEPOT, "webmail", "src", "poc", "cdc-index.js")
 
@@ -55,33 +66,33 @@ def lignes(fichier, motif):
     return out
 
 decisions = []
-for cel in lignes("cdc-rm2881-90-decisions.md", r"^D\d+"):
+for cel in lignes(f"cdc-{P}-90-decisions.md", r"^D\d+"):
     decisions.append({ "id": propre(cel[0]), "objet": propre(cel[1]),
                        "etat": etat(cel[2]) if len(cel) > 2 else "autre" })
 
 # les CONSEILS (C) font partie du registre : le dictionnaire les cite (conseils: [C05])
 conseils = []
-for cel in lignes("cdc-rm2881-90-decisions.md", r"^C\d+"):
+for cel in lignes(f"cdc-{P}-90-decisions.md", r"^C\d+"):
     conseils.append({ "id": propre(cel[0]), "objet": propre(cel[1]),
                       "etat": propre(cel[3]) if len(cel) > 3 else "" })
 
 # contrôle : une décision rédigée en section mais absente de la vue d'ensemble est
 # invisible du POC, du dictionnaire et de tout ce qui lit l'index — on le dit.
-_src = io.open(os.path.join(CDC, "cdc-rm2881-90-decisions.md"), encoding="utf-8").read()
+_src = io.open(os.path.join(CDC, f"cdc-{P}-90-decisions.md"), encoding="utf-8").read()
 _sections = set(re.findall(r"^#{2,3} (D\d+b?) ", _src, re.M))
 _table = set(d["id"] for d in decisions)
 for _d in sorted(_sections - _table):
     print("⚠ %s est rédigée en section mais ABSENTE de la vue d'ensemble — invisible de l'index" % _d, file=sys.stderr)
 
 questions = []
-for cel in lignes("cdc-rm2881-99-questions-ouvertes.md", r"^Q\d+"):
+for cel in lignes(f"cdc-{P}-99-questions-ouvertes.md", r"^Q\d+"):
     questions.append({ "id": propre(cel[0]), "objet": propre(cel[1]),
                        "bloque": propre(cel[2]) if len(cel) > 2 else "",
                        "urgence": urgence(cel[3]) if len(cel) > 3 else "autre" })
 
 chapitres = []
 for f in sorted(os.listdir(CDC)):
-    m = re.match(r"cdc-rm2881-(\d+)-(.+)\.md$", f)
+    m = re.match(r"cdc-" + re.escape(P) + r"-(\d+)-(.+)\.md$", f)
     if not m: continue
     titre = io.open(os.path.join(CDC, f), encoding="utf-8").readline()
     chapitres.append({ "n": m.group(1), "fichier": f,
@@ -98,13 +109,13 @@ dico = { k: yml(k) for k in ("entites", "champs", "relations", "enumerations", "
 
 # ---- le PLAN du sommaire : objet et avancement par chapitre, tels que docs/ les tient ----
 plan = {}
-for cel in lignes("cdc-rm2881-00-sommaire.md", r"^\d{2}$"):
+for cel in lignes(f"cdc-{P}-00-sommaire.md", r"^\d{2}$"):
     if len(cel) >= 4:
         plan[propre(cel[0])] = { "objet": propre(cel[2]), "avancement": propre(cel[3]) }
 
 # ---- le VRAC : chaque note du demandeur, tracée jusqu'à sa résolution ----
 vrac = []
-for cel in lignes("cdc-rm2881-91-vrac.md", r"^N\d+"):
+for cel in lignes(f"cdc-{P}-91-vrac.md", r"^N\d+"):
     vrac.append({ "id": propre(cel[0]), "verbatim": propre(cel[1]),
                   "etat": propre(cel[2]) if len(cel) > 2 else "",
                   "traite_par": propre(cel[3]) if len(cel) > 3 else "" })
@@ -129,7 +140,7 @@ for ch in chapitres:
     textes[ch["n"]] = io.open(os.path.join(CDC, ch["fichier"]), encoding="utf-8").read()
 sections = {}
 _titre = re.compile(r"^#{2,3} ~{0,2}([DQC]\d+b?)~{0,2}\b")
-for fichier in ("cdc-rm2881-90-decisions.md", "cdc-rm2881-99-questions-ouvertes.md"):
+for fichier in (f"cdc-{P}-90-decisions.md", f"cdc-{P}-99-questions-ouvertes.md"):
     src = io.open(os.path.join(CDC, fichier), encoding="utf-8").read().split("\n")
     cur, buf = None, []
     def flush():

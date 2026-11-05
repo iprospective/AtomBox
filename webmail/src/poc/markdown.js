@@ -3,7 +3,7 @@
    Pas de bibliothèque : le POC n'a aucune dépendance, et le CDC n'a besoin
    de rien d'autre. Le HTML source est échappé AVANT toute transformation.
 
-   Les liens internes du CDC (cdc-rm2881-NN-….md, avec ou sans ancre)
+   Les liens internes du CDC (cdc-<préfixe>-NN-….md, avec ou sans ancre ; le préfixe est déclaré, RM3639)
    deviennent des liens de navigation dans la page « CDC » : data-chap="NN". */
 (function (ABX) {
   "use strict";
@@ -14,7 +14,7 @@
     t = esc(t);
     t = t.replace(/`([^`]+)`/g, (_, c) => "<code>" + c + "</code>");
     t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, lib, url) => {
-      const m = url.match(/cdc-rm2881-(\d+)-[^)#]*\.md(#.*)?$/);
+      const m = url.match(/cdc-[a-z0-9-]+?-(\d{2})-[^)#]*\.md(#.*)?$/);
       if (m) return `<a href="#" class="cdc-lien" data-chap="${m[1]}">${lib}</a>`;
       return `<a href="${url}" target="_blank" rel="noopener">${lib}</a>`;
     });

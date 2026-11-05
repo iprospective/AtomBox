@@ -19,8 +19,19 @@ def trouver_cdc():
     sys.exit("gen : aucun .mmi-pm/docs au-dessus de " + __file__ + " — passer CDC_DIR")
 
 CDC = os.environ.get("CDC_DIR") or trouver_cdc()
+
+def prefixe_declare():
+    """RM3639 : le préfixe des vues du CDC, DÉCLARÉ dans le meta.yml du projet (cdc: {prefixe: …}) — jamais en dur"""
+    _y = yaml
+    try:
+        meta = _y.safe_load(io.open(os.path.join(os.path.dirname(os.path.abspath(CDC)), "meta.yml"), encoding="utf-8")) or {}
+        return str(((meta.get("cdc") or {}).get("prefixe")) or "atombox")
+    except (OSError, ValueError):
+        return "atombox"
+
+P = os.environ.get("CDC_PREFIXE") or prefixe_declare()
 DICT = os.path.join(CDC, "dict")
-SORTIE = os.path.join(CDC, "cdc-rm2881-16-dictionnaire.md")
+SORTIE = os.path.join(CDC, f"cdc-{P}-16-dictionnaire.md")
 
 def charge(nom):
     return yaml.safe_load(io.open(os.path.join(DICT, nom + ".yml"), encoding="utf-8"))
