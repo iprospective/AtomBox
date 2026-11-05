@@ -930,3 +930,25 @@ def test_un_message_envoye_a_soi_meme_est_dans_les_deux_boites(serveur_imap):
             assert rendu[0][1] == soi, "%s : l'octet exact" % boite
     finally:
         c.logout()
+
+
+def test_un_renommage_se_voit_depuis_un_autre_client_connecte(serveur_imap):
+    """Constat du 04/11 (RM3630-N001) : « un renommage de dossier ne se propage pas entre les clients ? ».
+    Deux clients connectés EN MÊME TEMPS : ce que l'un renomme, l'autre le voit au LIST suivant (tout dossier est
+    abonné : LSUB aussi), et l'ancien nom n'existe plus pour lui."""
+    a, b = _connecte(serveur_imap), _connecte(serveur_imap)
+    try:
+        assert a.create("Avant")[0] == "OK"
+        assert "Avant" in _noms(b), "l'autre client voit la création"
+        assert a.rename("Avant", "Apres")[0] == "OK"
+        noms_b = _noms(b)
+        assert "Apres" in noms_b and "Avant" not in noms_b, "l'autre client voit le nouveau nom : %s" % noms_b
+        typ, rows = b.lsub()
+        assert typ == "OK" and any(b'"Apres"' in r or r.endswith(b"Apres") for r in rows if r), "…abonné d'office : %r" % rows
+        typ, data = b.select("Avant")
+        assert typ == "NO", "l'ancien nom n'existe plus pour personne : %r" % data
+        assert a.delete("Apres")[0] == "OK"
+    finally:
+        for c in (a, b):
+            try: c.logout()
+            except Exception: pass
