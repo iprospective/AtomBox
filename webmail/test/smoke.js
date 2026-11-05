@@ -208,7 +208,7 @@ console.log("— tout le CDC dans la maquette (textes, sections, dictionnaire) �
   vrai(Object.keys(C.sections).length >= 150, Object.keys(C.sections).length + " sections (décisions, questions, conseils) découpées");
   vrai(!!C.sections.D138 && C.sections.D138.includes("partitionn"), "la section D138 est là, et complète");
   vrai(!!C.sections.Q054 && !!C.sections.C009, "les questions et les conseils ont aussi leur section");
-  const h = M.rendre("## Titre\n\n| a | b |\n|---|---|\n| **x** | `y` |\n\n> citation\n\n- un\n- deux\n\nVoir [le 03](cdc-rm2881-03-modele-donnees.md) et D138.");
+  const h = M.rendre("## Titre\n\n| a | b |\n|---|---|\n| **x** | `y` |\n\n> citation\n\n- un\n- deux\n\nVoir [le 03](cdc-atombox-03-modele-donnees.md) et D138.");
   vrai(h.includes("<h3>") && h.includes("<table") && h.includes("<blockquote>") && h.includes("<li>deux</li>"),
        "le rendu markdown couvre titres, tableaux, citations, listes");
   vrai(h.includes('data-chap="03"') && (h.includes('data-fiche="D138"') || h.includes('data-sec="D138"')),
