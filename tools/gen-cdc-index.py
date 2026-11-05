@@ -170,7 +170,9 @@ js = """/* INDEX DU CDC — FICHIER GÉNÉRÉ, ne pas éditer à la main.
 def atome():
     import subprocess, sys
     pm = os.path.join(os.environ.get("MMI_PM_CORE", "/zfs/workspaces/.mmi-pm-core"), "scripts", "pm-cdc.py")
-    if not os.path.isfile(pm) or not os.path.isdir(os.path.join(CDC, "cdc")):
+    # RM3638 : la racine du CDC atomique est DÉCLARÉE (meta.yml), hors de docs/ : `.mmi-pm/cdc/` ; `docs/cdc/` en transition
+    racines = (os.path.join(CDC, "cdc"), os.path.join(os.path.dirname(os.path.abspath(CDC)), "cdc"))
+    if not os.path.isfile(pm) or not any(os.path.isdir(os.path.join(r, "decisions")) for r in racines):
         print("gen : pas de CDC atomique (ou pas de moteur) — fiches absentes"); return None
     r = subprocess.run([sys.executable, pm, "--docs-dir", CDC, "composer"], capture_output=True, text=True)
     if r.returncode:
