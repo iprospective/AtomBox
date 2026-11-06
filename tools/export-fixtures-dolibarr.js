@@ -47,7 +47,7 @@ for (const [axe, role] of Object.entries(AXES)) {
       if (!vus.has(m.from_adresse)) vus.set(m.from_adresse, { nom: m.from_nom, adresse: m.from_adresse });
     }
     const t = { cle: v.id, nom: v.label, axe: role, domaine: domaine(v.label),
-                contacts: [...vus.values()].slice(0, 4), messages: (C.dossiers[v.id] || []).length };
+                contacts: [...vus.values()], messages: (C.dossiers[v.id] || []).length };
     if (role === "client" || role === "prospect") {
       t.documents = P.with("docs/" + v.id, () => {
         const out = [], n = role === "client" ? P.int(1, 3) : P.int(0, 1);

@@ -85,12 +85,14 @@ function eml({ de, a, sujet, corps, date, mid, irt, refs, pieces }) {
 
 // ── 1. le corpus du POC, pour les sociétés du Dolibarr de démo ─────────────────────────────────
 const parNom = new Map(DOCS.tiers.map(t => [t.nom, t]));
-const sortie = []; const fils = {};
+const sortie = []; const fils = {}; const vus = new Set();
 const AXES = ["client", "fournisseur", "prospect", "partenaire"];
 for (const a of AXES) for (const v of Fx.valeurs[a] || []) {
   if (!parNom.has(v.label)) continue;
   const ms = (ABX.Corpus.dossiers[v.id] || []).slice().sort((x, y) => x.date_recue - y.date_recue);
   for (const m of ms) {
+    if (vus.has(m.id)) continue;           // le POC range certains messages dans deux dossiers : un seul exemplaire
+    vus.add(m.id);
     const mid = "<abxpoc." + crypto.createHash("sha1").update(m.id).digest("hex").slice(0, 20) + "@demo.invalid>";
     const fil = fils[v.id + "#" + m.thread_id] = fils[v.id + "#" + m.thread_id] || [];
     const sortant = m.sens === "out", corr = sortant ? { nom: "", adresse: (m.destinataires || [])[0] } : { nom: m.from_nom, adresse: m.from_adresse };
