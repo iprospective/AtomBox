@@ -42,9 +42,13 @@ for (const [axe, role] of Object.entries(AXES)) {
     const vus = new Map();
     for (const m of C.dossiers[v.id] || []) {
       // les personnes qui ÉCRIVENT pour ce tiers : ni nos envois, ni les machines, ni les usurpations (D128)
-      if (m.sens === "out" || m.usurpation || (m.nature && m.nature !== "humain")) continue;
-      if (!m.from_adresse || !m.from_adresse.endsWith("@" + domaine(v.label))) continue;
-      if (!vus.has(m.from_adresse)) vus.set(m.from_adresse, { nom: m.from_nom, adresse: m.from_adresse });
+      // ceux qui écrivent pour ce tiers, et ceux à qui l'on écrit chez lui (un envoi va souvent à quelqu'un qui n'a
+      // jamais écrit) — ni les machines, ni les usurpations (D128)
+      if (m.usurpation || (m.nature && m.nature !== "humain")) continue;
+      const qui = m.sens === "out" ? (m.destinataires || [])[0] : m.from_adresse;
+      if (!qui || !qui.endsWith("@" + domaine(v.label))) continue;
+      const nom = m.sens === "out" ? qui.split("@")[0].split(".").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ") : m.from_nom;
+      if (!vus.has(qui)) vus.set(qui, { nom, adresse: qui });
     }
     const t = { cle: v.id, nom: v.label, axe: role, domaine: domaine(v.label),
                 contacts: [...vus.values()], messages: (C.dossiers[v.id] || []).length };
