@@ -69,14 +69,14 @@ def test_les_messages_de_demo_se_rangent_par_les_tags_dolibarr_et_se_retirent(ba
     (tmp_path / "docs.json").write_text(json.dumps(docs), encoding="utf-8")
     out = tmp_path / "eml"
     r = subprocess.run(["node", os.path.join(ICI, "..", "..", "tools", "fixtures-eml.js"), "--documents", str(tmp_path / "docs.json"),
-                        "--boite", "demo@exemple.fr", "--hote", HOTE, "--out", str(out)], capture_output=True, text=True)
+                        "--mailbox", "demo@exemple.fr", "--host", HOTE, "--out", str(out)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
 
     sys.path.insert(0, OUTILS)
     import importlib.util
     spec = importlib.util.spec_from_file_location("ingest_fixtures", os.path.join(OUTILS, "ingest-fixtures.py"))
     ing = importlib.util.module_from_spec(spec); spec.loader.exec_module(ing)
-    assert ing.main(["--dir", str(out), "--boite", "demo@exemple.fr"]) == 0
+    assert ing.main(["--dir", str(out), "--mailbox", "demo@exemple.fr"]) == 0
     s = session()
     n = s.scalar(select(func.count()).select_from(Comm))
     attendus = len(json.loads((out / "manifeste.json").read_text())["messages"])
@@ -86,8 +86,8 @@ def test_les_messages_de_demo_se_rangent_par_les_tags_dolibarr_et_se_retirent(ba
     tiers = s.scalar(select(func.count()).select_from(CommTag).join(Tag, Tag.tag_id == CommTag.tag_id).where(Tag.valeur == "3"))
     assert tiers >= 2, "les messages échangés avec le tiers portent son tag (règle d'adresse) : %s" % tiers
 
-    assert ing.main(["--dir", str(out), "--boite", "demo@exemple.fr"]) == 0
+    assert ing.main(["--dir", str(out), "--mailbox", "demo@exemple.fr"]) == 0
     assert session().scalar(select(func.count()).select_from(Comm)) == n, "rejouer ne double rien"
 
-    assert ing.main(["--retirer", "--boite", "demo@exemple.fr"]) == 0
+    assert ing.main(["--remove", "--mailbox", "demo@exemple.fr"]) == 0
     assert session().scalar(select(func.count()).select_from(Comm)) == 0, "--retirer efface tout le jeu, et ce qui en dépend"

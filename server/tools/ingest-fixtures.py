@@ -6,12 +6,12 @@ l'INGESTION normale (`ingest`) : magasin en squelette (RM3631), identité, fil, 
 — l'en-tête (« dolibarr-pro<id>@<hôte> » → tag du document, D187) et l'adresse (le tiers, D189). Reçus : boîte de
 réception, avec les règles de l'utilisateur ; envoyés : « Envoyés », déposés tels quels.
 
-Tout message de démo porte « X-AtomBox-Demo: abxpoc » ; `--retirer` les retrouve par là et les efface, avec tout ce
+Tout message de démo porte « X-AtomBox-Demo: abxpoc » ; `--remove` les retrouve par là et les efface, avec tout ce
 qui leur appartient (lignes qui pointent vers eux : découvertes dans le schéma, pas listées à la main).
 Ces messages n'existent QUE dans AtomBox (pas chez le fournisseur) : la relève ne les touche pas.
 
-    python3 tools/ingest-fixtures.py --dir DIR --boite test@iprospective.eu [--a-blanc]
-    python3 tools/ingest-fixtures.py --retirer --boite test@iprospective.eu [--a-blanc]
+    python3 tools/ingest-fixtures.py --dir DIR --mailbox test@iprospective.eu [--dry-run]
+    python3 tools/ingest-fixtures.py --remove --mailbox test@iprospective.eu [--dry-run]
 """
 from __future__ import annotations
 
@@ -29,22 +29,22 @@ MARQUE = "abxpoc"
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dir"); ap.add_argument("--boite", required=True)
-    ap.add_argument("--retirer", action="store_true"); ap.add_argument("--a-blanc", action="store_true")
+    ap.add_argument("--dir"); ap.add_argument("--mailbox", required=True)
+    ap.add_argument("--remove", action="store_true"); ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
     from atombox import settings
     from atombox.db import session
     from atombox.schema.models import Adresse, Boite, CommEmail, Dossier
     from atombox.store import Store
     s = session()
-    boite = s.scalar(select(Boite).join(Adresse, Adresse.adresse_id == Boite.adresse_id).where(Adresse.adresse_complete == a.boite))
+    boite = s.scalar(select(Boite).join(Adresse, Adresse.adresse_id == Boite.adresse_id).where(Adresse.adresse_complete == a.mailbox))
     if boite is None:
-        sys.exit(f"boîte inconnue : {a.boite}")
+        sys.exit(f"boîte inconnue : {a.mailbox}")
     marques = [cid for cid, h in s.execute(select(CommEmail.comm_id, CommEmail.headers)).all() if f"X-AtomBox-Demo: {MARQUE}" in (h or "")]
 
-    if a.retirer:
-        print(("(à blanc) " if a.a_blanc else "") + f"{len(marques)} message(s) de démo marqué(s) « {MARQUE} »")
-        if a.a_blanc or not marques:
+    if a.remove:
+        print(("(à blanc) " if a.dry_run else "") + f"{len(marques)} message(s) de démo marqué(s) « {MARQUE} »")
+        if a.dry_run or not marques:
             return 0
         fks = s.execute(text("""SELECT tc.table_name, kcu.column_name FROM information_schema.table_constraints tc
             JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
@@ -70,7 +70,7 @@ def main(argv=None):
     if inbox is None or sent is None:
         sys.exit("boîte de réception ou « Envoyés » introuvable dans la boîte")
     man = json.loads((Path(a.dir) / "manifeste.json").read_text(encoding="utf-8"))
-    if a.a_blanc:
+    if a.dry_run:
         n_in = sum(1 for m in man["messages"] if m["sens"] == "in")
         print(f"(à blanc) {len(man['messages'])} message(s) : {n_in} reçus → {inbox.alias_imap}, "
               f"{len(man['messages']) - n_in} envoyés → {sent.alias_imap} ; {len(marques)} déjà marqué(s)")
@@ -85,7 +85,7 @@ def main(argv=None):
         neufs += bool(r.get("nouveau")); deja += not r.get("nouveau")
         if i % 500 == 0:
             print(f"  … {i}/{len(man['messages'])}", flush=True)
-    print(f"✓ {neufs} message(s) versé(s), {deja} déjà là — boîte {a.boite}")
+    print(f"✓ {neufs} message(s) versé(s), {deja} déjà là — boîte {a.mailbox}")
     return 0
 
 

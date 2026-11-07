@@ -59,11 +59,82 @@ def _folder(s, boite_id, alias: str, presents=()) -> Dossier:
     s.add(d); s.commit()
     return d
 
+# ── LA COLLECTE QUI VIDE LA SOURCE (D205, RM3645) ──────────────────────────────────────────────────
+# Une option PAR BOÎTE : `ATOMBOX_COLLECT_MOVE` liste les adresses (virgules ou blancs ; « * » = toutes). Une fois
+# le message stocké et VÉRIFIÉ (le magasin le reconstitue à l'octet, RM3631), il est DÉPLACÉ à la source dans
+# « AtomBox/Relevé » — jamais effacé : le fournisseur garde tout, sa boîte de réception se vide. AtomBox devient la
+# vérité de ce message : son `uid_imap` est remis à vide, et les deux synchronisations d'état (montante, F113 ;
+# descendante, sync_down) ne le touchent plus. Ce dossier-là n'est jamais relevé (sinon tout reviendrait en boucle).
+# Seul le courrier REÇU part : envoyés et brouillons restent où les autres clients les cherchent.
+COLLECTED_FOLDER = "AtomBox/Relev&AOk-"          # « AtomBox/Relevé », en modified UTF-7 (le nom du fil)
+_COLLECT_PARENT = "AtomBox"
+COLLECT_BATCH = 200                              # par dossier et par passage : un premier passage sur une grosse boîte
+
+
+def collect_moves(adresse: str) -> bool:
+    """l'option de D205 est-elle active pour cette boîte ? (relue à chaque passage)"""
+    v = (settings.read("ATOMBOX_COLLECT_MOVE") or "").replace(",", " ").lower().split()
+    return "*" in v or (adresse or "").lower() in v
+
+
+def never_polled(alias: str) -> bool:
+    """« AtomBox/Relevé » (et son parent) : ce que la collecte y range n'est jamais relu (D205 § 3)"""
+    return alias in (COLLECTED_FOLDER, _COLLECT_PARENT) or alias.startswith(COLLECTED_FOLDER + "/")
+
+
+def _received_folder(d) -> bool:
+    from ..services.messages import special_of
+    return not (d.special_use in ("\\Sent", "\\Drafts") or special_of(d.alias_imap) in ("sent", "drafts"))
+
+
+def move_collected(s, store: Store, releve: Poller, boite_id, adresse: str, d, bruts: dict | None = None,
+                   batch: int = COLLECT_BATCH) -> int:
+    """déplace à la source ce qui, dans ce dossier, est stocké ET vérifié ; rend le nombre de messages déplacés.
+    Un message que le magasin ne reconstitue pas, ou un MOVE refusé, reste à la source, garde son UID (donc sa
+    synchronisation), et sera rejoué au passage suivant — bruyamment, jamais en silence (D152)."""
+    if not collect_moves(adresse) or not _received_folder(d):
+        return 0
+    from ..schema.models import Rattachement
+    ratts = list(s.scalars(select(Rattachement).where(Rattachement.boite_id == boite_id,
+                                                      Rattachement.dossier_id == d.dossier_id,
+                                                      Rattachement.uid_imap.isnot(None)).limit(batch)))
+    if not ratts:
+        return 0
+    if not getattr(releve, "_collect_ready", False):
+        if COLLECTED_FOLDER not in releve.folders():
+            releve.create_folder(COLLECTED_FOLDER)
+        releve._collect_ready = True
+    releve.select_folder(d.alias_imap, writable=True)
+    bruts = bruts or {}
+    n = 0
+    for r in ratts:
+        uid = r.uid_imap
+        try:
+            source = bruts.get(uid)
+            if source is None:
+                source = releve.read(uid)[0]
+            if store.read_message(str(r.comm_id)) != source:
+                log.error("%s/%s uid %d : le magasin ne reconstitue pas l'original à l'octet — LAISSÉ à la source",
+                          adresse, d.alias_imap, uid)
+                continue
+            releve.move(uid, COLLECTED_FOLDER)
+        except Exception as e:
+            s.rollback()
+            log.error("%s/%s uid %d : non déplacé vers « AtomBox/Relevé » — %s (rejoué au prochain passage)",
+                      adresse, d.alias_imap, uid, e)
+            continue
+        r.uid_imap = None              # AtomBox devient la vérité de ce message (D205 § 2)
+        s.commit(); n += 1
+    if n:
+        log.info("%s/%s : %d message(s) déplacé(s) vers « AtomBox/Relevé » (D205)", adresse, d.alias_imap, n)
+    return n
+
+
 def poll_mailbox(s, store: Store, releve: Poller, boite_id, adresse: str) -> int:
     """un passage complet sur tous les dossiers d'une boîte ; rend le nombre de messages ingérés"""
     n = 0
     log.debug("%s : relève", adresse)
-    presents = releve.folders()
+    presents = [a for a in releve.folders() if not never_polled(a)]
     for alias in presents:
         d = _folder(s, boite_id, alias, presents)
         validity, uidnext = releve.select_folder(alias)
@@ -71,9 +142,11 @@ def poll_mailbox(s, store: Store, releve: Poller, boite_id, adresse: str) -> int
         if d.uid_validity is not None and d.uid_validity != validity:
             log.warning("%s/%s : UIDVALIDITY a changé (%s → %s) — resynchronisation depuis 1 (D043)", adresse, alias, d.uid_validity, validity)
             since = 1
+        bruts = {}                    # ce qu'on vient de lire : la collecte (D205) le compare au magasin sans relire
         for uid in releve.new_uids(since):
             try:
                 raw_bytes, date, drapeaux = releve.read(uid)
+                if collect_moves(adresse): bruts[uid] = raw_bytes
                 # LE SENS PAR LE DOSSIER DU FOURNISSEUR (D185) : ce qui est dans ses Envoyés ou ses
                 # Brouillons est ÉMIS. La relève passait « reçu » pour tout — deux messages de nos
                 # Envoyés étaient marqués reçus (mesuré le 21/10).
@@ -95,6 +168,10 @@ def poll_mailbox(s, store: Store, releve: Poller, boite_id, adresse: str) -> int
         try: sync_down(s, releve, boite_id, adresse, d)
         except Exception as e:
             s.rollback(); log.error("%s/%s : synchronisation descendante en échec — %s", adresse, alias, e)
+        # puis, si l'option est active, ce qui est stocké et vérifié quitte la source (D205)
+        try: move_collected(s, store, releve, boite_id, adresse, d, bruts)
+        except Exception as e:
+            s.rollback(); log.error("%s/%s : collecte (déplacement à la source) en échec — %s", adresse, alias, e)
     if n: log.info("%s : %d message(s) ingéré(s)", adresse, n)
     return n
 
