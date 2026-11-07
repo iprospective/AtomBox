@@ -97,7 +97,7 @@ journalctl -u atombox-api -f                          # et logs/ pour le journal
 | tâche | `@tache(chaque="10m")` | cadencée par `python -m atombox.tasks` | échec journalisé, reprogrammée |
 
 Processus : `uvicorn atombox.api.app:app` (N travailleurs), `python -m atombox.ingestion.daemon`
-(`ATOMBOX_PART=2/4` pour partitionner les boîtes), `python -m atombox.tasks` (N travailleurs).
+(`ATOMBOX_PART=2/4` pour partitionner les boîtes ; `ATOMBOX_COLLECT_MOVE=adresse,…` pour que la collecte déplace à la source, dans « AtomBox/Relevé », ce qu'elle a stocké et vérifié — D205), `python -m atombox.tasks` (N travailleurs).
 
 ## F001, F002 — l'ingestion et le magasin
 

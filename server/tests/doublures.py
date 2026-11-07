@@ -138,7 +138,14 @@ class FauxImap(threading.Thread):
                         self.verrou.notify_all()
                     write(tag + " OK [APPENDUID %d %d] APPEND terminé" % (b["validity"], uid))
                 elif cmd == "LOGOUT": write("* BYE"); write(tag + " OK fait"); break
-                elif cmd in ("NOOP", "CHECK", "CLOSE", "EXPUNGE", "SUBSCRIBE", "UNSUBSCRIBE", "CREATE"): write(tag + " OK fait")
+                elif cmd == "CREATE":
+                    # un vrai fournisseur CRÉE le dossier : un MOVE qui le vise doit ensuite aboutir (RM3645)
+                    nom = self._mailbox_name(args)
+                    with self.verrou:
+                        if nom not in self.boites:
+                            self.boites[nom] = {"validity": 1000 + len(self.boites), "suivant": 1, "messages": []}
+                    write(tag + " OK fait")
+                elif cmd in ("NOOP", "CHECK", "CLOSE", "EXPUNGE", "SUBSCRIBE", "UNSUBSCRIBE"): write(tag + " OK fait")
                 else: write(tag + " BAD commande inconnue du faux IMAP : " + cmd)
         except (OSError, ValueError):
             pass

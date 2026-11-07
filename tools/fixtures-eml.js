@@ -4,7 +4,7 @@
    Mathieu, 06/11 : « j'aimerais de vrais messages, de vraies pièces jointes (mais on peut faire des PDF et des images
    très simples), et bien relier les choses dans atombox avec les tags dolibarr ».
 
-   Deux familles, toutes adressées à la boîte de démo (--boite) :
+   Deux familles, toutes adressées à la boîte de démo (--mailbox) :
    1. le CORPUS DU POC — les messages que le webmail montre déjà (même graine, mêmes fichiers), pour les sociétés que le
       Dolibarr de démo connaît : mêmes correspondants, mêmes sujets, mêmes corps, mêmes fils, mêmes dates ; leurs deux
       pièces deviennent de vrais fichiers (un PDF minimal, le logo de signature — LE MÊME partout : un seul blob).
@@ -15,15 +15,15 @@
 
    Chaque message porte « X-AtomBox-Demo: abxpoc » : il se retrouve, et se retire.
 
-     node tools/fixtures-eml.js --documents documents.json --boite test@iprospective.eu --hote <hôte des Message-ID> --out DIR
+     node tools/fixtures-eml.js --documents documents.json --mailbox test@iprospective.eu --host <hôte des Message-ID> --out DIR
      (documents.json : scripts/demo-export-documents.php du module Dolibarr) */
 "use strict";
 const fs = require("fs"), path = require("path"), zlib = require("zlib"), crypto = require("crypto");
 
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d; };
 const DOCS = JSON.parse(fs.readFileSync(arg("--documents"), "utf-8"));
-const BOITE = arg("--boite"), HOTE = arg("--hote"), OUT = arg("--out");
-if (!BOITE || !HOTE || !OUT) { console.error("usage : --documents F --boite ADRESSE --hote HÔTE --out DIR"); process.exit(2); }
+const BOITE = arg("--mailbox"), HOTE = arg("--host"), OUT = arg("--out");
+if (!BOITE || !HOTE || !OUT) { console.error("usage : --documents F --mailbox ADRESSE --host HÔTE --out DIR"); process.exit(2); }
 const MOI = { nom: DOCS.societe || "iProspective", adresse: BOITE };
 
 // ── le POC, chargé tel quel ──────────────────────────────────────────────────────────────────────
