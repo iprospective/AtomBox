@@ -64,6 +64,8 @@
       Message.cablerTags(el, m);
       D.on(el, "[data-c]", "onclick", b => ABX.Controllers.Compose.demarrer(b.dataset.c, m));
       D.on(el, ".pjc",     "onclick", c => Message.ouvrirPiece(m, +c.dataset.pj));
+      /* RM3548 : le bouton est DANS la carte — il ne doit pas ouvrir la pièce en plus de la ranger */
+      D.on(el, "[data-ranger]", "onclick", (b, e) => { if (e) e.stopPropagation(); Message.rangerPiece(m, +b.dataset.ranger, +b.dataset.t); });
       D.on(el, "[data-e]", "onclick", b => Message.logErp(m, b.dataset.e));
     },
 
@@ -187,6 +189,21 @@ UPDATE piece_jointe
         "⚠ le blob est partagé par " + b.refs + " liaison(s) : un seul UPDATE libère ≈ " +
         F.poids(At.gain(b)) + " mais modifie l'octet de TOUS les porteurs — l'original doit rester " +
         "tant qu'un message doit être revérifiable (D025/D026)", true);
+    },
+
+    /* RANGER UNE PIÈCE JOINTE dans les documents de l'objet d'un tag (RM3548, F151). C'est la page hôte (Dolibarr) qui
+       range, avec les droits de son utilisateur ; on lui demande, et la carte dit ce qu'il en est. Rend la promesse. */
+    rangerPiece(m, i, k) {
+      const p = (m.pieces_jointes || [])[i], t = (m.tags || [])[k];
+      const pj = p && p.b && p.b.pj_id;
+      if (!p || !t || !pj || !ABX.Hote) return Promise.resolve(null);
+      const repeindre = () => { const tab = (St.ui.tabs || []).find(x => x.key === St.ui.tab); if (tab) Message.peindre(tab); };
+      p._range = { etat: "encours" }; repeindre();
+      return ABX.Hote.ranger({ msg: m.id, pj, axe: t.axe, val: t.val }).then(r => {
+        const ref = (r && r.objet && r.objet.ref) || t.val;
+        p._range = r && r.ok ? { etat: "ok", texte: ref + (r.nom ? " (" + r.nom + ")" : "") } : { etat: "erreur", texte: (r && r.erreur) || "échec" };
+        repeindre(); return r;
+      });
     },
 
     logErp(m, quoi) {

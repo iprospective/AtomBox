@@ -147,7 +147,18 @@
   });
 
   /* ---- pièces jointes ---------------------------------------------------- */
-  R.define("attachment.card", ({ p, i }) => {
+  /* RM3548 (F151) — RANGER LA PIÈCE dans les documents de l'objet d'un tag, quand le webmail est intégré dans
+     l'application qui déclare cet axe et qu'elle annonce le geste (ABX.Hote). Une cible par tag qui a une fiche. */
+  const cibles = m => (ABX.Hote && ABX.Hote.peut("ranger-pj") && m) ? (m.tags || []).map((t, k) => ({ t, k })).filter(x => ficheTag(x.t)) : [];
+  const rangement = (p, i, m) => {
+    const cs = cibles(m); if (!cs.length) return "";
+    const r = p._range || {};
+    return `<span class="pjr">${r.etat === "ok" ? `<span class="badge ok">📁 rangée dans ${F.esc(r.texte)}</span>`
+        : r.etat === "encours" ? `<span class="badge">📁 rangement…</span>`
+        : `${r.etat === "erreur" ? `<span class="badge w">📁 non rangée : ${F.esc(r.texte)}</span> ` : ""}${cs.map(x =>
+            `<button class="hbtn pjr-b" data-ranger="${i}" data-t="${x.k}" title="Ajouter aux documents de ${F.esc(tagLabel(x.t))}">📁 ${F.esc(tagLabel(x.t))}</button>`).join(" ")}`}</span>`;
+  };
+  R.define("attachment.card", ({ p, i, m }) => {
     const b = p.b, div = p.declare !== b.mime, At = ABX.Attachments;
     return `<div class="pjc" data-pj="${i}">
       <span class="pic">${b.ic}</span>
@@ -164,7 +175,7 @@
             : b.eml ? `<span class="badge">message/rfc822 — dédupliqué comme un message (D066)</span>` : ""}
           ${At.recompressable(b)
             ? `<span class="badge w">recompression proposée · gain ≈ ${F.poids(At.gain(b))} (D070)</span>` : ""}
-        </span></span></div>`;
+        </span>${rangement(p, i, m)}</span></div>`;
   });
 
   R.define("attachment.list", ({ m }) => {
@@ -172,7 +183,7 @@
     const tot = m.pj_ko;
     return `<div class="box"><h4>Pièces jointes — ${m.pieces_jointes.length} · ${F.poids(tot)} décodés,
         ${F.poids(Math.round(tot * 1.37))} sur le fil (base64, D069)</h4>
-      <div class="pjl">${m.pieces_jointes.map((p, i) => R.render("attachment.card", { p, i })).join("")}</div>
+      <div class="pjl">${m.pieces_jointes.map((p, i) => R.render("attachment.card", { p, i, m })).join("")}</div>
       <div class="dmeta" style="margin-top:8px">Le <b>nom</b> et le <b>type déclaré</b> sont portés
         par la liaison, les <b>octets</b> et le <b>type détecté</b> par le blob : c'est ce qui permet
         de dédupliquer sans mentir sur le message d'origine (D024/D025/D032).</div></div>`;

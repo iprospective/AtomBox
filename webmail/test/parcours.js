@@ -539,6 +539,48 @@ function serveur(vus) {
   vrai(!A.Session.depuisFragment({ hash: "#msg=m2", pathname: "/", search: "" }, { replaceState() {} }), "sans session dans le fragment, rien ne change");
   eq(A.Session.jeton(), "jeton-delegue", "…et la session en place reste");
 
+  console.log("— le webmail intégré range une pièce dans les documents de l'objet d'un tag (RM3548, F151) ————");
+  {
+    const H = A.Hote, postes = [], cadreAvant = H.cadre;
+    const hote = { postMessage: (d, o) => postes.push([d, o]) };
+    H.cadre = () => hote;
+    const ORIG = "https://doli.example";
+    etat.messages.m3.tags = [{ axe: "propal", val: "7", source: "dolibarr", libelle: "PR2611-0007" }, { axe: "client", val: "x", source: "moi" }];
+    A.Api.cache.message("m3") && delete A.Api.cache.message("m3")._complet;
+    A.Controllers.Tabs.ouvrir({ type: "msg", id: "m3" }, false); await drainer(e);
+    vrai(!det().includes("data-ranger"), "tant que la page hôte n'a rien annoncé : aucun bouton (le webmail seul ne range rien)");
+    eq(H.recevoir({ source: {}, origin: ORIG, data: { type: "atombox:hote", gestes: ["ranger-pj"] } }), false, "un message d'une AUTRE fenêtre que le cadre parent est ignoré");
+    vrai(H.recevoir({ source: hote, origin: ORIG, data: { type: "atombox:hote", gestes: ["ranger-pj"] } }) && H.peut("ranger-pj"), "la page hôte annonce le geste, on retient son origine");
+    eq(H.recevoir({ source: hote, origin: "https://autre.example", data: { type: "atombox:hote", gestes: ["autre"] } }), false, "une fois connue, l'origine de l'hôte ne change plus");
+    await drainer(e);
+    A.Controllers.Tabs.ouvrir({ type: "msg", id: "m3" }, false); await drainer(e);
+    vrai(det().includes('data-ranger="0" data-t="0"') && det().includes("📁 PR2611-0007"), "un bouton par pièce et par tag qui a une fiche (la proposition)");
+    vrai(!det().includes('data-t="1"'), "un tag sans fiche chez une application n'en a pas");
+    geste("detail", "[data-ranger]", 0); await drainer(e);
+    const dem = postes.find(x => x[0].type === "atombox:ranger-pj");
+    vrai(!!dem && dem[1] === ORIG, "la demande part au cadre parent, à l'origine de l'hôte seulement");
+    eq(dem && [dem[0].msg, dem[0].pj, dem[0].axe, dem[0].val].join("|"), "m3|p1|propal|7", "elle porte le message, la pièce et le TAG — pas un type Dolibarr");
+    vrai(!A.Controllers.Visionneuse.ouverte, "le bouton est dans la carte : il range, il n'ouvre pas la pièce");
+    vrai(det().includes("rangement…"), "la carte dit que c'est en cours");
+    eq(H.recevoir({ source: hote, origin: "https://autre.example", data: { type: "atombox:ranger-pj:resultat", rid: dem[0].rid, ok: true } }), false, "une réponse d'une autre origine est ignorée");
+    vrai(H.recevoir({ source: hote, origin: ORIG, data: { type: "atombox:ranger-pj:resultat", rid: dem[0].rid, ok: true, nom: "devis.pdf", objet: { ref: "PR2611-0007" } } }), "la réponse de l'hôte est reçue");
+    await drainer(e);
+    vrai(det().includes("rangée dans PR2611-0007 (devis.pdf)"), "la carte dit où la pièce est rangée");
+    geste("detail", "[data-ranger]", 0); await drainer(e);
+    const dem2 = postes.filter(x => x[0].type === "atombox:ranger-pj")[1];
+    eq(dem2 && dem2[0].pj, "p2", "la pièce suivante a son propre bouton");
+    H.recevoir({ source: hote, origin: ORIG, data: { type: "atombox:ranger-pj:resultat", rid: dem2[0].rid, ok: false, erreur: "droits insuffisants" } });
+    await drainer(e);
+    vrai(det().includes("non rangée : droits insuffisants") && det().includes('data-ranger="1"'), "un refus est dit, et le geste reste offert");
+    const nAvant = postes.length;
+    eq(await A.Controllers.Message.rangerPiece(A.Api.cache.message("m3"), 9, 0), null, "rangerPiece : une pièce qui n'existe pas ne demande rien à l'hôte");
+    eq(await A.Controllers.Message.rangerPiece(A.Api.cache.message("m3"), 0, 9), null, "rangerPiece : un tag qui n'existe pas non plus");
+    eq(postes.length, nAvant, "…et rien n'est parti");
+    H.origine = null; H.gestes = []; H.cadre = cadreAvant;
+    eq((await H.ranger({ msg: "m3", pj: "p1", axe: "propal", val: "7" })).ok, false, "sans page hôte : le geste rend un refus, sans jeter");
+    etat.messages.m3.tags = []; A.Api.cache.message("m3") && delete A.Api.cache.message("m3")._complet;
+  }
+
   console.log("— le contexte Dolibarr à côté du message (F047) ————————————————————");
   etat.messages.m3.contexte = [{ application: "Dolibarr", tiers: { id: "20", libelle: "Contexte SA", lien: "https://doli.example/societe/card.php?socid=20" },
     encours: 2640, echu: 1440, devise: "EUR", maj: "2026-10-27T10:00:00+00:00",
