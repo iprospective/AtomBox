@@ -1509,6 +1509,18 @@ header {
   border-style: dashed;
 }
 
+.pjr {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.pjr-b {
+  font-size: 11px;
+  padding: 1px 6px;
+}
+
 /* ---- intégration ERP ---- */
 .box.erp {
   border-color: var(--accent);

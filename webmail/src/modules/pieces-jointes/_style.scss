@@ -35,3 +35,7 @@
 .jalon.v4{border-color:var(--warn);color:var(--warn)}
 .jalon.v6{border-color:var(--danger);color:var(--danger);border-style:dashed}
 .chip.futur{opacity:.6;border-style:dashed}
+
+// RM3548 : ranger la pièce dans les documents de l'objet d'un tag (webmail intégré)
+.pjr { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pjr-b { font-size: 11px; padding: 1px 6px; }

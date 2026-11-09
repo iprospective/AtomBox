@@ -11,6 +11,7 @@
   /* ---- la session d'abord (D157) : sans session, l'écran de connexion et RIEN d'autre.
      Le chargeur a déjà choisi le monde au chargement (simulé si poc/poc). */
   if (!ABX.Session.lire()) { ABX.Controllers.Connexion.peindre(); ABX.pret = Promise.resolve(false); return; }
+  if (ABX.Hote) ABX.Hote.demarrer();   // intégré : la page hôte dit ce qu'elle sait faire pour nous (RM3548)
   document.body.dataset.etat = "ouvert";
 
   /* ---- réactions du bus ---------------------------------------------------
