@@ -952,3 +952,61 @@ def test_un_renommage_se_voit_depuis_un_autre_client_connecte(serveur_imap):
         for c in (a, b):
             try: c.logout()
             except Exception: pass
+
+
+def test_deux_sessions_concurrentes_ne_se_marchent_pas_dessus(serveur_imap):
+    """RM3322, critère « deux sessions concurrentes ne se marchent pas dessus ». Le serveur est une seule boucle
+    asyncio : un état de session rangé au mauvais endroit (au niveau de l'écouteur, d'un module, d'une session de base
+    partagée) passerait tous les tests à un client et ne casserait qu'à deux. Deux clients travaillent donc EN MÊME
+    TEMPS, dans deux fils, et changent sans cesse de dossier, à contretemps : chacun doit voir SON dossier sélectionné,
+    son nombre de messages, et l'octet exact du magasin — jamais l'état de l'autre."""
+    # l'attendu est lu AVANT les fils : la session de base du harnais n'est pas faite pour être partagée entre fils
+    c = _connecte(serveur_imap)
+    try:
+        typ, n = c.select("INBOX", readonly=True); assert typ == "OK"
+        n_inbox = int(n[0])
+        typ, data = c.uid("SEARCH", None, "ALL"); uids = data[0].split()
+        attendu = {u: serveur_imap["magasin"].read_message(_comm(serveur_imap["session"], int(u))) for u in uids}
+        typ, n = c.select("Trash", readonly=True); assert typ == "OK"
+        n_trash = int(n[0])
+    finally:
+        c.logout()
+    assert n_inbox >= 3 and n_inbox != n_trash, "les deux dossiers doivent se distinguer par leur nombre de messages"
+
+    tours, erreurs = 15, []
+    depart = threading.Barrier(2, timeout=30)
+
+    def client(nom, ordre):
+        k = _connecte(serveur_imap)
+        try:
+            for t in range(tours):
+                depart.wait()                                  # les deux sessions repartent ensemble à chaque tour
+                for dossier in ordre if t % 2 == 0 else ordre[::-1]:
+                    typ, n = k.select(dossier, readonly=True)
+                    attendu_n = n_inbox if dossier == "INBOX" else n_trash
+                    if typ != "OK" or int(n[0]) != attendu_n:
+                        erreurs.append("%s tour %d : SELECT %s → %r (attendu %d)" % (nom, t, dossier, n, attendu_n)); return
+                    typ, data = k.uid("SEARCH", None, "ALL")
+                    if dossier == "INBOX":
+                        if sorted(data[0].split()) != sorted(uids):
+                            erreurs.append("%s tour %d : SEARCH INBOX → %r" % (nom, t, data)); return
+                        for u in uids:
+                            typ, data = k.uid("FETCH", u, "(BODY.PEEK[])")
+                            if typ != "OK" or data[0][1] != attendu[u]:
+                                erreurs.append("%s tour %d : UID %s, pas l'octet du magasin" % (nom, t, u.decode())); return
+                    elif len(data[0].split()) != n_trash:
+                        erreurs.append("%s tour %d : SEARCH %s → %r" % (nom, t, dossier, data)); return
+        except Exception as e:                                 # un fil qui meurt doit faire rougir le test, pas le figer
+            erreurs.append("%s : %r" % (nom, e))
+            depart.abort()
+        finally:
+            try: k.logout()
+            except Exception: pass
+
+    # À CONTRETEMPS : quand A est dans INBOX, B est dans Trash, et inversement
+    fils = [threading.Thread(target=client, args=("A", ["INBOX", "Trash"])),
+            threading.Thread(target=client, args=("B", ["Trash", "INBOX"]))]
+    for f in fils: f.start()
+    for f in fils: f.join(120)
+    assert not any(f.is_alive() for f in fils), "une session s'est figée"
+    assert not erreurs, erreurs
